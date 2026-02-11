@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { TemplateValidator } from '@/lib/utils/template-validator';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';

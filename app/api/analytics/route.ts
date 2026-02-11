@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;

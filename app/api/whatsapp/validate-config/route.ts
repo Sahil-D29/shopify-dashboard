@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { WhatsAppActionConfig } from '@/lib/types/whatsapp-config';

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';

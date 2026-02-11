@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 
 import { validateWhatsAppConfig } from "@/lib/config/whatsapp-env";

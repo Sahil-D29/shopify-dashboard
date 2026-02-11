@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { Customer } from '@/lib/types/customer';

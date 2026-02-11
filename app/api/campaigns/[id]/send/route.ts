@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Campaign } from '@/lib/types/campaign';
 import type { CustomerSegment } from '@/lib/types/segment';

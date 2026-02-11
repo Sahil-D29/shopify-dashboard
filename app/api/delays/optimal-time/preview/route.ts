@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
 const HOURLY_ENGAGEMENT = Array.from({ length: 24 }, (_, hour) => {

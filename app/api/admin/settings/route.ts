@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/admin-auth';
 import { readSystemSettings, writeSystemSettings } from '@/lib/system-settings';

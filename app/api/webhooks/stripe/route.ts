@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * Stripe webhook - MUST use raw body for signature verification
  * No body parser; read request.text() and pass to stripe.webhooks.constructEvent

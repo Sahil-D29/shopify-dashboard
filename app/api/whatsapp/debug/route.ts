@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getTemplates } from '@/lib/whatsapp/templates-store';
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { buildInstallUrl, normalizeShopDomain } from '@/lib/shopify';
 import crypto from 'crypto';

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserContext, buildStoreFilter, canManageTeam } from '@/lib/user-context';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';

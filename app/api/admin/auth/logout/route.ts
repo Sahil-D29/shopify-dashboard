@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, logAdminAction } from '@/lib/auth/admin-auth';
 import { cookies } from 'next/headers';

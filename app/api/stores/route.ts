@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getStoresForUser, createStoreForUser } from '@/lib/store-registry';
 import { auth } from '@/lib/auth';

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getShopifyClient } from '@/lib/shopify/api-helper';
 import type { ShopifyCheckout, ShopifyCheckoutListResponse } from '@/lib/types/shopify-checkout';

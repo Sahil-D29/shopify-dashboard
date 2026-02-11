@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonFile } from '@/lib/utils/json-storage';
 import { JourneyEnrollment } from '@/lib/types/journey';

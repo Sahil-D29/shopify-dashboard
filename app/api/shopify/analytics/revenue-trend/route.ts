@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getShopifyClient } from '@/lib/shopify/api-helper';
 import type { ShopifyOrderListResponse } from '@/lib/shopify/client';

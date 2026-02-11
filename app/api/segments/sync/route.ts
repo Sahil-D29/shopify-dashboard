@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { syncAllSegments, getSyncStatus } from '@/lib/jobs/segment-sync-job';
 import { requireStoreAccess } from '@/lib/tenant/api-helpers';

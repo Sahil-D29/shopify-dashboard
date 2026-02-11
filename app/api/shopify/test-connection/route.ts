@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { ShopifyConfig } from '@/lib/store-config';
 import { getUserContext } from '@/lib/user-context';

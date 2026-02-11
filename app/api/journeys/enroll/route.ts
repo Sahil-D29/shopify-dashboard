@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { enrollCustomer } from '@/lib/journeys/executor';
 import { getShopifyClient } from '@/lib/shopify/api-helper';

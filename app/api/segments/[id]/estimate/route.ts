@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 const MOCK_SEGMENT_ESTIMATES: Record<string, { total: number; estimatedAt: string }> = {

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { CustomerSegment } from '@/lib/types/segment';
 import { calculateSegmentStatsFromFiles } from '@/lib/utils/segment-stats-file-based';
