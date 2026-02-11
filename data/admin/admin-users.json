@@ -1,0 +1,19 @@
+{
+  "admins": [
+    {
+      "id": "admin_1764489987642_dax3z9i7l",
+      "email": "admin@yourdomain.com",
+      "password": "$2b$12$elcTapW3f480YWYJe/1eCemYMSzPJLmaBzoXqbdbQSaTJuI/VcfUC",
+      "name": "Super Admin",
+      "role": "super_admin",
+      "permissions": [
+        "*"
+      ],
+      "createdAt": "2025-11-30T08:06:27.642Z",
+      "lastLogin": "2025-12-12T16:46:38.752Z",
+      "status": "active",
+      "mfaEnabled": false,
+      "ipWhitelist": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Render Blueprint - Shopify Dashboard (Next.js)
+# Deploy from Render Dashboard: New > Blueprint, connect repo, select this file.
+# Or create a Web Service manually and use the values below.
+
+services:
+  - type: web
+    name: shopify-dashboard
+    runtime: node
+    region: oregon
+
+    # Repo: use Root Directory = shopify-dashboard if repo root is parent
+    rootDir: .
+
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+      # Add all other env vars in Render Dashboard → Environment (see RENDER_DEPLOY.md)

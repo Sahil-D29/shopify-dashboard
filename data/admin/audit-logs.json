@@ -1,0 +1,184 @@
+{
+  "logs": [
+    {
+      "id": "log_1765557998765_y0g3nc8sn",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-12T16:46:38.765Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1765541153577_fix8xoh80",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-12T12:05:53.577Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1765535508412_etf1joeg7",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-12T10:31:48.412Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1765002571112_gl0vopf5p",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-06T06:29:31.112Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764940418987_qm9k7u6ox",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "store_created",
+      "details": {
+        "storeId": "store_1764940418979_28dzn6y73",
+        "name": "Dorec"
+      },
+      "timestamp": "2025-12-05T13:13:38.987Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764940326265_h6h6m96s6",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-05T13:12:06.265Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764940317656_1e793m3i0",
+      "adminId": "unknown",
+      "action": "admin_login_failed",
+      "details": {
+        "email": "admin@yourdomain.com",
+        "reason": "Invalid credentials"
+      },
+      "timestamp": "2025-12-05T13:11:57.656Z",
+      "ipAddress": "::1",
+      "status": "failed"
+    },
+    {
+      "id": "log_1764909226679_m2l44fxsr",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-05T04:33:46.679Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764907443239_xia5w4d8x",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-05T04:04:03.239Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764649422765_k5n699u6t",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-02T04:23:42.765Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764648792171_1rrn7fr7v",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-02T04:13:12.171Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764648415797_hq2vpbr7n",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-12-02T04:06:55.797Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764509198506_esmgd9fej",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-11-30T13:26:38.506Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764492254174_xgz9rdzre",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "user_created",
+      "details": {
+        "userId": "user_1764492254168_biw051awr",
+        "email": "sailakshmi.baghel.aiml22@ggits.net",
+        "role": "viewer"
+      },
+      "timestamp": "2025-11-30T08:44:14.174Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764491252135_oh3mhcy1g",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-11-30T08:27:32.135Z",
+      "ipAddress": "::1",
+      "status": "success"
+    },
+    {
+      "id": "log_1764491179749_avittokmg",
+      "adminId": "admin_1764489987642_dax3z9i7l",
+      "action": "admin_login",
+      "details": {
+        "email": "admin@yourdomain.com"
+      },
+      "timestamp": "2025-11-30T08:26:19.749Z",
+      "ipAddress": "::1",
+      "status": "success"
+    }
+  ]
+}

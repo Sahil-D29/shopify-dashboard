@@ -1,0 +1,652 @@
+// Prisma Schema for Shopify Dashboard
+// Database: PostgreSQL
+// ORM: Prisma Client
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SUPER_ADMIN
+  STORE_OWNER
+  MANAGER
+  TEAM_MEMBER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_INVITATION
+}
+
+enum StoreRole {
+  OWNER
+  MANAGER
+  TEAM_MEMBER
+  VIEWER
+}
+
+enum MemberStatus {
+  ACTIVE
+  PENDING
+  INACTIVE
+}
+
+enum CampaignType {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ScheduleType {
+  IMMEDIATE
+  SCHEDULED
+  RECURRING
+}
+
+enum JourneyStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum TriggerType {
+  ORDER_CREATED
+  CUSTOMER_CREATED
+  CHECKOUT_ABANDONED
+  SEGMENT_JOINED
+  CUSTOM
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum LogStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  UNPAID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum ErrorLevel {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum HealthStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+
+enum WorkerStatus {
+  RUNNING
+  STOPPED
+  PAUSED
+  ERROR
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  name         String
+  passwordHash String? // Nullable for OAuth users
+  role         UserRole   @default(VIEWER)
+  status       UserStatus @default(ACTIVE)
+  invitedBy    String?
+  lastLogin    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  ownedStores      Store[]       @relation("StoreOwner")
+  storeMembers     StoreMember[]
+  createdCampaigns Campaign[]    @relation("CampaignCreator")
+  createdJourneys  Journey[]     @relation("JourneyCreator")
+  createdSegments  Segment[]     @relation("SegmentCreator")
+  activityLogs     ActivityLog[]
+  invitations      Invitation[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Store {
+  id             String   @id @default(uuid())
+  shopifyDomain  String   @unique
+  shopifyStoreId String   @unique
+  storeName      String
+  accessToken    String // Should be encrypted
+  scope          String
+  isActive       Boolean  @default(true)
+  installedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  ownerId           String
+  owner             User                @relation("StoreOwner", fields: [ownerId], references: [id])
+  members           StoreMember[]
+  segments          Segment[]
+  campaigns         Campaign[]
+  journeys          Journey[]
+  subscriptions     Subscription[]
+  queueItems        CampaignQueueItem[] @relation("StoreQueueItems")
+
+  @@index([shopifyDomain])
+  @@index([ownerId])
+  @@map("stores")
+}
+
+model StoreMember {
+  id          String       @id @default(uuid())
+  userId      String
+  storeId     String
+  role        StoreRole    @default(TEAM_MEMBER)
+  permissions Json? // Custom permissions override
+  status      MemberStatus @default(ACTIVE)
+  invitedBy   String?
+  joinedAt    DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@index([userId])
+  @@index([storeId])
+  @@index([status])
+  @@map("store_members")
+}
+
+model Segment {
+  id            String   @id @default(uuid())
+  storeId       String
+  name          String
+  description   String?
+  filters       Json // Segment filter criteria
+  customerCount Int      @default(0) // Cached count
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  store              Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy          String
+  creator            User                @relation("SegmentCreator", fields: [createdBy], references: [id])
+  campaigns          Campaign[]
+  journeyEnrollments JourneyEnrollment[]
+
+  @@index([storeId])
+  @@index([createdBy])
+  @@index([isActive])
+  @@map("segments")
+}
+
+model Campaign {
+  id              String         @id @default(uuid())
+  storeId         String
+  name            String
+  description     String?
+  type            CampaignType
+  status          CampaignStatus @default(DRAFT)
+  segmentId       String?
+  messageTemplate Json // Message content
+  scheduleType    ScheduleType
+  scheduledAt     DateTime?
+  executedAt      DateTime?
+  completedAt     DateTime?
+
+  // Metrics
+  totalSent      Int @default(0)
+  totalDelivered Int @default(0)
+  totalOpened    Int @default(0)
+  totalClicked   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  store      Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  segment    Segment?            @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  createdBy  String
+  creator    User                @relation("CampaignCreator", fields: [createdBy], references: [id])
+  logs       CampaignLog[]
+  queueItems CampaignQueueItem[] @relation("CampaignQueueItems")
+
+  @@index([storeId])
+  @@index([status])
+  @@index([segmentId])
+  @@index([scheduledAt])
+  @@index([createdBy])
+  @@map("campaigns")
+}
+
+model CampaignLog {
+  id         String    @id @default(uuid())
+  campaignId String
+  customerId String // Shopify customer ID
+  status     LogStatus
+  message    String?
+  error      String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("campaign_logs")
+}
+
+model Journey {
+  id            String        @id @default(uuid())
+  storeId       String
+  name          String
+  description   String?
+  definition    Json // Journey flow definition (nodes, edges)
+  status        JourneyStatus @default(DRAFT)
+  triggerType   TriggerType
+  triggerConfig Json // Trigger configuration
+
+  // Stats
+  totalEnrollments     Int @default(0)
+  activeEnrollments    Int @default(0)
+  completedEnrollments Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  store       Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy   String
+  creator     User                @relation("JourneyCreator", fields: [createdBy], references: [id])
+  enrollments JourneyEnrollment[]
+  logs        JourneyLog[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([createdBy])
+  @@map("journeys")
+}
+
+model JourneyEnrollment {
+  id          String           @id @default(uuid())
+  journeyId   String
+  customerId  String // Shopify customer ID
+  segmentId   String? // Segment that triggered enrollment
+  currentNode String? // Current node in journey
+  status      EnrollmentStatus @default(ACTIVE)
+  enrolledAt  DateTime         @default(now())
+  completedAt DateTime?
+  metadata    Json?
+
+  // Relations
+  journey Journey  @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  segment Segment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+
+  @@unique([journeyId, customerId])
+  @@index([journeyId])
+  @@index([customerId])
+  @@index([status])
+  @@index([enrolledAt])
+  @@map("journey_enrollments")
+}
+
+model JourneyLog {
+  id           String    @id @default(uuid())
+  journeyId    String
+  enrollmentId String?
+  customerId   String
+  nodeId       String
+  action       String
+  status       LogStatus
+  message      String?
+  error        String?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+
+  // Relations
+  journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId])
+  @@index([enrollmentId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("journey_logs")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  storeId              String             @unique
+  planId               String
+  planName             String
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  // Relations
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  subscriptionId  String
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("USD")
+  status          PaymentStatus
+  stripePaymentId String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  storeId    String?
+  action     String
+  resource   String?
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([storeId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model ErrorLog {
+  id         String     @id @default(uuid())
+  level      ErrorLevel @default(ERROR)
+  message    String
+  stack      String?
+  context    Json?
+  userId     String?
+  storeId    String?
+  resolved   Boolean    @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([level])
+  @@index([resolved])
+  @@index([createdAt])
+  @@map("error_logs")
+}
+
+model SystemHealth {
+  id                        String        @id @default(uuid())
+  serverStartedAt           DateTime?
+  serverUptimeSeconds       Int           @default(0)
+  campaignWorkerStatus      WorkerStatus  @default(STOPPED)
+  journeyWorkerStatus       WorkerStatus  @default(STOPPED)
+  shopifyLastTokenCheck     DateTime?
+  shopifyTokenValid         Boolean       @default(false)
+  shopifyLastSuccessfulSync DateTime?
+  lastUpdated               DateTime      @default(now()) @updatedAt
+
+  // Legacy fields (for compatibility)
+  service                   String?
+  status                    HealthStatus  @default(HEALTHY)
+  metrics                   Json?
+  message                   String?
+  checkedAt                 DateTime      @default(now())
+
+  @@index([status])
+  @@index([lastUpdated])
+  @@map("system_health")
+}
+
+model PlanFeature {
+  id                   String   @id @default(uuid())
+  planId               String   @unique
+  name                 String
+  price                Decimal  @db.Decimal(10, 2)
+  billingCycle         String   // monthly, yearly
+  messagesPerMonth     Int      // -1 for unlimited
+  campaignsPerMonth    Int      // -1 for unlimited
+  stores               Int      // -1 for unlimited
+  teamMembersPerStore  Int      // -1 for unlimited
+  analytics            String   // basic, advanced
+  support              String   // email, priority
+  whatsappAutomation   Boolean  @default(false)
+  customTemplates      Boolean  @default(false)
+  advancedSegmentation Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([planId])
+  @@map("plan_features")
+}
+
+model UsageMetric {
+  id               String   @id @default(uuid())
+  storeId          String
+  userId           String?
+  period           String   // YYYY-MM format
+  planType         String
+  messagesSent     Int      @default(0)
+  campaignsCreated Int      @default(0)
+  apiCalls         Int      @default(0)
+  messagesLimit    Int      // -1 for unlimited
+  campaignsLimit   Int      // -1 for unlimited
+  apiCallsLimit    Int      // -1 for unlimited
+  alert80Sent      Boolean  @default(false)
+  alert100Sent     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([storeId, period, userId])
+  @@index([storeId])
+  @@index([period])
+  @@map("usage_metrics")
+}
+
+model Coupon {
+  id              String       @id @default(uuid())
+  code            String       @unique
+  discountType    DiscountType
+  value           Decimal      @db.Decimal(10, 2)
+  validFrom       DateTime?
+  validUntil      DateTime?
+  usageLimit      Int?         // null = unlimited
+  usedCount       Int          @default(0)
+  applicablePlans Json         // Array of plan IDs
+  singleUse       Boolean      @default(false)
+  usedBy          Json         // Array of user IDs
+  status          String       @default("active")
+  description     String?
+  createdBy       String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([code])
+  @@index([status])
+  @@index([validUntil])
+  @@map("coupons")
+}
+
+model Brand {
+  id                  String   @id @default(uuid())
+  storeId             String
+  brandName           String
+  brandLogo           String?
+  brandColor          String   @default("#000000")
+  brandSecondaryColor String?
+  timezone            String   @default("UTC")
+  industryType        String?
+  emailSignature      String?
+  socialLinks         Json?    // {facebook, twitter, instagram, etc}
+  defaultTemplates    Json?    // Array of template IDs
+  settings            Json?    // Additional brand settings
+  createdBy           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([storeId])
+  @@map("brands")
+}
+
+model WhatsAppConfig {
+  id                 String   @id @default(uuid())
+  storeId            String   @unique
+  phoneNumberId      String?
+  businessAccountId  String?
+  accessToken        String?  // Should be encrypted
+  webhookVerifyToken String?
+  isConfigured       Boolean  @default(false)
+  templates          Json?    // Array of approved templates
+  settings           Json?    // Additional WhatsApp settings
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([storeId])
+  @@map("whatsapp_configs")
+}
+
+model CampaignQueueItem {
+  id          String      @id @default(uuid())
+  campaignId  String
+  storeId     String?
+  scheduledAt DateTime
+  status      QueueStatus @default(PENDING)
+  retryCount  Int         @default(0)
+  lastError   String?
+  lastAttempt DateTime?
+  startedAt   DateTime?
+  payload     Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  campaign Campaign @relation("CampaignQueueItems", fields: [campaignId], references: [id], onDelete: Cascade)
+  store    Store?   @relation("StoreQueueItems", fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([campaignId])
+  @@index([storeId])
+  @@map("campaign_queue")
+}
+
+model Invitation {
+  id         String    @id @default(uuid())
+  storeId    String
+  email      String
+  role       StoreRole
+  invitedBy  String
+  token      String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  inviter User @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([email])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("invitations")
+}
+
+model SegmentSyncStatus {
+  id            String   @id @default("singleton") // Single record for system-wide status
+  isRunning     Boolean  @default(false)
+  lastRun       DateTime?
+  nextRun       DateTime?
+  results       Json?    // Array of SegmentSyncResult
+  error         String?
+  needsUpdate   Boolean  @default(false) // Flag for webhook-triggered updates
+  lastTriggered DateTime? // Last webhook trigger time
+  triggerTopic  String?   // Last webhook topic that triggered update
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  @@map("segment_sync_status")
+}
+

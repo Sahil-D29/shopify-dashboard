@@ -1,0 +1,11 @@
+{
+  "example-store.myshopify.com": {
+    "shop": "example-store.myshopify.com",
+    "accessToken": "shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "scope": "read_products,read_orders,read_customers,read_locations",
+    "installedAt": 1234567890000,
+    "lastUpdated": 1234567890000
+  }
+}
+
+

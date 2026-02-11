@@ -1,0 +1,28 @@
+{
+  "users": [
+    {
+      "id": "user_1764137243538_t81fonfin",
+      "name": "Sailakshmi Singh Baghel",
+      "email": "sailakshmisinghbaghel@gmail.com",
+      "password": "$2b$12$GH0HBCAwLyv3eqArYxbNd.wz/sVIWju9JD/fa7uruLZeF9ZmcVxdC",
+      "shopifyStoreId": null,
+      "createdAt": "2025-11-26T06:07:23.539Z",
+      "lastLogin": "2025-11-30T05:05:07.817Z",
+      "provider": "google",
+      "googleId": "108030347601592093803",
+      "image": "https://lh3.googleusercontent.com/a/ACg8ocJ9hV5NMRPYobDjESxHbqcHYnSOxlTR-xgdAQ3zHoixTak8HCE=s96-c"
+    },
+    {
+      "id": "user_1764492254168_biw051awr",
+      "name": "Testing",
+      "email": "sailakshmi.baghel.aiml22@ggits.net",
+      "password": "$2b$12$vCuANOmuFLyiKxyIQvurAuCsPVQ/LoZsWTdjzuAXO6D5w00YIXZoC",
+      "phone": "9424309363",
+      "storeId": "store_default",
+      "role": "viewer",
+      "status": "active",
+      "createdAt": "2025-11-30T08:44:14.168Z",
+      "provider": "credentials"
+    }
+  ]
+}

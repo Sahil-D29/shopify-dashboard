@@ -1,0 +1,26 @@
+{
+  "systemName": "Shopify Marketing Dashboard",
+  "supportEmail": "support@yourdomain.com",
+  "supportPhone": "",
+  "maintenanceMode": false,
+  "featureFlags": {
+    "multiStore": true,
+    "userRoles": true,
+    "rfmSegmentation": false,
+    "predictiveAnalytics": false
+  },
+  "security": {
+    "sessionTimeout": 30,
+    "require2FA": false,
+    "ipWhitelist": [],
+    "passwordMinLength": 8,
+    "passwordRequireUppercase": true,
+    "passwordRequireNumber": true
+  },
+  "api": {
+    "rateLimit": 1000,
+    "rateLimitWindow": 3600
+  },
+  "updatedAt": "2024-01-01T00:00:00Z"
+}
+
