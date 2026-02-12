@@ -341,20 +341,16 @@ export const authConfig: NextAuthConfig = {
 };
 
 // Validate required environment variables at startup
-// Only throw in production - in development, log a warning
+// Don't throw during build (next build sets NODE_ENV=production but env vars may not be available)
 const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
 if (!authSecret) {
-  const errorMessage = 
+  const errorMessage =
     'AUTH_SECRET or NEXTAUTH_SECRET is not configured. ' +
     'Please set one in your .env.local file. ' +
     'Generate one with: node scripts/generate-secrets.js';
-  
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(errorMessage);
-  } else {
-    console.warn('⚠️  [Auth]', errorMessage);
-    console.warn('⚠️  [Auth] Authentication will not work until AUTH_SECRET or NEXTAUTH_SECRET is configured.');
-  }
+
+  console.warn('⚠️  [Auth]', errorMessage);
+  console.warn('⚠️  [Auth] Authentication will not work until AUTH_SECRET or NEXTAUTH_SECRET is configured.');
 }
 
 export const authOptions = authConfig;
