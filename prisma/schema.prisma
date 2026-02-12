@@ -139,6 +139,72 @@ enum QueueStatus {
 }
 
 // ============================================
+// CONTACTS & CHAT ENUMS
+// ============================================
+
+enum ContactSource {
+  SHOPIFY
+  CSV_IMPORT
+  MANUAL
+  WHATSAPP_INBOUND
+  FORM
+}
+
+enum OptInStatus {
+  OPTED_IN
+  OPTED_OUT
+  PENDING
+  NOT_SET
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  TEMPLATE
+  INTERACTIVE
+  LOCATION
+  STICKER
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+}
+
+enum WhatsAppFlowStatus {
+  DRAFT
+  PUBLISHED
+  DEPRECATED
+  BLOCKED
+}
+
+// ============================================
 // MODELS
 // ============================================
 
@@ -162,6 +228,8 @@ model User {
   createdSegments  Segment[]     @relation("SegmentCreator")
   activityLogs     ActivityLog[]
   invitations      Invitation[]
+  assignedConversations Conversation[] @relation("AssignedConversations")
+  internalNotes    InternalNote[]
 
   @@index([email])
   @@index([role])
@@ -190,6 +258,13 @@ model Store {
   journeys          Journey[]
   subscriptions     Subscription[]
   queueItems        CampaignQueueItem[] @relation("StoreQueueItems")
+  contacts          Contact[]
+  contactGroups     ContactGroup[]
+  customFieldDefs   CustomFieldDefinition[]
+  conversations     Conversation[]
+  quickReplies      QuickReply[]
+  autoReplyRules    AutoReplyRule[]
+  whatsappFlows     WhatsAppFlow[]
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -648,5 +723,296 @@ model SegmentSyncStatus {
   updatedAt     DateTime  @default(now()) @updatedAt
 
   @@map("segment_sync_status")
+}
+
+// ============================================
+// CONTACTS MANAGEMENT
+// ============================================
+
+model Contact {
+  id                String        @id @default(uuid())
+  storeId           String
+  phone             String        // E.164 format (+1234567890)
+  name              String?
+  email             String?
+  firstName         String?
+  lastName          String?
+  avatarUrl         String?
+  tags              Json          @default("[]")   // String array
+  optInStatus       OptInStatus   @default(NOT_SET)
+  optInAt           DateTime?
+  optOutAt          DateTime?
+  source            ContactSource @default(MANUAL)
+  shopifyCustomerId String?       // Link to Shopify customer
+  customFields      Json          @default("{}")   // Key-value custom data
+  metadata          Json?
+  lastMessageAt     DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  messages      Message[]
+
+  @@unique([storeId, phone])
+  @@index([storeId])
+  @@index([phone])
+  @@index([shopifyCustomerId])
+  @@index([optInStatus])
+  @@index([source])
+  @@index([lastMessageAt])
+  @@map("contacts")
+}
+
+model ContactGroup {
+  id          String   @id @default(uuid())
+  storeId     String
+  name        String
+  description String?
+  color       String?  // For UI display
+  contactIds  Json     @default("[]") // Array of contact IDs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@map("contact_groups")
+}
+
+model CustomFieldDefinition {
+  id                 String          @id @default(uuid())
+  storeId            String
+  fieldName          String          // Machine name (snake_case)
+  fieldLabel         String          // Human-readable label
+  fieldType          CustomFieldType @default(TEXT)
+  options            Json            @default("[]") // For SELECT type
+  isRequired         Boolean         @default(false)
+  isFilterable       Boolean         @default(true)
+  isTemplateVariable Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, fieldName])
+  @@index([storeId])
+  @@map("custom_field_definitions")
+}
+
+// ============================================
+// LIVE CHAT & CONVERSATIONS
+// ============================================
+
+model Conversation {
+  id                 String             @id @default(uuid())
+  storeId            String
+  contactId          String
+  assignedTo         String?            // User ID of assigned agent
+  status             ConversationStatus @default(OPEN)
+  lastMessageAt      DateTime?
+  lastMessagePreview String?            // First ~100 chars for inbox list
+  unreadCount        Int                @default(0)
+  metadata           Json?
+  closedAt           DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  // Relations
+  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  contact      Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedUser User?          @relation("AssignedConversations", fields: [assignedTo], references: [id], onDelete: SetNull)
+  messages     Message[]
+  notes        InternalNote[]
+
+  @@unique([storeId, contactId])
+  @@index([storeId])
+  @@index([contactId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id                String           @id @default(uuid())
+  conversationId    String
+  contactId         String
+  storeId           String
+  direction         MessageDirection
+  type              MessageType      @default(TEXT)
+  content           String           // Text body or caption
+  mediaUrl          String?          // For media messages
+  mediaType         String?          // MIME type
+  templateName      String?          // If sent via template
+  templateData      Json?            // Template variables
+  whatsappMessageId String?          // Meta wamid for DLR tracking
+  status            MessageStatus    @default(PENDING)
+  sentBy            String?          // User ID who sent (null for inbound)
+  errorMessage      String?
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id])
+
+  @@index([conversationId])
+  @@index([contactId])
+  @@index([storeId])
+  @@index([whatsappMessageId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("messages")
+}
+
+model InternalNote {
+  id             String   @id @default(uuid())
+  conversationId String
+  contactId      String?
+  storeId        String
+  content        String
+  createdBy      String   // User ID
+  createdAt      DateTime @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  creator      User         @relation(fields: [createdBy], references: [id])
+
+  @@index([conversationId])
+  @@index([contactId])
+  @@index([storeId])
+  @@map("internal_notes")
+}
+
+model QuickReply {
+  id        String   @id @default(uuid())
+  storeId   String
+  shortcut  String   // e.g. "/thanks"
+  title     String
+  content   String
+  category  String?
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shortcut])
+  @@index([storeId])
+  @@map("quick_replies")
+}
+
+model AutoReplyRule {
+  id           String   @id @default(uuid())
+  storeId      String
+  name         String
+  isActive     Boolean  @default(true)
+  priority     Int      @default(0)
+  keywords     Json     // Array of trigger keywords
+  matchType    String   @default("contains") // exact, contains, regex
+  replyType    String   @default("text")     // text, template
+  replyContent String?
+  templateName String?
+  templateData Json?
+  schedule     Json?    // Active hours (optional)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([isActive])
+  @@map("auto_reply_rules")
+}
+
+// ============================================
+// WHATSAPP FLOWS
+// ============================================
+
+model WhatsAppFlow {
+  id               String             @id @default(uuid())
+  storeId          String
+  metaFlowId       String?            // ID from Meta API
+  name             String
+  status           WhatsAppFlowStatus @default(DRAFT)
+  categories       Json               @default("[]")
+  definition       Json               // Flow JSON definition
+  previewUrl       String?
+  validationErrors Json?
+
+  // Analytics
+  totalSent       Int @default(0)
+  totalCompleted  Int @default(0)
+  totalDroppedOff Int @default(0)
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  store     Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  responses WhatsAppFlowResponse[]
+
+  @@index([storeId])
+  @@index([metaFlowId])
+  @@map("whatsapp_flows")
+}
+
+model WhatsAppFlowResponse {
+  id           String    @id @default(uuid())
+  flowId       String
+  contactId    String?
+  phone        String
+  screenId     String
+  responseData Json      // Form submission data
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  // Relations
+  flow WhatsAppFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId])
+  @@index([contactId])
+  @@index([createdAt])
+  @@map("whatsapp_flow_responses")
+}
+
+// ============================================
+// ANALYTICS
+// ============================================
+
+model WhatsAppAnalyticsSnapshot {
+  id                      String   @id @default(uuid())
+  storeId                 String
+  date                    DateTime @db.Date
+  period                  String   // DAILY, WEEKLY, MONTHLY
+  messagesSent            Int      @default(0)
+  messagesDelivered       Int      @default(0)
+  messagesRead            Int      @default(0)
+  messagesReplied         Int      @default(0)
+  messagesFailed          Int      @default(0)
+  conversationsOpened     Int      @default(0)
+  conversationsResolved   Int      @default(0)
+  avgResponseTimeSeconds  Int      @default(0)
+  revenue                 Decimal  @default(0) @db.Decimal(10, 2)
+  purchases               Int      @default(0)
+  campaignROI             Decimal  @default(0) @db.Decimal(10, 2)
+  topCampaignId           String?
+  topTemplateId           String?
+  createdAt               DateTime @default(now())
+
+  @@unique([storeId, date, period])
+  @@index([storeId])
+  @@index([date])
+  @@map("whatsapp_analytics_snapshots")
 }
 

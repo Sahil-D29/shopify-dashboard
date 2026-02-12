@@ -5,21 +5,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Image from 'next/image';
-import { 
-  LayoutDashboard, 
-  Users, 
-  ShoppingCart, 
-  Package, 
+import {
+  LayoutDashboard,
+  Users,
+  ShoppingCart,
+  Package,
   ShoppingBag,
   Settings,
   Filter,
   ChevronRight,
   ChevronDown,
   MessageSquare,
+  MessageCircle,
   Zap,
   LogOut,
   User,
-  Loader2
+  Loader2,
+  Contact,
+  Workflow,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getWindowStorage } from '@/lib/window-storage';
@@ -198,6 +202,21 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             Dashboard
           </Link>
 
+          {/* Live Chat */}
+          <Link
+            href="/chat"
+            onClick={isMobile ? onClose : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              pathname?.startsWith('/chat')
+                ? "bg-gray-800 text-white"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            )}
+          >
+            <MessageCircle className="h-5 w-5 shrink-0" />
+            <span className="flex-1">Live Chat</span>
+          </Link>
+
         {/* Customers Section with Nested Segments */}
         <div>
           <div className="flex items-center gap-1">
@@ -255,6 +274,21 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           </div>
         </div>
 
+        {/* Contacts (WhatsApp) */}
+        <Link
+          href="/contacts"
+          onClick={isMobile ? onClose : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            pathname?.startsWith('/contacts')
+              ? "bg-gray-800 text-white"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
+        >
+          <Contact className="h-5 w-5 shrink-0" />
+          Contacts
+        </Link>
+
         {/* Templates */}
         <Link
           href="/templates"
@@ -298,6 +332,36 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
         >
           <Zap className="h-5 w-5 shrink-0" />
           Journeys
+        </Link>
+
+        {/* Flows */}
+        <Link
+          href="/flows"
+          onClick={isMobile ? onClose : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            pathname?.startsWith('/flows')
+              ? "bg-gray-800 text-white"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
+        >
+          <Workflow className="h-5 w-5 shrink-0" />
+          Flows
+        </Link>
+
+        {/* Analytics */}
+        <Link
+          href="/analytics"
+          onClick={isMobile ? onClose : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            pathname?.startsWith('/analytics')
+              ? "bg-gray-800 text-white"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
+        >
+          <BarChart3 className="h-5 w-5 shrink-0" />
+          Analytics
         </Link>
 
         {/* Other Navigation Items (excluding Dashboard and Settings) */}
