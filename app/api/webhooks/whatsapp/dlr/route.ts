@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 
 interface DLRPayload {
@@ -33,6 +34,28 @@ export async function POST(request: NextRequest) {
       for (const change of entry.changes || []) {
         for (const status of change.value?.statuses || []) {
           const { id: messageId, status: messageStatus, recipient_id, timestamp, errors } = status;
+
+          // ─── PHASE 2: Update Prisma Message status ────────
+          try {
+            const statusMap: Record<string, string> = {
+              sent: 'SENT',
+              delivered: 'DELIVERED',
+              read: 'READ',
+              failed: 'FAILED',
+            };
+            const prismaStatus = statusMap[messageStatus];
+            if (prismaStatus && messageId) {
+              await prisma.message.updateMany({
+                where: { whatsappMessageId: messageId },
+                data: {
+                  status: prismaStatus as any,
+                  errorMessage: messageStatus === 'failed' ? errors?.[0]?.message || 'Delivery failed' : undefined,
+                },
+              });
+            }
+          } catch (err) {
+            console.error('[DLR] Prisma message update error:', err);
+          }
 
           // Find journey enrollment with this message ID
           const enrollments = readJsonFile<any>('journey-enrollments.json');

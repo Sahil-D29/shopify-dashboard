@@ -8,6 +8,7 @@ import { Menu, X } from 'lucide-react';
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname?.startsWith('/auth');
+  const isChatPage = pathname?.startsWith('/chat');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Close sidebar when route changes on mobile
@@ -75,9 +76,13 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="px-4 py-6 sm:px-6 lg:px-8">
-            {children}
-          </div>
+          {isChatPage ? (
+            children
+          ) : (
+            <div className="px-4 py-6 sm:px-6 lg:px-8">
+              {children}
+            </div>
+          )}
         </main>
       </div>
     </div>

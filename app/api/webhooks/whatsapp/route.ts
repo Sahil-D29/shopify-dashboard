@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import type { JourneyEnrollment } from '@/lib/types/journey';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
@@ -193,6 +194,16 @@ export async function POST(request: NextRequest) {
               const errorMessage = toTrimmedString((err as any)?.title);
 
               if (!messageId || !statusType) return;
+
+              // ─── PHASE 2: Update Prisma Message status ────────
+              const prismaStatusMap: Record<string, string> = { sent: 'SENT', delivered: 'DELIVERED', read: 'READ', failed: 'FAILED' };
+              const prismaStatus = prismaStatusMap[statusType];
+              if (prismaStatus) {
+                prisma.message.updateMany({
+                  where: { whatsappMessageId: messageId },
+                  data: { status: prismaStatus as any, errorMessage: statusType === 'failed' ? errorMessage : undefined },
+                }).catch(err => console.error('[Webhook] Prisma message update error:', err));
+              }
 
               campaignMessages = updateCampaignMessageStatus(campaignMessages, {
                 messageId,

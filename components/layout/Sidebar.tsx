@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { getWindowStorage } from '@/lib/window-storage';
 import { toast } from 'sonner';
 import { StoreSwitcher } from '@/components/layout/StoreSwitcher';
+import { ChatNotificationBadge } from '@/components/chat/ChatNotificationBadge';
 import { X } from 'lucide-react';
 
 const USER_PREFERENCES_KEY = 'user:preferences';
@@ -215,6 +216,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           >
             <MessageCircle className="h-5 w-5 shrink-0" />
             <span className="flex-1">Live Chat</span>
+            <ChatNotificationBadge storeId={null} />
           </Link>
 
         {/* Customers Section with Nested Segments */}
