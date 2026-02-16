@@ -23,7 +23,8 @@ import {
   Loader2,
   Contact,
   Workflow,
-  BarChart3
+  BarChart3,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getWindowStorage } from '@/lib/window-storage';
@@ -49,6 +50,7 @@ const navigation = [
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Abandoned Carts', href: '/abandoned-carts', icon: ShoppingBag },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Billing', href: '/billing', icon: CreditCard },
 ];
 
 export function Sidebar({ onClose, isMobile = false }: SidebarProps) {

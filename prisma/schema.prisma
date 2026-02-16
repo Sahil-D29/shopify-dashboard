@@ -574,6 +574,7 @@ model PlanFeature {
   whatsappAutomation   Boolean  @default(false)
   customTemplates      Boolean  @default(false)
   advancedSegmentation Boolean  @default(false)
+  priceINR             Decimal? @db.Decimal(10, 2) // Price in INR
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -618,6 +619,8 @@ model Coupon {
   usedBy          Json         // Array of user IDs
   status          String       @default("active")
   description     String?
+  assignedStoreId String?      // Lock coupon to specific store/customer
+  isRecurring     Boolean      @default(false) // Applies every billing cycle
   createdBy       String
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -625,6 +628,7 @@ model Coupon {
   @@index([code])
   @@index([status])
   @@index([validUntil])
+  @@index([assignedStoreId])
   @@map("coupons")
 }
 
@@ -854,6 +858,8 @@ model Message {
   status            MessageStatus    @default(PENDING)
   sentBy            String?          // User ID who sent (null for inbound)
   errorMessage      String?
+  costAmount        Decimal?         @default(0) @db.Decimal(10, 4) // Markup cost (e.g. 0.10 INR)
+  costCurrency      String?          @default("INR")
   metadata          Json?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt

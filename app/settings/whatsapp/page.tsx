@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff, Loader2, Phone, ShieldCheck, RefreshCcw } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Phone, ShieldCheck, RefreshCcw, CheckCircle, ExternalLink } from 'lucide-react';
 import { WhatsAppConfig, WhatsAppConfigManager } from '@/lib/whatsapp-config';
+import { useSearchParams } from 'next/navigation';
 
 interface TestConnectionResponse {
   success: boolean;
@@ -32,11 +33,93 @@ export default function WhatsAppSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<null | { success: boolean; message: string }>(null);
+  const [embeddedLoading, setEmbeddedLoading] = useState(false);
+  const [embeddedConnected, setEmbeddedConnected] = useState(false);
+  const [connectedInfo, setConnectedInfo] = useState<{ businessName?: string; phoneNumber?: string } | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const existing = WhatsAppConfigManager.getConfig();
     if (existing) setConfig(existing);
   }, []);
+
+  // Handle Facebook OAuth callback redirect
+  useEffect(() => {
+    const code = searchParams.get('code');
+    const error = searchParams.get('error');
+
+    if (error) {
+      setTestResult({ success: false, message: decodeURIComponent(error) });
+      return;
+    }
+
+    if (code) {
+      handleEmbeddedCallback(code);
+    }
+
+    if (searchParams.get('connected') === 'true') {
+      setEmbeddedConnected(true);
+    }
+  }, [searchParams]);
+
+  const handleEmbeddedSignup = async () => {
+    setEmbeddedLoading(true);
+    try {
+      const res = await fetch('/api/whatsapp/embedded-signup');
+      const data = await res.json();
+      if (data.loginUrl) {
+        window.location.href = data.loginUrl;
+      } else {
+        setTestResult({ success: false, message: data.error || 'Failed to start signup' });
+        setEmbeddedLoading(false);
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: getErrorMessage(err, 'Failed to start embedded signup') });
+      setEmbeddedLoading(false);
+    }
+  };
+
+  const handleEmbeddedCallback = async (code: string) => {
+    setEmbeddedLoading(true);
+    try {
+      const res = await fetch('/api/whatsapp/embedded-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (data.success && data.configured) {
+        setEmbeddedConnected(true);
+        setConnectedInfo({ businessName: data.businessName, phoneNumber: data.phoneNumber });
+        setTestResult({ success: true, message: 'WhatsApp Business Account connected successfully!' });
+        // Clean URL
+        window.history.replaceState({}, '', '/settings/whatsapp');
+      } else if (data.success && !data.configured && data.businesses) {
+        // Multiple WABAs — auto-select first for now
+        const biz = data.businesses[0];
+        if (biz?.wabaId && biz?.phoneNumbers?.[0]) {
+          const saveRes = await fetch('/api/whatsapp/embedded-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, wabaId: biz.wabaId, phoneNumberId: biz.phoneNumbers[0].id }),
+          });
+          const saveData = await saveRes.json();
+          if (saveData.success) {
+            setEmbeddedConnected(true);
+            setConnectedInfo({ businessName: biz.name, phoneNumber: biz.phoneNumbers[0].displayPhoneNumber });
+            setTestResult({ success: true, message: 'WhatsApp Business Account connected!' });
+          }
+        }
+        window.history.replaceState({}, '', '/settings/whatsapp');
+      } else {
+        setTestResult({ success: false, message: data.error || 'Failed to complete signup' });
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: getErrorMessage(err, 'Callback processing failed') });
+    } finally {
+      setEmbeddedLoading(false);
+    }
+  };
 
   const onChange = (field: keyof WhatsAppConfig, value: WhatsAppConfig[typeof field]) => {
     setConfig(prev => ({
@@ -122,10 +205,53 @@ export default function WhatsAppSettingsPage() {
         </div>
       </div>
 
+      {/* Facebook Embedded Signup */}
+      <Card className={embeddedConnected ? 'border-green-300 bg-green-50/30' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {embeddedConnected ? <CheckCircle className="h-5 w-5 text-green-600" /> : <ExternalLink className="h-5 w-5" />}
+            Connect with Facebook
+          </CardTitle>
+          <CardDescription>
+            {embeddedConnected
+              ? 'Your WhatsApp Business Account is connected'
+              : 'One-click setup — connect your WhatsApp Business Account via Facebook'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {embeddedConnected && connectedInfo ? (
+            <div className="space-y-2">
+              {connectedInfo.businessName && (
+                <p className="text-sm"><span className="font-medium">Business:</span> {connectedInfo.businessName}</p>
+              )}
+              {connectedInfo.phoneNumber && (
+                <p className="text-sm"><span className="font-medium">Phone:</span> {connectedInfo.phoneNumber}</p>
+              )}
+              <Button variant="outline" size="sm" onClick={handleEmbeddedSignup} className="mt-2">
+                Reconnect
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={handleEmbeddedSignup}
+              disabled={embeddedLoading}
+              className="bg-[#1877F2] hover:bg-[#166FE5] text-white"
+            >
+              {embeddedLoading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
+              ) : (
+                <><ExternalLink className="mr-2 h-4 w-4" /> Connect with Facebook</>
+              )}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Manual Credentials */}
       <Card>
         <CardHeader>
-          <CardTitle>Credentials</CardTitle>
-          <CardDescription>Enter your verified WhatsApp Business credentials</CardDescription>
+          <CardTitle>Manual Configuration</CardTitle>
+          <CardDescription>Or enter your WhatsApp Business credentials manually</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

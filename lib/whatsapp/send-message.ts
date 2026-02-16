@@ -7,7 +7,6 @@
 import { prisma } from '@/lib/prisma';
 import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
 import { normalizePhone } from './normalize-phone';
-
 export type SendMessageType = 'text' | 'template' | 'image' | 'video' | 'document' | 'audio';
 
 export interface SendMessageOptions {
@@ -135,6 +134,15 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
       where: { id: opts.contactId },
       data: { lastMessageAt: new Date() },
     });
+
+    // Record per-message markup cost
+    try {
+      const { recordMessageCost } = await import('@/lib/billing/message-cost');
+      await recordMessageCost(dbMessage.id, opts.storeId);
+    } catch (costError) {
+      console.error('[sendWhatsAppMessage] Cost tracking error:', costError);
+      // Don't fail the send if cost tracking fails
+    }
 
     return {
       success: true,
