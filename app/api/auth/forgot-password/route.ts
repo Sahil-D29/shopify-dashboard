@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { NextResponse } from 'next/server';
-import { findUserByEmail, readUsers, writeUsers } from '@/lib/fileAuth';
+import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { sendEmail } from '@/lib/email';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
@@ -16,20 +18,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find user
-    const user = await findUserByEmail(email);
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        passwordHash: true,
+      },
+    });
 
     // Always return success even if user not found (security best practice)
     if (!user) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         message: 'If an account exists, reset instructions have been sent'
       });
     }
 
-    // Don't allow password reset for OAuth-only users
-    if (!user.password) {
-      return NextResponse.json({ 
+    // Don't allow password reset for OAuth-only users (no passwordHash)
+    if (!user.passwordHash) {
+      return NextResponse.json({
         success: true,
         message: 'If an account exists, reset instructions have been sent'
       });
@@ -39,22 +49,21 @@ export async function POST(request: Request) {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-    // Update user with reset token
-    const users = await readUsers();
-    const userIndex = users.findIndex((u) => u.id === user.id);
-    
-    if (userIndex !== -1) {
-      users[userIndex].resetToken = resetToken;
-      users[userIndex].resetTokenExpiry = resetTokenExpiry.toISOString();
-      await writeUsers(users);
-    }
+    // Store reset token in database
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
 
     const baseUrl = getBaseUrl();
     const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
-    
+
     await sendEmail({
       to: email,
-      subject: 'Reset Your Password - Shopify Dashboard',
+      subject: 'Reset Your Password - DOREC.IN',
       html: `
         <!DOCTYPE html>
         <html>
@@ -67,39 +76,39 @@ export async function POST(request: Request) {
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">Reset Your Password</h1>
           </div>
-          
+
           <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
             <p style="font-size: 16px; margin-bottom: 20px;">Hello ${user.name || 'there'},</p>
-            
+
             <p style="font-size: 16px; margin-bottom: 20px;">
-              You requested to reset your password for your Shopify Dashboard account. Click the button below to proceed:
+              You requested to reset your password for your DOREC.IN account. Click the button below to proceed:
             </p>
-            
+
             <div style="text-align: center; margin: 30px 0;">
               <a href="${resetUrl}" style="display: inline-block; padding: 14px 28px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
                 Reset Password
               </a>
             </div>
-            
+
             <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
               Or copy and paste this link into your browser:
             </p>
             <p style="font-size: 12px; color: #9ca3af; word-break: break-all; background: #f9fafb; padding: 10px; border-radius: 5px;">
               ${resetUrl}
             </p>
-            
+
             <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
               <strong>This link will expire in 1 hour.</strong>
             </p>
-            
+
             <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
               If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
             </p>
-            
+
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            
+
             <p style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
-              This is an automated message. Please do not reply to this email.
+              This is an automated message from DOREC.IN. Please do not reply to this email.
             </p>
           </div>
         </body>
@@ -107,7 +116,7 @@ export async function POST(request: Request) {
       `,
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: 'Reset instructions sent to email'
     });
@@ -119,4 +128,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

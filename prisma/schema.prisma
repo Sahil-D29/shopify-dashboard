@@ -215,10 +215,12 @@ model User {
   passwordHash String? // Nullable for OAuth users
   role         UserRole   @default(VIEWER)
   status       UserStatus @default(ACTIVE)
-  invitedBy    String?
-  lastLogin    DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  invitedBy         String?
+  lastLogin         DateTime?
+  resetToken        String?    @unique
+  resetTokenExpiry  DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   // Relations
   ownedStores      Store[]       @relation("StoreOwner")
