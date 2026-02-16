@@ -42,11 +42,11 @@ export async function POST(req: NextRequest) {
 
     console.log("User authenticated:", user.email);
 
-    // Create JWT token
-    const secretString = process.env.NEXTAUTH_SECRET;
-    
+    // Create JWT token (check both AUTH_SECRET and NEXTAUTH_SECRET for compatibility)
+    const secretString = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
     if (!secretString) {
-      console.error('NEXTAUTH_SECRET is not configured');
+      console.error('AUTH_SECRET / NEXTAUTH_SECRET is not configured');
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
