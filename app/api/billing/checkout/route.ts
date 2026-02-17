@@ -27,18 +27,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { planId, billingCycle, currency } = body;
+    const { planId, currency } = body;
+    const billingCycle = body.billingCycle || 'monthly';
 
-    if (!planId || !billingCycle || !currency) {
+    if (!planId || !currency) {
       return NextResponse.json(
-        { error: 'Missing required fields: planId, billingCycle, currency' },
+        { error: 'Missing required fields: planId, currency' },
         { status: 400 }
       );
     }
 
-    // Validate plan exists
+    // Validate plan exists — look up by planId field (e.g. "starter"), not primary key
     const plan = await prisma.planFeature.findUnique({
-      where: { id: planId },
+      where: { planId },
     });
 
     if (!plan) {

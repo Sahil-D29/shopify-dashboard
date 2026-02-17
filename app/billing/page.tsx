@@ -10,6 +10,7 @@ import UsageDashboard from '@/components/billing/UsageDashboard';
 import PaymentHistory from '@/components/billing/PaymentHistory';
 import CouponInput from '@/components/billing/CouponInput';
 import RazorpayCheckout from '@/components/billing/RazorpayCheckout';
+import { Loader2 } from 'lucide-react';
 
 interface Plan {
   planId: string;
@@ -27,17 +28,20 @@ interface Plan {
 }
 
 interface Subscription {
-  plan: {
-    name: string;
-  };
+  id: string;
   status: string;
+  planId: string;
+  planName: string;
+  currentPeriodStart: string;
   currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
 }
 
 interface CheckoutResponse {
   gateway: 'razorpay' | 'stripe';
-  subscriptionId?: string;
+  razorpaySubscriptionId?: string;
   razorpayKeyId?: string;
+  shortUrl?: string;
   sessionUrl?: string;
 }
 
@@ -50,68 +54,69 @@ export default function BillingPage() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [discount, setDiscount] = useState<{ discountType: string; value: number } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchStoreId = async () => {
-      try {
-        const response = await fetch('/api/store/current');
-        if (response.ok) {
-          const data = await response.json();
-          setStoreId(data.storeId);
-        }
-      } catch (error) {
-        console.error('Error fetching store ID:', error);
-      }
-    };
-
-    fetchStoreId();
-  }, []);
-
-  useEffect(() => {
-    if (!storeId) return;
-
     const fetchData = async () => {
       try {
-        const [plansRes, subRes] = await Promise.all([
-          fetch('/api/billing/plans'),
-          fetch(`/api/billing/subscription?storeId=${storeId}`),
-        ]);
-
+        // Fetch plans (public, no storeId needed)
+        const plansRes = await fetch('/api/billing/plans');
         if (plansRes.ok) {
           const plansData = await plansRes.json();
-          setPlans(plansData);
+          const rawPlans = plansData.plans || [];
+          setPlans(rawPlans.map((p: Record<string, unknown>) => ({
+            ...p,
+            price: p.priceUSD ?? p.price ?? 0,
+            priceINR: p.priceINR ?? 0,
+          })));
         }
 
-        if (subRes.ok) {
-          const subData = await subRes.json();
-          setCurrentSubscription(subData);
+        // Fetch session to get storeId
+        const sessionRes = await fetch('/api/auth/session');
+        if (sessionRes.ok) {
+          const session = await sessionRes.json();
+          const userStoreId = session?.user?.storeId;
+          if (userStoreId) {
+            setStoreId(userStoreId);
+            // Fetch subscription
+            const subRes = await fetch(`/api/billing/subscription?storeId=${userStoreId}`);
+            if (subRes.ok) {
+              const subData = await subRes.json();
+              if (subData.subscription) {
+                setCurrentSubscription(subData.subscription);
+              }
+            }
+          }
         }
-      } catch (error) {
-        console.error('Error fetching billing data:', error);
+      } catch (err) {
+        console.error('Error fetching billing data:', err);
+        setError('Failed to load billing information');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [storeId]);
+  }, []);
 
   const handleSubscribe = async (planId: string) => {
     setSelectedPlanId(planId);
   };
 
   const handleCheckout = async () => {
-    if (!selectedPlanId || !storeId) return;
+    if (!selectedPlanId) return;
 
     try {
+      const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planId: selectedPlanId,
+          billingCycle: selectedPlan?.billingCycle || 'monthly',
           currency,
-          storeId,
-          couponCode: discount ? discount.discountType : null,
+          storeId: storeId || undefined,
+          couponCode: discount ? discount.discountType : undefined,
         }),
       });
 
@@ -119,14 +124,21 @@ export default function BillingPage() {
         const data: CheckoutResponse = await response.json();
         setCheckoutData(data);
 
+        if (data.gateway === 'razorpay' && data.shortUrl) {
+          window.location.href = data.shortUrl;
+          return;
+        }
+
         if (data.gateway === 'stripe' && data.sessionUrl) {
           window.location.href = data.sessionUrl;
         }
       } else {
-        console.error('Checkout failed');
+        const errData = await response.json();
+        setError(errData.error || 'Checkout failed');
       }
-    } catch (error) {
-      console.error('Error during checkout:', error);
+    } catch (err) {
+      console.error('Error during checkout:', err);
+      setError('Something went wrong during checkout');
     }
   };
 
@@ -138,13 +150,18 @@ export default function BillingPage() {
     window.location.reload();
   };
 
-  const handlePaymentFailure = (error: string) => {
+  const handlePaymentFailure = (failError: string) => {
     setCheckoutData(null);
-    alert(`Payment failed: ${error}`);
+    alert(`Payment failed: ${failError}`);
   };
 
   if (loading) {
-    return <div className="p-8">Loading billing information...</div>;
+    return (
+      <div className="flex items-center justify-center p-16">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <span className="ml-3 text-gray-600">Loading billing information...</span>
+      </div>
+    );
   }
 
   return (
@@ -167,6 +184,12 @@ export default function BillingPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {currentSubscription && (
         <Card>
           <CardHeader>
@@ -176,7 +199,7 @@ export default function BillingPage() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Plan</p>
-                <p className="font-medium">{currentSubscription.plan.name}</p>
+                <p className="font-medium">{currentSubscription.planName}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
@@ -207,17 +230,23 @@ export default function BillingPage() {
         </TabsList>
 
         <TabsContent value="plans" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <PlanCard
-                key={plan.planId}
-                plan={plan}
-                isCurrentPlan={currentSubscription?.plan?.name === plan.name}
-                currency={currency}
-                onSubscribe={handleSubscribe}
-              />
-            ))}
-          </div>
+          {plans.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p>No plans available yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {plans.map((plan) => (
+                <PlanCard
+                  key={plan.planId}
+                  plan={plan}
+                  isCurrentPlan={currentSubscription?.planId === plan.planId}
+                  currency={currency}
+                  onSubscribe={handleSubscribe}
+                />
+              ))}
+            </div>
+          )}
 
           {selectedPlanId && (
             <Card>
@@ -238,17 +267,29 @@ export default function BillingPage() {
         </TabsContent>
 
         <TabsContent value="usage">
-          {storeId && <UsageDashboard storeId={storeId} />}
+          {storeId ? (
+            <UsageDashboard storeId={storeId} />
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <p>Subscribe to a plan to see usage analytics.</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="payments">
-          {storeId && <PaymentHistory storeId={storeId} />}
+          {storeId ? (
+            <PaymentHistory storeId={storeId} />
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <p>No payment history yet.</p>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
-      {checkoutData?.gateway === 'razorpay' && checkoutData.subscriptionId && checkoutData.razorpayKeyId && (
+      {checkoutData?.gateway === 'razorpay' && checkoutData.razorpaySubscriptionId && checkoutData.razorpayKeyId && (
         <RazorpayCheckout
-          subscriptionId={checkoutData.subscriptionId}
+          subscriptionId={checkoutData.razorpaySubscriptionId}
           razorpayKeyId={checkoutData.razorpayKeyId}
           onSuccess={handlePaymentSuccess}
           onFailure={handlePaymentFailure}

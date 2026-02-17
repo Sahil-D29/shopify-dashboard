@@ -20,10 +20,8 @@ export async function GET(request: NextRequest) {
 
     const storeId = await getCurrentStoreId(request);
     if (!storeId) {
-      return NextResponse.json(
-        { error: 'Store not found' },
-        { status: 404 }
-      );
+      // New users may not have a store yet — return empty data
+      return NextResponse.json({ subscription: null, usage: null });
     }
 
     const subscription = await prisma.subscription.findUnique({
@@ -31,10 +29,8 @@ export async function GET(request: NextRequest) {
     });
 
     if (!subscription) {
-      return NextResponse.json(
-        { error: 'No subscription found' },
-        { status: 404 }
-      );
+      // No subscription yet — normal for new users
+      return NextResponse.json({ subscription: null, usage: null });
     }
 
     // Get plan features

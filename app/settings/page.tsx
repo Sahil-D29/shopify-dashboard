@@ -110,6 +110,8 @@ function SettingsContent() {
   const [waLoading, setWaLoading] = useState(false);
   const [waTesting, setWaTesting] = useState(false);
   const [waResult, setWaResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [embeddedLoading, setEmbeddedLoading] = useState(false);
+  const [embeddedConnected, setEmbeddedConnected] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<{ shopifyConfigured: boolean; whatsappConfigured: boolean; settingsCompleted: boolean; missingConfigs: string[] } | null>(null);
 
   // Check access permissions
@@ -461,6 +463,67 @@ function SettingsContent() {
     setShopifyConfig({ shopUrl: '', accessToken: '', apiKey: '', apiSecret: '' });
     setShopifyResult({ success: true, message: 'Configuration reset!' });
   };
+
+  // Facebook Embedded Signup
+  const handleEmbeddedSignup = async () => {
+    setEmbeddedLoading(true);
+    try {
+      const res = await fetch('/api/whatsapp/embedded-signup');
+      const data = await res.json();
+      if (data.loginUrl) {
+        window.location.href = data.loginUrl;
+      } else {
+        setWaResult({ success: false, message: data.error || 'Failed to start signup' });
+        setEmbeddedLoading(false);
+      }
+    } catch (err) {
+      setWaResult({ success: false, message: getErrorMessage(err, 'Failed to start embedded signup') });
+      setEmbeddedLoading(false);
+    }
+  };
+
+  // Handle embedded signup OAuth callback
+  useEffect(() => {
+    const code = searchParams.get('code');
+    const oauthError = searchParams.get('error');
+
+    if (oauthError) {
+      setWaResult({ success: false, message: decodeURIComponent(oauthError) });
+      setActiveSection('wa');
+      return;
+    }
+
+    if (code) {
+      setActiveSection('wa');
+      setEmbeddedLoading(true);
+      (async () => {
+        try {
+          const res = await fetch('/api/whatsapp/embedded-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            setEmbeddedConnected(true);
+            setWaResult({ success: true, message: 'WhatsApp Business Account connected successfully!' });
+            window.history.replaceState({}, '', '/settings');
+          } else {
+            setWaResult({ success: false, message: data.error || 'Failed to complete signup' });
+          }
+        } catch (err) {
+          setWaResult({ success: false, message: getErrorMessage(err, 'Callback processing failed') });
+        } finally {
+          setEmbeddedLoading(false);
+        }
+      })();
+    }
+
+    if (searchParams.get('connected') === 'true') {
+      setEmbeddedConnected(true);
+      setActiveSection('wa');
+    }
+  }, [searchParams]);
 
   // WhatsApp functions
   const handleWaTest = async () => {
@@ -960,6 +1023,58 @@ function SettingsContent() {
               </div>
 
               <div className="px-6 md:px-8 py-6 md:py-8 space-y-6">
+                {/* Facebook Embedded Signup */}
+                <div className={`p-5 rounded-lg border ${embeddedConnected ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        {embeddedConnected ? (
+                          <><CheckCircle2 className="h-5 w-5 text-green-600" /> WhatsApp Connected</>
+                        ) : (
+                          <><ExternalLink className="h-5 w-5 text-blue-600" /> Quick Setup with Facebook</>
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {embeddedConnected
+                          ? 'Your WhatsApp Business Account is connected via Facebook'
+                          : 'One-click setup — connect your WhatsApp Business Account via Facebook Login'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleEmbeddedSignup}
+                      disabled={embeddedLoading}
+                      className={`px-5 py-2.5 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                        embeddedConnected
+                          ? 'bg-gray-600 hover:bg-gray-700'
+                          : 'bg-[#1877F2] hover:bg-[#166FE5] shadow-lg shadow-blue-600/30'
+                      }`}
+                    >
+                      {embeddedLoading ? (
+                        <span className="flex items-center">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Connecting...
+                        </span>
+                      ) : embeddedConnected ? (
+                        'Reconnect'
+                      ) : (
+                        <span className="flex items-center">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Connect with Facebook
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-3 bg-white text-gray-500">OR configure manually</span>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
