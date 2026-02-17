@@ -3,8 +3,13 @@
 import { useEffect, useRef } from 'react';
 
 interface RazorpayCheckoutProps {
-  subscriptionId: string;
+  orderId: string;
   razorpayKeyId: string;
+  amount: number;
+  currency: string;
+  planName: string;
+  planId: string;
+  storeId: string;
   onSuccess: () => void;
   onFailure: (error: string) => void;
 }
@@ -16,14 +21,22 @@ declare global {
 }
 
 export default function RazorpayCheckout({
-  subscriptionId,
+  orderId,
   razorpayKeyId,
+  amount,
+  currency,
+  planName,
+  planId,
+  storeId,
   onSuccess,
   onFailure,
 }: RazorpayCheckoutProps) {
   const scriptLoaded = useRef(false);
+  const opened = useRef(false);
 
   useEffect(() => {
+    if (opened.current) return;
+
     const loadRazorpayScript = () => {
       return new Promise((resolve) => {
         if (window.Razorpay) {
@@ -58,28 +71,54 @@ export default function RazorpayCheckout({
         return;
       }
 
+      opened.current = true;
+
       const options = {
         key: razorpayKeyId,
-        subscription_id: subscriptionId,
+        order_id: orderId,
+        amount,
+        currency,
         name: 'DOREC.IN',
-        description: 'WhatsApp Marketing Platform',
+        description: `${planName} Plan - Monthly Subscription`,
         theme: {
           color: '#5459AC',
         },
-        handler: function (response: any) {
-          console.log('Payment successful:', response);
-          onSuccess();
+        handler: async function (response: any) {
+          // Verify payment on server
+          try {
+            const verifyRes = await fetch(`/api/billing/verify-payment?storeId=${storeId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                planId,
+              }),
+            });
+            const data = await verifyRes.json();
+            if (data.success) {
+              onSuccess();
+            } else {
+              onFailure(data.error || 'Payment verification failed');
+            }
+          } catch {
+            onFailure('Failed to verify payment with server');
+          }
         },
         modal: {
           ondismiss: function () {
+            opened.current = false;
             onFailure('Payment cancelled by user');
           },
         },
+        prefill: {},
       };
 
       const razorpayInstance = new window.Razorpay(options);
 
       razorpayInstance.on('payment.failed', function (response: any) {
+        opened.current = false;
         console.error('Payment failed:', response);
         onFailure(response.error?.description || 'Payment failed');
       });
@@ -87,10 +126,10 @@ export default function RazorpayCheckout({
       razorpayInstance.open();
     };
 
-    if (subscriptionId && razorpayKeyId) {
+    if (orderId && razorpayKeyId) {
       openRazorpayCheckout();
     }
-  }, [subscriptionId, razorpayKeyId, onSuccess, onFailure]);
+  }, [orderId, razorpayKeyId, amount, currency, planName, planId, storeId, onSuccess, onFailure]);
 
   return null;
 }

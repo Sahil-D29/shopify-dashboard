@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { createRazorpaySubscription, getRazorpayKeyId } from '@/lib/razorpay';
+import { createRazorpayOrder, getRazorpayKeyId } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
@@ -52,9 +52,45 @@ export async function POST(request: NextRequest) {
     const userEmail = session.user.email;
 
     if (currency === 'INR') {
-      // Razorpay checkout
-      const razorpayResult = await createRazorpaySubscription({
-        planId,
+      // Razorpay Orders API checkout
+      const amountINR = Number(plan.priceINR) || 0;
+      if (amountINR <= 0) {
+        // Free plan — activate immediately
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        await prisma.subscription.upsert({
+          where: { storeId },
+          create: {
+            storeId,
+            planId: plan.planId,
+            planName: plan.name,
+            status: 'ACTIVE',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            stripeSubscriptionId: null,
+            stripeCustomerId: null,
+          },
+          update: {
+            planId: plan.planId,
+            planName: plan.name,
+            status: 'ACTIVE',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+        });
+
+        return NextResponse.json({
+          gateway: 'free',
+          message: 'Free plan activated successfully',
+        });
+      }
+
+      const razorpayResult = await createRazorpayOrder({
+        planId: plan.planId,
+        planName: plan.name,
+        amountINR,
         email: userEmail,
         storeId,
       });
@@ -63,9 +99,13 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         gateway: 'razorpay',
-        razorpaySubscriptionId: razorpayResult.subscriptionId,
+        razorpayOrderId: razorpayResult.orderId,
         razorpayKeyId: keyId,
-        shortUrl: razorpayResult.shortUrl,
+        amount: razorpayResult.amount,
+        currency: razorpayResult.currency,
+        planName: plan.name,
+        planId: plan.planId,
+        storeId,
       });
     } else if (currency === 'USD') {
       // Stripe checkout
@@ -88,8 +128,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Billing checkout error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to create checkout session';
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { error: message },
       { status: 500 }
     );
   }

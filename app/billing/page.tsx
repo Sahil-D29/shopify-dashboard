@@ -38,11 +38,16 @@ interface Subscription {
 }
 
 interface CheckoutResponse {
-  gateway: 'razorpay' | 'stripe';
-  razorpaySubscriptionId?: string;
+  gateway: 'razorpay' | 'stripe' | 'free';
+  razorpayOrderId?: string;
   razorpayKeyId?: string;
-  shortUrl?: string;
+  amount?: number;
+  currency?: string;
+  planName?: string;
+  planId?: string;
+  storeId?: string;
   sessionUrl?: string;
+  message?: string;
 }
 
 export default function BillingPage() {
@@ -122,15 +127,23 @@ export default function BillingPage() {
 
       if (response.ok) {
         const data: CheckoutResponse = await response.json();
-        setCheckoutData(data);
 
-        if (data.gateway === 'razorpay' && data.shortUrl) {
-          window.location.href = data.shortUrl;
+        if (data.gateway === 'free') {
+          // Free plan activated immediately
+          alert(data.message || 'Free plan activated!');
+          window.location.reload();
+          return;
+        }
+
+        if (data.gateway === 'razorpay' && data.razorpayOrderId) {
+          // Open Razorpay inline checkout
+          setCheckoutData(data);
           return;
         }
 
         if (data.gateway === 'stripe' && data.sessionUrl) {
           window.location.href = data.sessionUrl;
+          return;
         }
       } else {
         const errData = await response.json();
@@ -287,10 +300,15 @@ export default function BillingPage() {
         </TabsContent>
       </Tabs>
 
-      {checkoutData?.gateway === 'razorpay' && checkoutData.razorpaySubscriptionId && checkoutData.razorpayKeyId && (
+      {checkoutData?.gateway === 'razorpay' && checkoutData.razorpayOrderId && checkoutData.razorpayKeyId && (
         <RazorpayCheckout
-          subscriptionId={checkoutData.razorpaySubscriptionId}
+          orderId={checkoutData.razorpayOrderId}
           razorpayKeyId={checkoutData.razorpayKeyId}
+          amount={checkoutData.amount || 0}
+          currency={checkoutData.currency || 'INR'}
+          planName={checkoutData.planName || ''}
+          planId={checkoutData.planId || ''}
+          storeId={checkoutData.storeId || storeId || ''}
           onSuccess={handlePaymentSuccess}
           onFailure={handlePaymentFailure}
         />

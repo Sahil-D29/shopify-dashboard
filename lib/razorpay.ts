@@ -1,6 +1,6 @@
 /**
- * Razorpay client for Indian payments (INR subscriptions)
- * Handles: subscription creation, cancellation, webhook verification
+ * Razorpay client for Indian payments (INR)
+ * Uses Razorpay Orders API for one-time payments
  */
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
@@ -30,44 +30,58 @@ export function getRazorpayKeyId(): string | undefined {
   return razorpayKeyId;
 }
 
-// Plan ID mapping: our planId → Razorpay plan ID (set in env)
-const RAZORPAY_PLAN_MAP: Record<string, string> = {
-  starter: process.env.RAZORPAY_PLAN_STARTER || '',
-  growth: process.env.RAZORPAY_PLAN_GROWTH || '',
-};
-
-/** Create a Razorpay subscription */
-export async function createRazorpaySubscription(opts: {
+/** Create a Razorpay order for payment */
+export async function createRazorpayOrder(opts: {
   planId: string;
+  planName: string;
+  amountINR: number;
   email: string;
   storeId: string;
-  couponCode?: string;
-}): Promise<{ subscriptionId: string; shortUrl?: string }> {
-  if (!razorpay) throw new Error('Razorpay is not configured');
+}): Promise<{ orderId: string; amount: number; currency: string }> {
+  if (!razorpay) throw new Error('Razorpay is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET env vars.');
 
-  const razorpayPlanId = RAZORPAY_PLAN_MAP[opts.planId];
-  if (!razorpayPlanId) throw new Error(`No Razorpay plan mapped for: ${opts.planId}`);
+  const amountInPaise = Math.round(opts.amountINR * 100); // Razorpay expects paise
 
-  const subscriptionOpts: Record<string, unknown> = {
-    plan_id: razorpayPlanId,
-    total_count: 12, // 12 billing cycles
-    quantity: 1,
+  const order = await (razorpay as any).orders.create({
+    amount: amountInPaise,
+    currency: 'INR',
+    receipt: `sub_${opts.storeId}_${opts.planId}_${Date.now()}`,
     notes: {
       storeId: opts.storeId,
       planId: opts.planId,
+      planName: opts.planName,
       email: opts.email,
     },
-  };
-
-  const subscription = await (razorpay as any).subscriptions.create(subscriptionOpts);
+  });
 
   return {
-    subscriptionId: subscription.id,
-    shortUrl: subscription.short_url,
+    orderId: order.id,
+    amount: amountInPaise,
+    currency: 'INR',
   };
 }
 
-/** Cancel a Razorpay subscription */
+/** Verify Razorpay payment signature after client-side checkout */
+export function verifyRazorpayPaymentSignature(opts: {
+  orderId: string;
+  paymentId: string;
+  signature: string;
+}): boolean {
+  if (!razorpayKeySecret) return false;
+
+  const body = `${opts.orderId}|${opts.paymentId}`;
+  const expectedSig = crypto
+    .createHmac('sha256', razorpayKeySecret)
+    .update(body)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(opts.signature),
+    Buffer.from(expectedSig)
+  );
+}
+
+/** Cancel a Razorpay subscription (legacy support) */
 export async function cancelRazorpaySubscription(subscriptionId: string): Promise<void> {
   if (!razorpay) throw new Error('Razorpay is not configured');
   await (razorpay as any).subscriptions.cancel(subscriptionId);
@@ -100,6 +114,62 @@ export async function handleRazorpayWebhookEvent(event: {
   const { event: eventType, payload } = event;
 
   switch (eventType) {
+    case 'payment.captured': {
+      const payment = payload.payment?.entity;
+      if (!payment) return;
+
+      const notes = payment.notes || {};
+      const storeId = notes.storeId;
+      const planId = notes.planId;
+
+      if (!storeId || !planId) return;
+
+      const plan = await prisma.planFeature.findUnique({ where: { planId } });
+      if (!plan) return;
+
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+      await prisma.subscription.upsert({
+        where: { storeId },
+        create: {
+          storeId,
+          planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          stripeSubscriptionId: payment.order_id, // Store Razorpay order ID
+          stripeCustomerId: null,
+        },
+        update: {
+          planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          stripeSubscriptionId: payment.order_id,
+        },
+      });
+
+      // Record payment
+      const sub = await prisma.subscription.findUnique({ where: { storeId } });
+      if (sub) {
+        await prisma.payment.create({
+          data: {
+            subscriptionId: sub.id,
+            amount: (payment.amount || 0) / 100,
+            currency: (payment.currency || 'INR').toUpperCase(),
+            status: 'SUCCEEDED',
+            stripePaymentId: payment.id,
+            paidAt: new Date(),
+          },
+        });
+      }
+      break;
+    }
+
     case 'subscription.activated':
     case 'subscription.charged': {
       const subscription = payload.subscription?.entity;
@@ -127,7 +197,7 @@ export async function handleRazorpayWebhookEvent(event: {
           status: 'ACTIVE',
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
-          stripeSubscriptionId: subscription.id, // Reusing field for Razorpay ID
+          stripeSubscriptionId: subscription.id,
           stripeCustomerId: null,
         },
         update: {
@@ -140,7 +210,6 @@ export async function handleRazorpayWebhookEvent(event: {
         },
       });
 
-      // Record payment if charged
       if (eventType === 'subscription.charged' && payload.payment?.entity) {
         const payment = payload.payment.entity;
         const sub = await prisma.subscription.findUnique({ where: { storeId } });
@@ -151,7 +220,7 @@ export async function handleRazorpayWebhookEvent(event: {
               amount: (payment.amount || 0) / 100,
               currency: (payment.currency || 'INR').toUpperCase(),
               status: 'SUCCEEDED',
-              stripePaymentId: payment.id, // Reusing field for Razorpay payment ID
+              stripePaymentId: payment.id,
               paidAt: new Date(),
             },
           });
