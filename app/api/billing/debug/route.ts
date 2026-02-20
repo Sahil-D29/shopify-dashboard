@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (storeId) {
       const store = await prisma.store.findUnique({
         where: { id: storeId },
-        select: { id: true, name: true, status: true },
+        select: { id: true, storeName: true, isActive: true },
       });
       checks.store = { ok: !!store, storeId, store };
     } else {
@@ -70,10 +70,10 @@ export async function GET(request: NextRequest) {
     hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
   };
 
-  // 6. Database connectivity
+  // 6. Database connectivity (use a simple count query to avoid $queryRaw issues with Neon adapter)
   try {
-    const result = await prisma.$queryRaw`SELECT 1 as ok`;
-    checks.database = { ok: true };
+    const count = await prisma.user.count();
+    checks.database = { ok: true, userCount: count };
   } catch (e) {
     checks.database = { ok: false, error: e instanceof Error ? e.message : 'DB connection failed' };
   }
