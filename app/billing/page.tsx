@@ -134,33 +134,36 @@ export default function BillingPage() {
         }),
       });
 
-      if (response.ok) {
-        const data: CheckoutResponse = await response.json();
+      const data = await response.json().catch(() => null);
 
-        if (data.gateway === 'free') {
-          // Free plan activated immediately
-          alert(data.message || 'Free plan activated!');
-          window.location.reload();
-          return;
-        }
-
-        if (data.gateway === 'razorpay' && data.razorpayOrderId) {
-          // Open Razorpay inline checkout
-          setCheckoutData(data);
-          return;
-        }
-
-        if (data.gateway === 'stripe' && data.sessionUrl) {
-          window.location.href = data.sessionUrl;
-          return;
-        }
-      } else {
-        const errData = await response.json();
-        setError(errData.error || 'Checkout failed');
+      if (!response.ok) {
+        const errorMsg = data?.error || `Checkout failed (HTTP ${response.status})`;
+        const step = data?.step ? ` [step: ${data.step}]` : '';
+        console.error('Checkout error:', { status: response.status, data });
+        setError(`${errorMsg}${step}`);
+        return;
       }
+
+      if (data?.gateway === 'free') {
+        alert(data.message || 'Free plan activated!');
+        window.location.reload();
+        return;
+      }
+
+      if (data?.gateway === 'razorpay' && data.razorpayOrderId) {
+        setCheckoutData(data);
+        return;
+      }
+
+      if (data?.gateway === 'stripe' && data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+        return;
+      }
+
+      setError('Unexpected response from checkout. Please try again.');
     } catch (err) {
       console.error('Error during checkout:', err);
-      setError('Something went wrong during checkout');
+      setError(`Checkout request failed: ${err instanceof Error ? err.message : 'Network error'}`);
     } finally {
       setCheckoutLoading(false);
     }

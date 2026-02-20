@@ -9,7 +9,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  let step = 'init';
   try {
+    step = 'auth';
     const session = await auth();
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -18,10 +20,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    step = 'parse-body';
     const body = await request.json();
     const { planId, currency } = body;
     const billingCycle = body.billingCycle || 'monthly';
 
+    step = 'resolve-store';
     // Resolve storeId: try tenant middleware (header/cookie/query), then fall back to request body
     let storeId = await getCurrentStoreId(request);
     if (!storeId && body.storeId) {
@@ -41,6 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    step = 'find-plan';
     // Validate plan exists — look up by planId field (e.g. "starter"), not primary key
     const plan = await prisma.planFeature.findUnique({
       where: { planId },
@@ -48,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     if (!plan) {
       return NextResponse.json(
-        { error: 'Invalid plan' },
+        { error: `Plan "${planId}" not found. Run seed-plans script to create plans.` },
         { status: 404 }
       );
     }
@@ -98,6 +103,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      step = 'create-razorpay-order';
       const razorpayResult = await createRazorpayOrder({
         planId: plan.planId,
         planName: plan.name,
@@ -140,8 +146,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Billing checkout error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create checkout session';
+    const stack = error instanceof Error ? error.stack : undefined;
     return NextResponse.json(
-      { error: message },
+      {
+        error: message,
+        detail: process.env.NODE_ENV !== 'production' ? stack : undefined,
+        step,
+      },
       { status: 500 }
     );
   }
