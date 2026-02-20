@@ -59,6 +59,7 @@ export default function BillingPage() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [discount, setDiscount] = useState<{ discountType: string; value: number } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -111,16 +112,27 @@ export default function BillingPage() {
   const handleCheckout = async () => {
     if (!selectedPlanId) return;
 
+    if (!storeId) {
+      setError('Store not found. Please log in again.');
+      return;
+    }
+
+    setCheckoutLoading(true);
+    setError(null);
+
     try {
       const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-store-id': storeId,
+      };
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           planId: selectedPlanId,
           billingCycle: selectedPlan?.billingCycle || 'monthly',
           currency,
-          storeId: storeId || undefined,
           couponCode: discount ? discount.discountType : undefined,
         }),
       });
@@ -145,6 +157,8 @@ export default function BillingPage() {
           window.location.href = data.sessionUrl;
           return;
         }
+
+        setError('Unexpected response from checkout. Please try again.');
       } else {
         const errData = await response.json();
         setError(errData.error || 'Checkout failed');
@@ -152,6 +166,8 @@ export default function BillingPage() {
     } catch (err) {
       console.error('Error during checkout:', err);
       setError('Something went wrong during checkout');
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -271,8 +287,15 @@ export default function BillingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <CouponInput onApply={setDiscount} planId={selectedPlanId} />
-                <Button onClick={handleCheckout} className="w-full">
-                  Proceed to Checkout
+                <Button onClick={handleCheckout} className="w-full" disabled={checkoutLoading}>
+                  {checkoutLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Proceed to Checkout'
+                  )}
                 </Button>
               </CardContent>
             </Card>
