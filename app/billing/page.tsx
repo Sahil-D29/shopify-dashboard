@@ -10,6 +10,7 @@ import UsageDashboard from '@/components/billing/UsageDashboard';
 import PaymentHistory from '@/components/billing/PaymentHistory';
 import CouponInput from '@/components/billing/CouponInput';
 import RazorpayCheckout from '@/components/billing/RazorpayCheckout';
+import { useTenant } from '@/lib/tenant/tenant-context';
 import { Loader2 } from 'lucide-react';
 
 interface Plan {
@@ -51,11 +52,13 @@ interface CheckoutResponse {
 }
 
 export default function BillingPage() {
-  const [storeId, setStoreId] = useState<string | null>(null);
+  const { currentStore, isLoading: tenantLoading } = useTenant();
+  const storeId = currentStore?.id || null;
   const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [discount, setDiscount] = useState<{ discountType: string; value: number } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
@@ -76,20 +79,13 @@ export default function BillingPage() {
           })));
         }
 
-        // Fetch session to get storeId
-        const sessionRes = await fetch('/api/auth/session');
-        if (sessionRes.ok) {
-          const session = await sessionRes.json();
-          const userStoreId = session?.user?.storeId;
-          if (userStoreId) {
-            setStoreId(userStoreId);
-            // Fetch subscription
-            const subRes = await fetch(`/api/billing/subscription?storeId=${userStoreId}`);
-            if (subRes.ok) {
-              const subData = await subRes.json();
-              if (subData.subscription) {
-                setCurrentSubscription(subData.subscription);
-              }
+        // Fetch subscription using storeId from tenant context
+        if (storeId) {
+          const subRes = await fetch(`/api/billing/subscription?storeId=${storeId}`);
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            if (subData.subscription) {
+              setCurrentSubscription(subData.subscription);
             }
           }
         }
@@ -101,8 +97,10 @@ export default function BillingPage() {
       }
     };
 
-    fetchData();
-  }, []);
+    if (!tenantLoading) {
+      fetchData();
+    }
+  }, [storeId, tenantLoading]);
 
   const handleSubscribe = async (planId: string) => {
     setSelectedPlanId(planId);
@@ -111,16 +109,27 @@ export default function BillingPage() {
   const handleCheckout = async () => {
     if (!selectedPlanId) return;
 
+    if (!storeId) {
+      setError('No store found. Please set up your store in Settings before subscribing.');
+      return;
+    }
+
+    setError(null);
+    setCheckoutLoading(true);
+
     try {
       const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-store-id': storeId,
+        },
         body: JSON.stringify({
           planId: selectedPlanId,
           billingCycle: selectedPlan?.billingCycle || 'monthly',
           currency,
-          storeId: storeId || undefined,
+          storeId,
           couponCode: discount ? discount.discountType : undefined,
         }),
       });
@@ -152,6 +161,8 @@ export default function BillingPage() {
     } catch (err) {
       console.error('Error during checkout:', err);
       setError('Something went wrong during checkout');
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -168,7 +179,7 @@ export default function BillingPage() {
     alert(`Payment failed: ${failError}`);
   };
 
-  if (loading) {
+  if (loading || tenantLoading) {
     return (
       <div className="flex items-center justify-center p-16">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -271,8 +282,24 @@ export default function BillingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <CouponInput onApply={setDiscount} planId={selectedPlanId} />
-                <Button onClick={handleCheckout} className="w-full">
-                  Proceed to Checkout
+                {error && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+                <Button
+                  onClick={handleCheckout}
+                  className="w-full"
+                  disabled={checkoutLoading}
+                >
+                  {checkoutLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Proceed to Checkout'
+                  )}
                 </Button>
               </CardContent>
             </Card>

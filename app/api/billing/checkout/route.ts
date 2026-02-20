@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { createRazorpayOrder, getRazorpayKeyId } from '@/lib/razorpay';
+import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
@@ -18,17 +18,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const storeId = await getCurrentStoreId(request);
-    if (!storeId) {
-      return NextResponse.json(
-        { error: 'Store not found' },
-        { status: 404 }
-      );
-    }
-
     const body = await request.json();
     const { planId, currency } = body;
     const billingCycle = body.billingCycle || 'monthly';
+
+    // Resolve storeId: try tenant middleware (header/cookie/query), then fall back to request body
+    let storeId = await getCurrentStoreId(request);
+    if (!storeId && body.storeId) {
+      storeId = body.storeId;
+    }
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'Store not found. Please set up your store in Settings first.' },
+        { status: 404 }
+      );
+    }
 
     if (!planId || !currency) {
       return NextResponse.json(
@@ -85,6 +89,13 @@ export async function POST(request: NextRequest) {
           gateway: 'free',
           message: 'Free plan activated successfully',
         });
+      }
+
+      if (!isRazorpayConfigured()) {
+        return NextResponse.json(
+          { error: 'Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET environment variables.' },
+          { status: 503 }
+        );
       }
 
       const razorpayResult = await createRazorpayOrder({

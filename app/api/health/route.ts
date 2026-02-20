@@ -39,6 +39,11 @@ export async function GET() {
     ? 'ok'
     : 'MISSING — admin panel login will fail';
 
+  // 6. Razorpay
+  checks.razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+    ? 'ok'
+    : 'MISSING — set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET for INR billing';
+
   const allOk = Object.values(checks).every((v) => v === 'ok' || v.startsWith('ok'));
 
   return NextResponse.json({
