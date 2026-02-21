@@ -46,7 +46,7 @@ export async function createRazorpayOrder(opts: {
     const order = await (razorpay as any).orders.create({
       amount: amountInPaise,
       currency: 'INR',
-      receipt: `sub_${opts.storeId}_${opts.planId}_${Date.now()}`,
+      receipt: `rcpt_${opts.storeId.slice(0, 8)}_${Date.now()}`,
       notes: {
         storeId: opts.storeId,
         planId: opts.planId,
