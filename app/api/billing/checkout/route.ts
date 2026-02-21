@@ -144,13 +144,11 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('Billing checkout error:', error);
+    console.error('Billing checkout error at step:', step, error);
     const message = error instanceof Error ? error.message : 'Failed to create checkout session';
-    const stack = error instanceof Error ? error.stack : undefined;
     return NextResponse.json(
       {
         error: message,
-        detail: process.env.NODE_ENV !== 'production' ? stack : undefined,
         step,
       },
       { status: 500 }

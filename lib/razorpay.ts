@@ -42,23 +42,33 @@ export async function createRazorpayOrder(opts: {
 
   const amountInPaise = Math.round(opts.amountINR * 100); // Razorpay expects paise
 
-  const order = await (razorpay as any).orders.create({
-    amount: amountInPaise,
-    currency: 'INR',
-    receipt: `sub_${opts.storeId}_${opts.planId}_${Date.now()}`,
-    notes: {
-      storeId: opts.storeId,
-      planId: opts.planId,
-      planName: opts.planName,
-      email: opts.email,
-    },
-  });
+  try {
+    const order = await (razorpay as any).orders.create({
+      amount: amountInPaise,
+      currency: 'INR',
+      receipt: `sub_${opts.storeId}_${opts.planId}_${Date.now()}`,
+      notes: {
+        storeId: opts.storeId,
+        planId: opts.planId,
+        planName: opts.planName,
+        email: opts.email,
+      },
+    });
 
-  return {
-    orderId: order.id,
-    amount: amountInPaise,
-    currency: 'INR',
-  };
+    return {
+      orderId: order.id,
+      amount: amountInPaise,
+      currency: 'INR',
+    };
+  } catch (err: any) {
+    const msg = err?.error?.description || err?.message || 'Unknown Razorpay error';
+    console.error('Razorpay order creation failed:', {
+      message: msg,
+      statusCode: err?.statusCode,
+      error: err?.error,
+    });
+    throw new Error(`Razorpay order creation failed: ${msg}`);
+  }
 }
 
 /** Verify Razorpay payment signature after client-side checkout */
