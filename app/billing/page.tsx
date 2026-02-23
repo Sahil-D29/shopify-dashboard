@@ -287,17 +287,18 @@ export default function BillingPage() {
                 <CouponInput onApply={setDiscount} planId={selectedPlanId} />
                 {discount && (() => {
                   const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
-                  const originalPrice = currency === 'INR' ? (selectedPlan?.priceINR || 0) : (selectedPlan?.price || 0);
+                  const originalPrice = Number(currency === 'INR' ? (selectedPlan?.priceINR || 0) : (selectedPlan?.price || 0));
+                  const discountVal = Number(discount.value);
                   const discountAmt = discount.discountType === 'PERCENTAGE'
-                    ? (originalPrice * discount.value / 100)
-                    : discount.value;
+                    ? (originalPrice * discountVal / 100)
+                    : discountVal;
                   const finalPrice = Math.max(0, originalPrice - discountAmt);
                   const currSymbol = currency === 'INR' ? '₹' : '$';
                   return (
                     <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Original Price:</span>
-                        <span className="line-through text-gray-400">{currSymbol}{originalPrice}</span>
+                        <span className="line-through text-gray-400">{currSymbol}{originalPrice.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-green-700">Discount ({discount.code}):</span>
