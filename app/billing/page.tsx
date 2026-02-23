@@ -130,7 +130,7 @@ export default function BillingPage() {
           billingCycle: selectedPlan?.billingCycle || 'monthly',
           currency,
           storeId,
-          couponCode: discount ? discount.discountType : undefined,
+          couponCode: discount ? discount.code : undefined,
         }),
       });
 
@@ -285,6 +285,31 @@ export default function BillingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <CouponInput onApply={setDiscount} planId={selectedPlanId} />
+                {discount && (() => {
+                  const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
+                  const originalPrice = currency === 'INR' ? (selectedPlan?.priceINR || 0) : (selectedPlan?.price || 0);
+                  const discountAmt = discount.discountType === 'PERCENTAGE'
+                    ? (originalPrice * discount.value / 100)
+                    : discount.value;
+                  const finalPrice = Math.max(0, originalPrice - discountAmt);
+                  const currSymbol = currency === 'INR' ? '₹' : '$';
+                  return (
+                    <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Original Price:</span>
+                        <span className="line-through text-gray-400">{currSymbol}{originalPrice}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Discount ({discount.code}):</span>
+                        <span className="text-green-700">-{currSymbol}{discountAmt.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-green-200 pt-1 mt-1">
+                        <span>You Pay:</span>
+                        <span className="text-green-700">{currSymbol}{finalPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {error && (
                   <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                     {error}

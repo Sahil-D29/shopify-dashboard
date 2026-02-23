@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 interface Discount {
   discountType: string;
   value: number;
+  code: string;
 }
 
 interface CouponInputProps {
@@ -44,7 +45,7 @@ export default function CouponInput({ onApply, planId }: CouponInputProps) {
             ? `${data.value}% discount applied`
             : `₹${data.value} discount applied`;
         setMessage({ type: 'success', text: discountText });
-        onApply({ discountType: data.discountType, value: data.value });
+        onApply({ discountType: data.discountType, value: data.value, code: code.trim().toUpperCase() });
       } else {
         setMessage({ type: 'error', text: data.message || 'Invalid coupon code' });
       }

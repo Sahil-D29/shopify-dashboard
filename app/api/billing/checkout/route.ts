@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     step = 'parse-body';
     const body = await request.json();
-    const { planId, currency } = body;
+    const { planId, currency, couponCode } = body;
     const billingCycle = body.billingCycle || 'monthly';
 
     step = 'resolve-store';
@@ -60,11 +60,73 @@ export async function POST(request: NextRequest) {
 
     const userEmail = session.user.email;
 
+    // ─── Apply coupon discount ───────────────────────────────
+    step = 'apply-coupon';
+    let discountAmount = 0;
+    let appliedCouponId: string | null = null;
+
+    if (couponCode) {
+      const coupon = await prisma.coupon.findUnique({
+        where: { code: couponCode.toUpperCase() },
+      });
+
+      if (coupon && coupon.status === 'active') {
+        // Check if coupon is expired
+        if (coupon.validUntil && new Date(coupon.validUntil) < new Date()) {
+          return NextResponse.json(
+            { error: 'Coupon has expired' },
+            { status: 400 }
+          );
+        }
+
+        // Check usage limit
+        if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+          return NextResponse.json(
+            { error: 'Coupon usage limit reached' },
+            { status: 400 }
+          );
+        }
+
+        // Check if coupon is applicable to this plan
+        const applicablePlans = coupon.applicablePlans as string[];
+        if (applicablePlans && applicablePlans.length > 0 && !applicablePlans.includes(planId)) {
+          return NextResponse.json(
+            { error: 'Coupon is not valid for this plan' },
+            { status: 400 }
+          );
+        }
+
+        // Check if locked to a specific store
+        if (coupon.assignedStoreId && coupon.assignedStoreId !== storeId) {
+          return NextResponse.json(
+            { error: 'Coupon is not valid for your store' },
+            { status: 400 }
+          );
+        }
+
+        // Calculate discount
+        const originalPrice = currency === 'INR'
+          ? (Number(plan.priceINR) || 0)
+          : Number(plan.price);
+
+        if (coupon.discountType === 'PERCENTAGE') {
+          discountAmount = (originalPrice * Number(coupon.value)) / 100;
+        } else {
+          // FIXED discount
+          discountAmount = Number(coupon.value);
+        }
+
+        appliedCouponId = coupon.id;
+      }
+    }
+
     if (currency === 'INR') {
       // Razorpay Orders API checkout
-      const amountINR = Number(plan.priceINR) || 0;
+      const originalAmountINR = Number(plan.priceINR) || 0;
+      const amountINR = Math.max(0, originalAmountINR - discountAmount);
+
       if (amountINR <= 0) {
-        // Free plan — activate immediately
+        // Fully discounted or free plan — activate immediately
         const now = new Date();
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
@@ -90,9 +152,19 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Increment coupon usage
+        if (appliedCouponId) {
+          await prisma.coupon.update({
+            where: { id: appliedCouponId },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
         return NextResponse.json({
           gateway: 'free',
-          message: 'Free plan activated successfully',
+          message: appliedCouponId
+            ? 'Coupon applied! Plan activated for free.'
+            : 'Free plan activated successfully',
         });
       }
 
@@ -112,6 +184,14 @@ export async function POST(request: NextRequest) {
         storeId,
       });
 
+      // Increment coupon usage after successful order creation
+      if (appliedCouponId) {
+        await prisma.coupon.update({
+          where: { id: appliedCouponId },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+
       const keyId = getRazorpayKeyId();
 
       return NextResponse.json({
@@ -123,6 +203,8 @@ export async function POST(request: NextRequest) {
         planName: plan.name,
         planId: plan.planId,
         storeId,
+        originalAmount: Math.round(originalAmountINR * 100),
+        discountApplied: discountAmount > 0 ? Math.round(discountAmount * 100) : 0,
       });
     } else if (currency === 'USD') {
       // Stripe checkout
