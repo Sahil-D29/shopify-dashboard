@@ -34,15 +34,15 @@ export function AnalyticsFiltersPanel({ filters, onChange, segments, isLoading }
   };
 
   return (
-    <aside className="rounded-3xl border border-[#E8E4DE] bg-white/85 p-6 shadow-sm backdrop-blur">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="rounded-2xl bg-[#F6F1EB] p-2 text-[#8B7F76]">
-            <Filter className="h-4 w-4" />
+    <aside className="rounded-2xl border border-[#E8E4DE] bg-white/85 p-4 shadow-sm backdrop-blur sm:rounded-3xl sm:p-6">
+      <header className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="rounded-xl bg-[#F6F1EB] p-1.5 text-[#8B7F76] sm:rounded-2xl sm:p-2">
+            <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </span>
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#6F6256]">Filters</h2>
-            <p className="text-xs text-[#8B7F76]">Refine analytics by time range, status, or segments.</p>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.25em] text-[#6F6256] sm:text-sm">Filters</h2>
+            <p className="hidden text-xs text-[#8B7F76] sm:block">Refine analytics by time range, status, or segments.</p>
           </div>
         </div>
         {hasFilters ? (
@@ -58,7 +58,7 @@ export function AnalyticsFiltersPanel({ filters, onChange, segments, isLoading }
         ) : null}
       </header>
 
-      <div className="mt-6 space-y-5">
+      <div className="mt-4 space-y-4 sm:mt-6 sm:space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <DateField
             label="From"

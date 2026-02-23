@@ -66,7 +66,7 @@ export function OverviewCards({ overview, timeline }: OverviewCardsProps) {
   const previous = timeline.length > 1 ? timeline.at(-2) : undefined;
 
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <section className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
       {CARDS.map(card => {
         const Icon = card.icon;
         const value = overview[card.key];
@@ -77,27 +77,28 @@ export function OverviewCards({ overview, timeline }: OverviewCardsProps) {
           <article
             key={card.key}
             className={cn(
-              'relative overflow-hidden rounded-3xl border border-[#E8E4DE] bg-gradient-to-br p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+              'relative overflow-hidden rounded-2xl border border-[#E8E4DE] bg-gradient-to-br p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:rounded-3xl sm:p-5',
               card.gradient
             )}
           >
             <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-2">
-                <span className="text-xs uppercase tracking-[0.18em] text-[#6F6256]/70">{card.title}</span>
-                <span className={cn('text-3xl font-semibold tracking-tight', card.accent)}>
+              <div className="flex flex-col gap-1 sm:gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-[#6F6256]/70 sm:text-xs">{card.title}</span>
+                <span className={cn('text-xl font-semibold tracking-tight sm:text-3xl', card.accent)}>
                   {formatNumber(value)}
                   {card.suffix}
                 </span>
               </div>
-              <div className="rounded-2xl bg-white/40 p-2 text-[#6F6256]">
-                <Icon className="h-5 w-5" />
+              <div className="rounded-xl bg-white/40 p-1.5 text-[#6F6256] sm:rounded-2xl sm:p-2">
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
               </div>
             </div>
-            <footer className="mt-5 flex items-center gap-2 text-xs text-[#6F6256]/80">
+            <footer className="mt-3 flex items-center gap-1.5 text-[10px] text-[#6F6256]/80 sm:mt-5 sm:gap-2 sm:text-xs">
               <span className={cn('font-medium', delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-rose-500' : 'text-[#6F6256]')}>
                 {trendLabel}
               </span>
-              <span>vs previous period</span>
+              <span className="hidden sm:inline">vs previous period</span>
+              <span className="sm:hidden">vs prev</span>
             </footer>
           </article>
         );

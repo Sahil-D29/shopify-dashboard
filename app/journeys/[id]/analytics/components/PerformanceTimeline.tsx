@@ -87,15 +87,15 @@ export function PerformanceTimeline({ data, className }: PerformanceTimelineProp
   }, [data]);
 
   return (
-    <div className={cn('rounded-3xl border border-[#E8E4DE] bg-white/90 p-6 shadow-sm', className)}>
+    <div className={cn('rounded-2xl border border-[#E8E4DE] bg-white/90 p-4 shadow-sm sm:rounded-3xl sm:p-6', className)}>
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[#4A4139]">Journey Performance Trend</h2>
-          <p className="text-sm text-[#8B7F76]">Daily view of enrollments, completions, and goals achieved.</p>
+          <h2 className="text-base font-semibold text-[#4A4139] sm:text-lg">Journey Performance Trend</h2>
+          <p className="text-xs text-[#8B7F76] sm:text-sm">Daily view of enrollments, completions, and goals achieved.</p>
         </div>
       </header>
 
-      <div className="mt-6 h-64">
+      <div className="mt-4 h-48 sm:mt-6 sm:h-64">
         {chartData ? (
           <LineChart
             data={chartData}

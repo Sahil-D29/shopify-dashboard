@@ -34,29 +34,29 @@ export function FunnelVisualization({ steps, total }: FunnelVisualizationProps) 
   const maxCustomers = Math.max(...steps.map(step => step.customers), total || 1);
 
   return (
-    <div className="mt-6 space-y-4">
+    <div className="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
       {steps.map((step, index) => {
         const widthPercent = Math.max(12, Math.round((step.customers / maxCustomers) * 100));
         const gradient = TYPE_GRADIENT[step.type] || TYPE_GRADIENT.goal;
 
         return (
           <Fragment key={step.id}>
-            <div className="flex items-center gap-4">
-              <div className="w-32 shrink-0 space-y-1">
-                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[#B9AA9F]">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-20 shrink-0 space-y-0.5 sm:w-32 sm:space-y-1">
+                <p className="text-[9px] font-medium uppercase tracking-[0.2em] text-[#B9AA9F] sm:text-[11px]">
                   Step {index + 1}
                 </p>
-                <p className="text-sm font-semibold text-[#5B4B3F]">{step.title}</p>
+                <p className="truncate text-xs font-semibold text-[#5B4B3F] sm:text-sm">{step.title}</p>
               </div>
-              <div className="flex-1">
-                <div className="h-3 overflow-hidden rounded-full bg-[#F2ECE6]">
+              <div className="min-w-0 flex-1">
+                <div className="h-2.5 overflow-hidden rounded-full bg-[#F2ECE6] sm:h-3">
                   <div
                     className={cn('h-full rounded-full bg-gradient-to-r shadow-sm transition-all duration-300', gradient)}
                     style={{ width: `${widthPercent}%` }}
                   />
                 </div>
               </div>
-              <div className="w-20 text-right text-sm font-semibold text-[#6F6256]">
+              <div className="w-14 text-right text-xs font-semibold text-[#6F6256] sm:w-20 sm:text-sm">
                 {step.customers.toLocaleString()}
               </div>
             </div>

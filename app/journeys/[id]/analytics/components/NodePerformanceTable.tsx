@@ -54,30 +54,30 @@ export function NodePerformanceTable({ metrics }: NodePerformanceTableProps) {
   };
 
   return (
-    <div className="rounded-3xl border border-[#E8E4DE] bg-white/90 p-6 shadow-sm">
+    <div className="rounded-2xl border border-[#E8E4DE] bg-white/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[#4A4139]">Node performance</h2>
-          <p className="text-sm text-[#8B7F76]">Understand how each step contributes to overall conversion.</p>
+          <h2 className="text-base font-semibold text-[#4A4139] sm:text-lg">Node performance</h2>
+          <p className="text-xs text-[#8B7F76] sm:text-sm">Understand how each step contributes to overall conversion.</p>
         </div>
       </header>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-[#E8E4DE]">
-        <table className="w-full text-sm">
-          <thead className="bg-[#F6F1EB] text-left text-[11px] uppercase tracking-[0.25em] text-[#A29386]">
+      <div className="mt-4 overflow-x-auto rounded-xl border border-[#E8E4DE] sm:mt-5 sm:rounded-2xl">
+        <table className="w-full min-w-[600px] text-sm">
+          <thead className="bg-[#F6F1EB] text-left text-[10px] uppercase tracking-[0.25em] text-[#A29386] sm:text-[11px]">
             <tr>
-              <th className="px-4 py-3">Node</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">
+              <th className="px-3 py-2.5 sm:px-4 sm:py-3">Node</th>
+              <th className="px-3 py-2.5 sm:px-4 sm:py-3">Type</th>
+              <th className="px-3 py-2.5 sm:px-4 sm:py-3">
                 <SortButton label="Customers" active={sortKey === 'customers'} direction={sortDirection} onClick={() => handleSort('customers')} />
               </th>
-              <th className="px-4 py-3">
+              <th className="px-3 py-2.5 sm:px-4 sm:py-3">
                 <SortButton label="Completion" active={sortKey === 'completion'} direction={sortDirection} onClick={() => handleSort('completion')} />
               </th>
-              <th className="px-4 py-3">
+              <th className="px-3 py-2.5 sm:px-4 sm:py-3">
                 <SortButton label="Avg time" active={sortKey === 'avgTime'} direction={sortDirection} onClick={() => handleSort('avgTime')} />
               </th>
-              <th className="px-4 py-3 text-right">Activity</th>
+              <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Activity</th>
             </tr>
           </thead>
           <tbody>
