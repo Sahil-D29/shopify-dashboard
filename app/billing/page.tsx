@@ -60,7 +60,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-  const [discount, setDiscount] = useState<{ discountType: string; value: number } | null>(null);
+  const [discount, setDiscount] = useState<{ discountType: string; value: number; code: string } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
