@@ -648,7 +648,7 @@ export default function JourneyDetailPage() {
                           <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500">
                             {log.customerEmail && <span>{log.customerEmail}</span>}
                             {log.customerPhone && <span>{log.customerPhone}</span>}
-                            {log.data?.nodeId && <span>Node: {String(log.data.nodeId)}</span>}
+                            {log.data?.nodeId ? <span>Node: {String(log.data.nodeId)}</span> : null}
                           </div>
                         </div>
                       </div>
