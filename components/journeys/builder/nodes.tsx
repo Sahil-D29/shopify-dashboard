@@ -352,7 +352,7 @@ const NodeShell = ({
   return (
     <div
       className={cn(
-        'group relative flex w-[280px] max-w-[400px] min-h-[120px] flex-col rounded-xl border bg-white transition-all duration-200 hover:-translate-y-0.5',
+        'group relative flex w-[260px] max-w-[360px] min-h-[100px] flex-col rounded-xl border bg-white transition-all duration-200 hover:-translate-y-0.5',
         pill ? 'px-5 py-3.5' : 'overflow-hidden',
         selected ? `ring-2 ring-offset-2 ${token.ring} shadow-xl ${token.glow}` : 'shadow-md hover:shadow-lg'
       )}

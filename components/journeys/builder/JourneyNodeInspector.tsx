@@ -58,9 +58,9 @@ export interface JourneyNodeInspectorProps {
 }
 
 const PanelSection = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section className="space-y-3 rounded-2xl border border-[#E8E4DE] bg-white p-5 shadow-sm">
-    <h3 className="text-sm font-semibold uppercase tracking-wide text-[#B8977F]">{title}</h3>
-    <div className="space-y-4 text-sm text-[#8B7F76]">{children}</div>
+  <section className="space-y-2.5 rounded-xl border border-[#E8E4DE] bg-white p-3 shadow-sm">
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-[#B8977F]">{title}</h3>
+    <div className="space-y-3 text-sm text-[#8B7F76]">{children}</div>
   </section>
 );
 
@@ -76,7 +76,7 @@ export function JourneyNodeInspector({
   className,
 }: JourneyNodeInspectorProps) {
   const inspectorClassName = cn(
-    'flex h-full min-w-[280px] max-w-full basis-0 flex-1 flex-col overflow-hidden border-l border-[#E8E4DE] bg-[#FAF9F6] transition-[flex-grow,flex-basis,width] duration-200 ease-in-out',
+    'flex h-full min-w-0 max-w-full basis-0 flex-1 flex-col overflow-hidden border-l border-[#E8E4DE] bg-[#FAF9F6] transition-[flex-grow,flex-basis,width] duration-200 ease-in-out',
     className
   );
 
@@ -316,21 +316,21 @@ export function JourneyNodeInspector({
 
   return (
     <aside className={inspectorClassName}>
-      <div className={cn('border-b border-[#E8E4DE] bg-gradient-to-br px-4 py-5 relative', headerStyles)}>
+      <div className={cn('border-b border-[#E8E4DE] bg-gradient-to-br px-3 py-4 relative', headerStyles)}>
         {onClose && (
           <button
             onClick={onClose}
-            className="lg:hidden absolute top-4 right-4 p-2 rounded-lg hover:bg-white/50 text-[#8B7F76] hover:text-[#4A4139] transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="lg:hidden absolute top-3 right-3 p-2 rounded-lg hover:bg-white/50 text-[#8B7F76] hover:text-[#4A4139] transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Close inspector"
           >
             <X className="h-5 w-5" />
           </button>
         )}
-        <p className="text-xs uppercase tracking-[0.3em] text-[#B8977F]">Selected Node</p>
-        <h2 className="text-xl sm:text-2xl font-semibold text-[#4A4139] pr-12 lg:pr-0">{node.data.label}</h2>
-        <p className="text-sm text-[#8B7F76]">{node.data.description}</p>
+        <p className="text-[10px] uppercase tracking-[0.25em] text-[#B8977F]">Selected Node</p>
+        <h2 className="text-lg font-semibold text-[#4A4139] pr-10 lg:pr-0 truncate">{node.data.label}</h2>
+        {node.data.description && <p className="text-xs text-[#8B7F76] line-clamp-2 mt-0.5">{node.data.description}</p>}
       </div>
-      <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 custom-scrollbar">
+      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 custom-scrollbar">
         <PanelSection title="Basic Details">
           <div className="space-y-2">
             <Label htmlFor="nodeLabel">Display Name</Label>
@@ -367,7 +367,7 @@ export function JourneyNodeInspector({
                       <span>{experimentConfig.experimentName || 'Experiment'}</span>
                     </div>
                     {experimentConfig.hypothesis ? (
-                      <p className="text-xs text-[#8B7F76]">“{experimentConfig.hypothesis}”</p>
+                      <p className="text-xs text-[#8B7F76]">"{experimentConfig.hypothesis}"</p>
                     ) : null}
                     {experimentConfig.description ? (
                       <p className="text-xs text-[#8B7F76]">{experimentConfig.description}</p>
@@ -839,7 +839,7 @@ export function JourneyNodeInspector({
           </PanelSection>
         ) : null}
       </div>
-      <div className="border-t border-[#E8E4DE] bg-white px-6 py-4">
+      <div className="border-t border-[#E8E4DE] bg-white px-3 py-3">
         <Button
           className="w-full gap-2 bg-[#C8998F] text-white hover:bg-[#B5837A]"
           onClick={() => node?.id && onDelete?.(node.id)}

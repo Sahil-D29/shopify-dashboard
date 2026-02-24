@@ -3799,8 +3799,8 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
             <ResizeHandle />
 
             <Panel
-              defaultSize={selectedNodeId ? 55 : 70}
-              minSize={30}
+              defaultSize={selectedNodeId ? 52 : 68}
+              minSize={28}
               className="flex h-full min-w-0 flex-col bg-white transition-[flex-grow,flex-basis,width] duration-200 ease-in-out"
             >
               {journeySettings?.testMode ? (
@@ -3883,12 +3883,12 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
 
             <Panel
               ref={inspectorPanelRef}
-              defaultSize={25}
-              minSize={18}
-              maxSize={40}
+              defaultSize={28}
+              minSize={20}
+              maxSize={45}
               collapsible
               collapsedSize={0}
-              className="flex h-full min-w-[260px] flex-col overflow-hidden border-l border-[#E8E4DE] bg-[#FAF9F6] transition-[flex-grow,flex-basis,width] duration-200 ease-in-out"
+              className="flex h-full min-w-0 flex-col overflow-hidden border-l border-[#E8E4DE] bg-[#FAF9F6] transition-[flex-grow,flex-basis,width] duration-200 ease-in-out"
             >
               <JourneyNodeInspector
                 key={selectedNode?.id ?? 'no-selection'}
