@@ -94,8 +94,7 @@ export default function PaymentHistory({ storeId }: PaymentHistoryProps) {
                     })}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {invoice.currency === 'INR' ? '₹' : '$'}
-                    {invoice.amount.toLocaleString()}
+                    ₹{invoice.amount.toLocaleString('en-IN')}
                   </TableCell>
                   <TableCell>{invoice.currency}</TableCell>
                   <TableCell>{getStatusBadge(invoice.status)}</TableCell>

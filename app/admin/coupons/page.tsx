@@ -303,7 +303,7 @@ export default function CouponsPage() {
                         <Badge variant="outline">{coupon.discountType}</Badge>
                       </td>
                       <td className="p-3">
-                        {coupon.discountType === 'PERCENTAGE' ? `${coupon.value}%` : `$${coupon.value}`}
+                        {coupon.discountType === 'PERCENTAGE' ? `${coupon.value}%` : `₹${coupon.value}`}
                       </td>
                       <td className="p-3">
                         {coupon.usageCount}{coupon.usageLimit ? `/${coupon.usageLimit}` : ''}

@@ -195,20 +195,7 @@ export default function BillingPage() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-        <div className="flex gap-2">
-          <Button
-            variant={currency === 'INR' ? 'default' : 'outline'}
-            onClick={() => setCurrency('INR')}
-          >
-            ₹ INR
-          </Button>
-          <Button
-            variant={currency === 'USD' ? 'default' : 'outline'}
-            onClick={() => setCurrency('USD')}
-          >
-            $ USD
-          </Button>
-        </div>
+        <Badge variant="outline" className="text-sm px-3 py-1">₹ INR</Badge>
       </div>
 
       {error && (

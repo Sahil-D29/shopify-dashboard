@@ -135,12 +135,9 @@ export default function PlansPage() {
                 </Button>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">${Number(plan.price)}</span>
+                <span className="text-3xl font-bold">₹{Number(plan.priceINR || plan.price).toLocaleString('en-IN')}</span>
                 <span className="text-gray-500">/{plan.billingCycle}</span>
               </div>
-              {plan.priceINR && (
-                <div className="text-sm text-gray-500">₹{Number(plan.priceINR)} INR</div>
-              )}
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
@@ -196,7 +193,7 @@ export default function PlansPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Price (USD)</label>
+                <label className="text-sm font-medium">Price (₹)</label>
                 <Input type="number" value={form.price || ''} onChange={e => setForm({ ...form, price: e.target.value })} className="mt-1" />
               </div>
               <div>

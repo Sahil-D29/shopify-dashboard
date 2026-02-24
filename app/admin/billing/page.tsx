@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { 
-  DollarSign, 
+  IndianRupee,
   Users, 
   TrendingDown, 
   TrendingUp,
@@ -262,7 +262,7 @@ export default function AdminBillingPage() {
       s.status,
       new Date(s.startDate).toLocaleDateString(),
       new Date(s.endDate).toLocaleDateString(),
-      `$${s.price.toFixed(2)}`,
+      `₹${s.price.toLocaleString('en-IN')}`,
       s.nextBilling ? new Date(s.nextBilling).toLocaleDateString() : 'N/A'
     ]);
     
@@ -321,10 +321,10 @@ export default function AdminBillingPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total MRR</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.totalMRR.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{stats.totalMRR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">Monthly recurring revenue</p>
           </CardContent>
         </Card>
@@ -357,7 +357,7 @@ export default function AdminBillingPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.revenueThisMonth.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{stats.revenueThisMonth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">Current month revenue</p>
           </CardContent>
         </Card>
@@ -377,7 +377,7 @@ export default function AdminBillingPage() {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="revenue" stroke="#8884d8" name="Revenue ($)" />
+              <Line type="monotone" dataKey="revenue" stroke="#8884d8" name="Revenue (₹)" />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -462,7 +462,7 @@ export default function AdminBillingPage() {
                           ? new Date(sub.nextBilling).toLocaleDateString()
                           : new Date(sub.endDate).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>${sub.price.toFixed(2)}</TableCell>
+                      <TableCell>₹{sub.price.toLocaleString('en-IN')}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

@@ -89,61 +89,68 @@ const variantTokens: Record<
     headerBorder: string;
     badge: string;
     ring: string;
+    glow: string;
   }
 > = {
   trigger: {
-    border: '#A7F3D0',
-    accent: '#047857',
-    iconBg: 'bg-emerald-100 text-emerald-700',
-    headerBg: 'bg-emerald-50',
-    headerBorder: 'border-emerald-100',
-    badge: 'bg-emerald-100 text-emerald-700',
-    ring: 'ring-emerald-200',
+    border: '#6EE7B7',
+    accent: '#059669',
+    iconBg: 'bg-emerald-50 text-emerald-600',
+    headerBg: 'bg-gradient-to-r from-emerald-50 to-teal-50',
+    headerBorder: 'border-emerald-100/80',
+    badge: 'bg-emerald-500 text-white',
+    ring: 'ring-emerald-300',
+    glow: 'shadow-emerald-100',
   },
   action: {
-    border: '#BFDBFE',
+    border: '#93C5FD',
     accent: '#2563EB',
-    iconBg: 'bg-blue-100 text-blue-600',
-    headerBg: 'bg-blue-50',
-    headerBorder: 'border-blue-100',
-    badge: 'bg-blue-100 text-blue-700',
-    ring: 'ring-blue-200',
+    iconBg: 'bg-blue-50 text-blue-600',
+    headerBg: 'bg-gradient-to-r from-blue-50 to-indigo-50',
+    headerBorder: 'border-blue-100/80',
+    badge: 'bg-blue-500 text-white',
+    ring: 'ring-blue-300',
+    glow: 'shadow-blue-100',
   },
   decision: {
-    border: '#FDE68A',
-    accent: '#B45309',
-    iconBg: 'bg-amber-100 text-amber-700',
-    headerBg: 'bg-amber-50',
-    headerBorder: 'border-amber-100',
-    badge: 'bg-amber-100 text-amber-700',
-    ring: 'ring-amber-200',
+    border: '#FCD34D',
+    accent: '#D97706',
+    iconBg: 'bg-amber-50 text-amber-600',
+    headerBg: 'bg-gradient-to-r from-amber-50 to-yellow-50',
+    headerBorder: 'border-amber-100/80',
+    badge: 'bg-amber-500 text-white',
+    ring: 'ring-amber-300',
+    glow: 'shadow-amber-100',
   },
   experiment: {
-    border: '#DDD6FE',
+    border: '#C4B5FD',
     accent: '#7C3AED',
-    iconBg: 'bg-violet-100 text-violet-700',
-    headerBg: 'bg-violet-50',
-    headerBorder: 'border-violet-100',
-    badge: 'bg-violet-100 text-violet-700',
-    ring: 'ring-violet-200',
+    iconBg: 'bg-violet-50 text-violet-600',
+    headerBg: 'bg-gradient-to-r from-violet-50 to-purple-50',
+    headerBorder: 'border-violet-100/80',
+    badge: 'bg-violet-500 text-white',
+    ring: 'ring-violet-300',
+    glow: 'shadow-violet-100',
   },
   wait: {
-    border: '#E5E7EB',
+    border: '#D1D5DB',
     accent: '#6B7280',
-    iconBg: 'bg-slate-100 text-slate-600',
-    headerBg: 'bg-slate-50',
-    headerBorder: 'border-slate-100',
-    badge: 'bg-slate-100 text-slate-600',
-    ring: 'ring-slate-200',
+    iconBg: 'bg-slate-50 text-slate-500',
+    headerBg: 'bg-gradient-to-r from-slate-50 to-gray-50',
+    headerBorder: 'border-slate-100/80',
+    badge: 'bg-slate-500 text-white',
+    ring: 'ring-slate-300',
+    glow: 'shadow-slate-100',
   },
   goal: {
-    border: '#FED7AA',
+    border: '#FDBA74',
     accent: '#EA580C',
-    iconBg: 'bg-orange-100 text-orange-700',
-    headerBg: 'bg-orange-50',
-    headerBorder: 'border-orange-100',
-    badge: 'bg-orange-100 text-orange-700',
-    ring: 'ring-orange-200',
+    iconBg: 'bg-orange-50 text-orange-600',
+    headerBg: 'bg-gradient-to-r from-orange-50 to-amber-50',
+    headerBorder: 'border-orange-100/80',
+    badge: 'bg-orange-500 text-white',
+    ring: 'ring-orange-300',
+    glow: 'shadow-orange-100',
   },
 };
 
@@ -345,11 +352,9 @@ const NodeShell = ({
   return (
     <div
       className={cn(
-        // Fixed width: 280px (professional, compact size)
-        // Min height ensures content is visible, auto height adapts to content
-        'group relative flex w-[280px] max-w-[400px] min-h-[140px] flex-col rounded-2xl border-2 bg-white shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-xl',
-        pill ? 'px-6 py-4' : 'overflow-hidden',
-        selected ? `ring-2 ring-offset-2 ${token.ring}` : 'ring-0'
+        'group relative flex w-[280px] max-w-[400px] min-h-[120px] flex-col rounded-xl border bg-white transition-all duration-200 hover:-translate-y-0.5',
+        pill ? 'px-5 py-3.5' : 'overflow-hidden',
+        selected ? `ring-2 ring-offset-2 ${token.ring} shadow-xl ${token.glow}` : 'shadow-md hover:shadow-lg'
       )}
       style={{ borderColor: token.border }}
     >
