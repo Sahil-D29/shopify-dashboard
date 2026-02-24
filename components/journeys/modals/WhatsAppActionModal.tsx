@@ -43,6 +43,7 @@ import { Step5TestValidate } from "@/components/journeys/nodes/whatsapp/Step5Tes
 import { UnifiedWhatsAppConfig } from "@/components/journeys/nodes/whatsapp/UnifiedWhatsAppConfig";
 import { normalizeVariableToken, renderTemplateWithVariables } from "@/lib/whatsapp/template-utils";
 import { validateStep2 } from "@/lib/whatsapp/step2Validator";
+import { UTMBuilder } from "@/components/journeys/builder/utm/UTMBuilder";
 
 import type {
   FailureHandlingConfig,
@@ -1557,7 +1558,19 @@ export default function WhatsAppActionModal({
           {renderErrors()}
 
           <div className="flex-1 min-h-0 overflow-hidden">
-            <div className="h-full overflow-y-auto pr-1">{renderStep()}</div>
+            <div className="h-full overflow-y-auto pr-1">
+              {renderStep()}
+
+              {/* UTM Link Tracking Builder */}
+              <details className="mt-6 rounded-xl border border-[#E8E4DE] bg-[#FAF9F6]">
+                <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-[#4A4139] hover:bg-[#F5F3EE] rounded-xl">
+                  Link Tracking (UTM Builder)
+                </summary>
+                <div className="border-t border-[#E8E4DE] px-4 py-4">
+                  <UTMBuilder journeyName={config.templateName || undefined} />
+                </div>
+              </details>
+            </div>
           </div>
         </div>
       </ResizableModal>

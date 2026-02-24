@@ -12,6 +12,7 @@ import {
   Clock3,
   Cog,
   GitBranch,
+  Globe,
   Loader2,
   MessageCircle,
   Pause,
@@ -24,6 +25,7 @@ import {
   Tag,
   Target,
   TestTube2,
+  Ticket,
   Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -53,7 +55,7 @@ export interface JourneyToolbarProps {
   onAddDelay?: () => void;
   onAddCondition?: () => void;
   onAddExperiment?: () => void;
-  onAddAction?: (type: 'whatsapp' | 'add_tag' | 'update_property') => void;
+  onAddAction?: (type: 'whatsapp' | 'add_tag' | 'update_property' | 'generate_discount' | 'http_webhook') => void;
   onAddGoal?: () => void;
   onBack?: () => void;
   isSaving?: boolean;
@@ -72,7 +74,7 @@ const statusTokens: Record<JourneyToolbarProps['status'], { label: string; tone:
 };
 
 const ACTION_MENU_OPTIONS: Array<{
-  id: 'whatsapp' | 'add_tag' | 'update_property';
+  id: 'whatsapp' | 'add_tag' | 'update_property' | 'generate_discount' | 'http_webhook';
   label: string;
   description: string;
   icon: LucideIcon;
@@ -94,6 +96,18 @@ const ACTION_MENU_OPTIONS: Array<{
     label: 'Update Property',
     description: 'Modify customer profile attributes.',
     icon: Settings2,
+  },
+  {
+    id: 'generate_discount',
+    label: 'Generate Discount',
+    description: 'Auto-create a unique Shopify discount code.',
+    icon: Ticket,
+  },
+  {
+    id: 'http_webhook',
+    label: 'HTTP Webhook',
+    description: 'POST customer data to an external endpoint.',
+    icon: Globe,
   },
 ];
 
@@ -210,7 +224,7 @@ export function JourneyToolbar({
     };
   }, [validationSummary]);
 
-  const handleActionSelect = (id: 'whatsapp' | 'add_tag' | 'update_property') => {
+  const handleActionSelect = (id: 'whatsapp' | 'add_tag' | 'update_property' | 'generate_discount' | 'http_webhook') => {
     onAddAction?.(id);
     setActionMenuOpen(false);
   };

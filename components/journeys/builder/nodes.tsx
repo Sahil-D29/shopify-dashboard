@@ -22,9 +22,11 @@ import {
   Sparkles,
   Moon,
   Target,
+  Ticket,
   Trash2,
   Trophy,
   Timer,
+  Globe,
   Zap,
 } from 'lucide-react';
 
@@ -160,6 +162,8 @@ const ACTION_TYPE_LABELS: Record<string, { label: string; detail: string }> = {
   sms: { label: 'SMS', detail: 'Send a concise text update' },
   add_tag: { label: 'Add Tag', detail: 'Attach a tag for future targeting' },
   update_property: { label: 'Update Property', detail: 'Modify customer attributes' },
+  generate_discount: { label: 'Generate Discount', detail: 'Auto-create a unique Shopify discount code' },
+  http_webhook: { label: 'HTTP Webhook', detail: 'Send customer data to an external URL' },
 };
 
 const GOAL_TYPE_LABELS: Record<string, string> = {
@@ -651,7 +655,7 @@ const BaseNode = memo(function BaseNode({ id, data, selected }: BuilderNodeProps
   } else if (data.variant === 'action') {
     const actionType = getString(meta.actionType) ?? data.subtype ?? 'whatsapp';
     const info = ACTION_TYPE_LABELS[actionType] ?? ACTION_TYPE_LABELS.whatsapp;
-    const ChannelIcon = actionType === 'email' ? Mail : actionType === 'sms' ? Send : MessageCircle;
+    const ChannelIcon = actionType === 'email' ? Mail : actionType === 'sms' ? Send : actionType === 'generate_discount' ? Ticket : actionType === 'http_webhook' ? Globe : MessageCircle;
     const timingLabel =
       getString(meta.timing) ??
       getString(meta.delayLabel) ??

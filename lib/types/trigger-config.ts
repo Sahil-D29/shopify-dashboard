@@ -9,7 +9,20 @@ export type ShopifyEventTriggerType =
   | 'customer_created'
   | 'product_added_to_cart'
   | 'checkout_started'
-  | 'custom_event';
+  | 'custom_event'
+  | 'price_drop'
+  | 'back_in_stock'
+  | 'browse_abandonment'
+  | 'cod_order_placed'
+  | 'repeat_purchase'
+  | 'review_requested'
+  | 'subscription_created'
+  | 'subscription_cancelled'
+  | 'date_property_trigger'
+  | 'whatsapp_reply_received'
+  | 'whatsapp_button_clicked'
+  | 'utm_link_clicked'
+  | 'campaign_opened';
 
 export type TimeBasedTriggerType = 'specific_datetime' | 'recurring_schedule' | 'attribute_date';
 

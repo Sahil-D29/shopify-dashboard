@@ -8,7 +8,7 @@ export interface EnhancedShopifyEvent {
   id: string;
   label: string;
   description: string;
-  category: 'product' | 'order' | 'cart' | 'customer' | 'payment' | 'fulfillment';
+  category: 'product' | 'order' | 'cart' | 'customer' | 'payment' | 'fulfillment' | 'engagement' | 'marketing';
   properties?: ShopifyEventProperty[];
 }
 
@@ -66,6 +66,47 @@ export const ENHANCED_SHOPIFY_EVENTS: Record<string, EnhancedShopifyEvent[]> = {
         { name: 'search_query', type: 'string', description: 'Search term entered' },
         { name: 'results_count', type: 'number', description: 'Number of results found' },
         { name: 'filters_applied', type: 'string', description: 'Filters applied during search' },
+      ],
+    },
+    {
+      id: 'price_drop',
+      label: 'Price Drop',
+      description: 'Product price decreased from previous value',
+      category: 'product',
+      properties: [
+        { name: 'product_id', type: 'string', description: 'Product ID' },
+        { name: 'product_name', type: 'string', description: 'Product name' },
+        { name: 'previous_price', type: 'number', description: 'Previous price' },
+        { name: 'new_price', type: 'number', description: 'New price' },
+        { name: 'drop_percentage', type: 'number', description: 'Price drop percentage' },
+        { name: 'product_url', type: 'string', description: 'Product URL' },
+      ],
+    },
+    {
+      id: 'back_in_stock',
+      label: 'Back in Stock',
+      description: 'Previously out-of-stock product is available again',
+      category: 'product',
+      properties: [
+        { name: 'product_id', type: 'string', description: 'Product ID' },
+        { name: 'product_name', type: 'string', description: 'Product name' },
+        { name: 'variant_id', type: 'string', description: 'Variant ID' },
+        { name: 'variant_title', type: 'string', description: 'Variant title' },
+        { name: 'inventory_quantity', type: 'number', description: 'Current inventory quantity' },
+        { name: 'product_url', type: 'string', description: 'Product URL' },
+      ],
+    },
+    {
+      id: 'browse_abandonment',
+      label: 'Browse Abandonment',
+      description: 'Customer viewed products but did not add to cart',
+      category: 'product',
+      properties: [
+        { name: 'customer_id', type: 'string', description: 'Customer ID' },
+        { name: 'products_viewed', type: 'string', description: 'Product IDs viewed (comma-separated)' },
+        { name: 'view_count', type: 'number', description: 'Number of products viewed' },
+        { name: 'session_duration', type: 'number', description: 'Browsing session duration in seconds' },
+        { name: 'last_viewed_product', type: 'string', description: 'Last product viewed' },
       ],
     },
   ],
@@ -150,6 +191,70 @@ export const ENHANCED_SHOPIFY_EVENTS: Record<string, EnhancedShopifyEvent[]> = {
         { name: 'restock', type: 'boolean', description: 'Items restocked indicator' },
       ],
     },
+    {
+      id: 'cod_order_placed',
+      label: 'COD Order Placed',
+      description: 'Customer placed a cash-on-delivery order',
+      category: 'order',
+      properties: [
+        { name: 'order_id', type: 'string', description: 'Order ID' },
+        { name: 'order_number', type: 'string', description: 'Order number' },
+        { name: 'order_total', type: 'number', description: 'Order total amount' },
+        { name: 'customer_phone', type: 'string', description: 'Customer phone number' },
+        { name: 'delivery_address', type: 'string', description: 'Delivery address' },
+        { name: 'items_count', type: 'number', description: 'Number of items ordered' },
+      ],
+    },
+    {
+      id: 'repeat_purchase',
+      label: 'Repeat Purchase',
+      description: 'Customer purchased a product they have bought before',
+      category: 'order',
+      properties: [
+        { name: 'order_id', type: 'string', description: 'Order ID' },
+        { name: 'product_id', type: 'string', description: 'Repeated product ID' },
+        { name: 'product_name', type: 'string', description: 'Repeated product name' },
+        { name: 'purchase_count', type: 'number', description: 'Total times purchased' },
+        { name: 'previous_order_date', type: 'date', description: 'Previous purchase date' },
+      ],
+    },
+    {
+      id: 'review_requested',
+      label: 'Review Requested',
+      description: 'Post-delivery review solicitation trigger',
+      category: 'order',
+      properties: [
+        { name: 'order_id', type: 'string', description: 'Order ID' },
+        { name: 'delivered_at', type: 'date', description: 'Delivery date' },
+        { name: 'days_since_delivery', type: 'number', description: 'Days since delivered' },
+        { name: 'product_names', type: 'string', description: 'Products to review (comma-separated)' },
+      ],
+    },
+    {
+      id: 'subscription_created',
+      label: 'Subscription Created',
+      description: 'Customer created a recurring subscription order',
+      category: 'order',
+      properties: [
+        { name: 'subscription_id', type: 'string', description: 'Subscription ID' },
+        { name: 'product_name', type: 'string', description: 'Subscribed product name' },
+        { name: 'interval', type: 'string', description: 'Billing interval (weekly, monthly, yearly)' },
+        { name: 'next_billing_date', type: 'date', description: 'Next billing date' },
+        { name: 'amount', type: 'number', description: 'Subscription amount' },
+      ],
+    },
+    {
+      id: 'subscription_cancelled',
+      label: 'Subscription Cancelled',
+      description: 'Customer cancelled a recurring subscription',
+      category: 'order',
+      properties: [
+        { name: 'subscription_id', type: 'string', description: 'Subscription ID' },
+        { name: 'product_name', type: 'string', description: 'Subscribed product name' },
+        { name: 'cancel_reason', type: 'string', description: 'Cancellation reason' },
+        { name: 'cancelled_at', type: 'date', description: 'Cancellation timestamp' },
+      ],
+    },
   ],
   payment: [
     {
@@ -206,6 +311,19 @@ export const ENHANCED_SHOPIFY_EVENTS: Record<string, EnhancedShopifyEvent[]> = {
         { name: 'updated_at', type: 'date', description: 'Update timestamp' },
       ],
     },
+    {
+      id: 'date_property_trigger',
+      label: 'Date / Birthday Trigger',
+      description: 'Trigger based on customer date attribute (birthday, anniversary)',
+      category: 'customer',
+      properties: [
+        { name: 'customer_id', type: 'string', description: 'Customer ID' },
+        { name: 'date_field', type: 'string', description: 'Date attribute name (e.g. birthday)' },
+        { name: 'date_value', type: 'date', description: 'The actual date value' },
+        { name: 'days_before', type: 'number', description: 'Days before the date to trigger' },
+        { name: 'customer_name', type: 'string', description: 'Customer name' },
+      ],
+    },
   ],
   fulfillment: [
     {
@@ -243,6 +361,65 @@ export const ENHANCED_SHOPIFY_EVENTS: Record<string, EnhancedShopifyEvent[]> = {
         { name: 'order_id', type: 'string', description: 'Order ID' },
         { name: 'delivered_at', type: 'date', description: 'Delivery timestamp' },
         { name: 'signature_collected', type: 'boolean', description: 'Was a signature collected?' },
+      ],
+    },
+  ],
+  engagement: [
+    {
+      id: 'whatsapp_reply_received',
+      label: 'WhatsApp Reply Received',
+      description: 'Customer replied to a WhatsApp message',
+      category: 'engagement',
+      properties: [
+        { name: 'message_id', type: 'string', description: 'Original message ID' },
+        { name: 'reply_text', type: 'string', description: 'Reply content' },
+        { name: 'customer_phone', type: 'string', description: 'Customer phone number' },
+        { name: 'template_name', type: 'string', description: 'Original template name' },
+        { name: 'replied_at', type: 'date', description: 'Reply timestamp' },
+      ],
+    },
+    {
+      id: 'whatsapp_button_clicked',
+      label: 'WhatsApp Button Clicked',
+      description: 'Customer clicked a button in a WhatsApp message',
+      category: 'engagement',
+      properties: [
+        { name: 'message_id', type: 'string', description: 'Message ID' },
+        { name: 'button_id', type: 'string', description: 'Button identifier' },
+        { name: 'button_text', type: 'string', description: 'Button label text' },
+        { name: 'customer_phone', type: 'string', description: 'Customer phone number' },
+        { name: 'template_name', type: 'string', description: 'Template name' },
+      ],
+    },
+  ],
+  marketing: [
+    {
+      id: 'utm_link_clicked',
+      label: 'UTM Link Clicked',
+      description: 'Customer clicked a tracked UTM link in a WhatsApp message',
+      category: 'marketing',
+      properties: [
+        { name: 'utm_source', type: 'string', description: 'UTM source parameter' },
+        { name: 'utm_medium', type: 'string', description: 'UTM medium parameter' },
+        { name: 'utm_campaign', type: 'string', description: 'UTM campaign parameter' },
+        { name: 'utm_content', type: 'string', description: 'UTM content parameter' },
+        { name: 'utm_term', type: 'string', description: 'UTM term parameter' },
+        { name: 'destination_url', type: 'string', description: 'Destination URL clicked' },
+        { name: 'customer_phone', type: 'string', description: 'Customer phone number' },
+        { name: 'clicked_at', type: 'date', description: 'Click timestamp' },
+      ],
+    },
+    {
+      id: 'campaign_opened',
+      label: 'Campaign Opened',
+      description: 'Customer opened a WhatsApp campaign message',
+      category: 'marketing',
+      properties: [
+        { name: 'campaign_id', type: 'string', description: 'Campaign ID' },
+        { name: 'campaign_name', type: 'string', description: 'Campaign name' },
+        { name: 'customer_phone', type: 'string', description: 'Customer phone number' },
+        { name: 'opened_at', type: 'date', description: 'Open timestamp' },
+        { name: 'channel', type: 'string', description: 'Channel (whatsapp, sms, email)' },
       ],
     },
   ],

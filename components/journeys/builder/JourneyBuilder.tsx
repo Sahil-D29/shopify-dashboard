@@ -1560,9 +1560,10 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
 
   useEffect(() => {
     const panel = sidebarPanelRef.current;
-    if (panel) {
-      setIsSidebarCollapsed(panel.isCollapsed());
+    if (panel && !panel.isCollapsed()) {
+      panel.collapse();
     }
+    setIsSidebarCollapsed(true);
   }, []);
 
   useEffect(() => {
@@ -3158,7 +3159,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
   }, [executionLogModal, testUsers]);
 
   const handleAddActionNode = useCallback(
-    (actionType: 'whatsapp' | 'add_tag' | 'update_property') => {
+    (actionType: 'whatsapp' | 'add_tag' | 'update_property' | 'generate_discount' | 'http_webhook') => {
       if (actionType === 'whatsapp') {
         handleAddNodeFromToolbar({
           nodeType: 'action',
@@ -3189,6 +3190,42 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
             label: 'Add Customer Tag',
           },
           toastMessage: 'Tagging action added to canvas',
+        });
+        return;
+      }
+
+      if (actionType === 'generate_discount') {
+        handleAddNodeFromToolbar({
+          nodeType: 'action',
+          subtype: 'generate_discount',
+          label: 'Generate Discount Code',
+          meta: {
+            actionType: 'generate_discount',
+            discountType: 'percentage',
+            value: 10,
+            prefix: 'SAVE',
+            usageLimit: 1,
+            expiresInDays: 30,
+            label: 'Generate Discount Code',
+          },
+          toastMessage: 'Discount code action added to canvas',
+        });
+        return;
+      }
+
+      if (actionType === 'http_webhook') {
+        handleAddNodeFromToolbar({
+          nodeType: 'action',
+          subtype: 'http_webhook',
+          label: 'HTTP Webhook',
+          meta: {
+            actionType: 'http_webhook',
+            method: 'POST',
+            url: '',
+            headers: {},
+            label: 'HTTP Webhook',
+          },
+          toastMessage: 'Webhook action added to canvas',
         });
         return;
       }
