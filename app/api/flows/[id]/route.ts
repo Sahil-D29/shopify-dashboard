@@ -24,7 +24,7 @@ export async function GET(
     if (!flow) {
       return NextResponse.json({ error: 'Flow not found' }, { status: 404 });
     }
-    return NextResponse.json({ flow });
+    return NextResponse.json({ success: true, flow });
   } catch (error) {
     console.error('Get flow error:', error);
     return NextResponse.json({ error: 'Failed to fetch flow' }, { status: 500 });
@@ -58,7 +58,7 @@ export async function PUT(
         ...(categories !== undefined && { categories }),
       },
     });
-    return NextResponse.json({ flow });
+    return NextResponse.json({ success: true, flow });
   } catch (error) {
     console.error('Update flow error:', error);
     return NextResponse.json({ error: 'Failed to update flow' }, { status: 500 });

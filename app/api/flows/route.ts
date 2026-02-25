@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         },
       },
     });
-    return NextResponse.json({ flow }, { status: 201 });
+    return NextResponse.json({ success: true, flow }, { status: 201 });
   } catch (error) {
     console.error('Create flow error:', error);
     return NextResponse.json({ error: 'Failed to create flow' }, { status: 500 });

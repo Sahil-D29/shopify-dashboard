@@ -56,7 +56,8 @@ export default function CreateFlowPage() {
         throw new Error(data.error || 'Failed to create flow');
       }
 
-      const flow = await res.json();
+      const data = await res.json();
+      const flow = data.flow || data;
       router.push(`/flows/${flow.id}/builder`);
     } catch (err: unknown) {
       const message =
