@@ -11,8 +11,6 @@ import {
 import {
   AlertCircle,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   GitBranch,
   Globe,
@@ -266,15 +264,15 @@ interface SidebarSectionProps {
 }
 
 const SidebarSection = ({ title, count, isOpen, onToggle, children }: SidebarSectionProps) => (
-  <div className="rounded-xl border border-[#E8E4DE] bg-white">
+  <div className="rounded-lg border border-[#E8E4DE] bg-white">
     <button
       type="button"
       onClick={onToggle}
-      className="flex w-full items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#8B7F76] transition hover:bg-[#F5F3EE]"
+      className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#8B7F76] transition hover:bg-[#F5F3EE]"
     >
       <span className="flex items-center gap-2">
         {title}
-        <span className="rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[10px] text-[#8B7F76]">{count}</span>
+        <span className="rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[11px] text-[#8B7F76]">{count}</span>
       </span>
       <ChevronDown className={cn('h-4 w-4 text-[#B8977F] transition-transform duration-200', isOpen && 'rotate-180')} />
     </button>
@@ -284,7 +282,7 @@ const SidebarSection = ({ title, count, isOpen, onToggle, children }: SidebarSec
         isOpen ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0'
       )}
     >
-      <div className="space-y-3 px-4 py-3">{children}</div>
+      <div className="space-y-2 px-3 py-2">{children}</div>
     </div>
   </div>
 );
@@ -294,7 +292,6 @@ interface JourneySidebarProps {
 }
 
 export function JourneySidebar({ className }: JourneySidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [segments, setSegments] = useState<SegmentSummary[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsError, setSegmentsError] = useState<string | null>(null);
@@ -572,45 +569,34 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
   return (
     <aside
       className={cn(
-        'flex h-full flex-shrink-0 flex-col border-r border-[#E8E4DE] bg-[#F5F3EE] transition-all duration-200 ease-out',
-        isCollapsed ? 'w-16' : 'w-64',
+        'flex h-full w-full flex-shrink-0 flex-col border-r border-[#E8E4DE] bg-[#F5F3EE] transition-all duration-200 ease-out overflow-hidden',
         className
       )}
     >
-      <div className={cn('flex items-center justify-between px-3 py-4', isCollapsed && 'flex-col gap-3')}>
-        <div className={cn('flex items-center gap-3', isCollapsed ? 'rotate-90' : '')}>
-          <Zap className="h-4 w-4 text-[#D4A574]" />
-          {!isCollapsed ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#B8977F]">Build</p>
-              <h2 className="text-lg font-semibold tracking-tight text-[#4A4139]">Journey Builder</h2>
-            </div>
-          ) : null}
+      <div className="flex items-center gap-3 px-3 py-3 min-w-0">
+        <Zap className="h-4 w-4 text-[#D4A574] shrink-0" />
+        <div className="min-w-0 overflow-hidden">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#B8977F] truncate">Build</p>
+          <h2 className="text-base font-semibold tracking-tight text-[#4A4139] truncate">Journey Builder</h2>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsCollapsed(prev => !prev)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E8E4DE] bg-white text-[#8B7F76] transition hover:bg-[#F5F3EE]"
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
       </div>
 
-      {!isCollapsed ? (
-        <div className="flex h-full flex-col overflow-hidden">
-          <div className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden pb-6 custom-scrollbar">
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden pb-6 px-2 custom-scrollbar min-w-[200px]">
             <SidebarSection
               title="Journey Blocks"
               count={JOURNEY_BLOCK_COUNT}
               isOpen={sectionOpen.journeyBlocks}
               onToggle={() => toggleSection('journeyBlocks')}
             >
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {groupBlocks.map(group => (
-                  <div key={group.id} className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#B8977F]">{group.title}</p>
-                    <div className="space-y-2">
+                  <div key={group.id} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 pb-0.5">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: blockPalette[group.variant] }} />
+                      <span className="text-[11px] font-medium text-[#8B7F76]">{group.title}</span>
+                    </div>
+                    <div className="space-y-1">
                       {group.blocks.map(block => {
                         const Icon = block.icon;
                         const tone = block.variant ? blockPalette[block.variant as PaletteVariant] : blockPalette[group.variant];
@@ -620,6 +606,7 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
                           <div
                             key={`${group.id}_${block.subtype}_${block.label}`}
                             draggable
+                            title={block.description}
                             onDragStart={event =>
                               handleDragStart(event, {
                                 variant,
@@ -633,21 +620,18 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
                               })
                             }
                             className={cn(
-                              'group flex w-full cursor-grab items-center gap-3 rounded-xl border border-transparent p-3 text-xs font-medium text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md',
-                              isWait ? 'rounded-full' : 'rounded-xl'
+                              'group flex w-full cursor-grab items-center gap-2.5 border bg-white px-3 py-2 text-xs font-medium text-[#4A4139] shadow-sm transition duration-150 hover:-translate-y-0.5 hover:shadow-md',
+                              isWait ? 'rounded-full' : 'rounded-lg'
                             )}
-                            style={{ backgroundColor: tone }}
+                            style={{ borderColor: '#E8E4DE', borderLeftColor: tone, borderLeftWidth: '3px' }}
                           >
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-                              <Icon className="h-4 w-4" />
+                            <span
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                              style={{ backgroundColor: `${tone}20`, color: tone }}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
                             </span>
-                            <div className="flex-1 space-y-1">
-                              <p className="text-[12px] font-semibold leading-snug">{block.label}</p>
-                              {block.description ? (
-                                <p className="text-[11px] text-white/80">{block.description}</p>
-                              ) : null}
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-white/70 opacity-0 transition group-hover:opacity-100" />
+                            <p className="text-[12px] font-semibold leading-snug truncate">{block.label}</p>
                           </div>
                         );
                       })}
@@ -955,13 +939,11 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
               </div>
             </SidebarSection>
 
-            <div className="rounded-2xl border border-dashed border-[#E8E4DE] bg-white/80 px-4 py-3 text-xs text-[#8B7F76]">
-              Drag blocks into the canvas to assemble your journey. Drop data sources on the canvas to instantly create
-              ready-to-use trigger and action nodes.
+            <div className="rounded-lg border border-dashed border-[#E8E4DE] bg-white/80 px-3 py-2 text-[11px] text-[#8B7F76]">
+              Drag blocks onto the canvas to build your journey.
             </div>
           </div>
         </div>
-      ) : null}
     </aside>
   );
 }
@@ -977,15 +959,15 @@ interface CatalogSectionProps<T> {
 function CatalogSection<T>({ title, count, emptyLabel, items, renderItem }: CatalogSectionProps<T>) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[#B8977F]">
+      <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-[#B8977F]">
         <span>{title}</span>
         {typeof count === 'number' ? (
-          <span className="rounded-full bg-[#F5F3EE] px-2 py-1 text-[10px] text-[#8B7F76]">{count}</span>
+          <span className="rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[11px] text-[#8B7F76]">{count}</span>
         ) : null}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         {items.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#E8E4DE] bg-white/60 p-4 text-xs text-[#8B7F76]">
+          <div className="rounded-lg border border-dashed border-[#E8E4DE] bg-white/60 p-3 text-xs text-[#8B7F76]">
             {emptyLabel}
           </div>
         ) : (

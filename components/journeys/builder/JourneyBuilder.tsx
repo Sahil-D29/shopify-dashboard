@@ -1559,11 +1559,13 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
   const journeyFetchControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const panel = sidebarPanelRef.current;
-    if (panel && !panel.isCollapsed()) {
-      panel.collapse();
-    }
-    setIsSidebarCollapsed(true);
+    requestAnimationFrame(() => {
+      const panel = sidebarPanelRef.current;
+      if (panel && !panel.isCollapsed()) {
+        panel.collapse();
+      }
+      setIsSidebarCollapsed(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -3818,12 +3820,11 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
           /* Desktop Layout with PanelGroup */
           <PanelGroup
             direction="horizontal"
-            autoSaveId="journey-builder-panels"
             className="flex h-full w-full"
           >
             <Panel
               ref={sidebarPanelRef}
-              defaultSize={20}
+              defaultSize={6}
               minSize={15}
               maxSize={32}
               collapsible

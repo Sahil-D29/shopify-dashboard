@@ -356,9 +356,9 @@ const NodeShell = ({
   return (
     <div
       className={cn(
-        'group relative flex w-[260px] max-w-[360px] min-h-[100px] flex-col rounded-xl border bg-white transition-all duration-200 hover:-translate-y-0.5',
+        'group relative flex w-[260px] max-w-[320px] flex-col rounded-xl border bg-white transition-all duration-200 hover:-translate-y-0.5',
         pill ? 'px-5 py-3.5' : 'overflow-hidden',
-        selected ? `ring-2 ring-offset-2 ${token.ring} shadow-xl ${token.glow}` : 'shadow-md hover:shadow-lg'
+        selected ? `ring-2 ring-offset-1 ${token.ring} shadow-md ${token.glow}` : 'shadow-sm hover:shadow-md'
       )}
       style={{ borderColor: token.border }}
     >
@@ -391,22 +391,18 @@ const NodeShell = ({
               token.headerBorder
             )}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               {Icon ? (
-                <span className={cn('flex h-10 w-10 items-center justify-center rounded-full', token.iconBg)}>
-                  <Icon className="h-5 w-5" />
+                <span className={cn('flex h-8 w-8 items-center justify-center rounded-full shrink-0', token.iconBg)}>
+                  <Icon className="h-4 w-4" />
                 </span>
               ) : null}
               <div className="min-w-0 flex-1">
-                {/* Improved text visibility: Larger font, better contrast, multi-line support */}
-                <p className="line-clamp-2 text-base font-semibold leading-snug text-slate-900">{data.label}</p>
-                {data.description ? (
-                  <p className="line-clamp-2 mt-1 text-sm leading-relaxed text-slate-700">{data.description}</p>
-                ) : null}
+                <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">{data.label}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className={cn('text-[11px] font-semibold uppercase', token.badge)}>
+            <div className="flex items-center gap-1.5">
+              <Badge className={cn('text-[11px] font-semibold uppercase shrink-0', token.badge)}>
                 {data.variant === 'action'
                   ? actionTypeLabel || 'Action'
                   : data.variant === 'goal'
@@ -419,37 +415,36 @@ const NodeShell = ({
                           ? 'Trigger'
                           : 'Node'}
               </Badge>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <button
                   type="button"
                   onClick={event => handleAction('onEdit', event)}
-                  className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                  className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Edit node"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={event => handleAction('onDuplicate', event)}
-                  className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                  className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Duplicate node"
                 >
-                  <Copy className="h-4 w-4" />
+                  <Copy className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={event => handleAction('onDelete', event)}
-                  className="rounded-lg p-1 text-red-400 transition hover:bg-white hover:text-red-500"
+                  className="rounded-md p-1 text-red-300 transition hover:bg-red-50 hover:text-red-500"
                   aria-label="Delete node"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Content area: Removed max-height restriction, improved padding for better readability */}
-          <div className="px-4 py-4 min-h-[100px]">{children}</div>
+          <div className="px-4 py-3">{children}</div>
           {handles}
 
           {footer != null ? (
@@ -458,9 +453,8 @@ const NodeShell = ({
             <>
               {summary.length > 0 ? (
                 <div className="px-4 pb-4">
-                  {/* Configuration summary: Improved text size and multi-line support */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                    <ul className="space-y-1.5">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+                    <ul className="space-y-1">
                       {summary.map((item, index) => (
                         // Use index suffix to ensure key uniqueness when summary contains duplicate values
                         <li key={`${item}-${index}`} className="line-clamp-2 leading-relaxed">
