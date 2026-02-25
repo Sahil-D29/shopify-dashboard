@@ -3,18 +3,14 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
   AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   CheckCircle2,
   Loader2,
-  ShieldCheck,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import ResizableModal from "@/components/ui/resizable-modal";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/lib/hooks/useToast";
@@ -43,7 +38,7 @@ import { Step5TestValidate } from "@/components/journeys/nodes/whatsapp/Step5Tes
 import { UnifiedWhatsAppConfig } from "@/components/journeys/nodes/whatsapp/UnifiedWhatsAppConfig";
 import { normalizeVariableToken, renderTemplateWithVariables } from "@/lib/whatsapp/template-utils";
 import { validateStep2 } from "@/lib/whatsapp/step2Validator";
-import { UTMBuilder } from "@/components/journeys/builder/utm/UTMBuilder";
+// UTM Builder is now inside UnifiedWhatsAppConfig
 
 import type {
   FailureHandlingConfig,
@@ -486,11 +481,9 @@ export default function WhatsAppActionModal({
   const [previewTestOpen, setPreviewTestOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [providerCapabilities, setProviderCapabilities] = useState<any>(null);
-  const [maintainAspect, setMaintainAspect] = useState(false);
-  const [resetToken, setResetToken] = useState(0);
+  const [maintainAspect] = useState(false);
+  const [resetToken] = useState(0);
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
-  const aspectPrefHydratedRef = useRef(false);
-  const lockAspectToggleId = useId();
 
   const dataSources = useMemo(() => DATA_SOURCE_OPTIONS(triggerContext), [triggerContext]);
   const steps = STEP_DEFINITIONS;
@@ -561,19 +554,7 @@ export default function WhatsAppActionModal({
     return () => window.removeEventListener("resize", updateViewport);
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage?.getItem(WHATSAPP_MODAL_ASPECT_KEY);
-    if (stored !== null) {
-      setMaintainAspect(stored === "true");
-    }
-    aspectPrefHydratedRef.current = true;
-  }, []);
-
-  useEffect(() => {
-    if (!aspectPrefHydratedRef.current || typeof window === "undefined") return;
-    window.localStorage?.setItem(WHATSAPP_MODAL_ASPECT_KEY, JSON.stringify(maintainAspect));
-  }, [maintainAspect]);
+  // Aspect ratio lock removed for cleaner UX
 
   const isMobileViewport = viewport.width > 0 && viewport.width < 768;
   const isTabletViewport = viewport.width >= 768 && viewport.width < 1024;
@@ -1474,35 +1455,7 @@ export default function WhatsAppActionModal({
   };
 
   const disableResize = isMobileViewport;
-  const handleResetModalSize = () => setResetToken(prev => prev + 1);
-  const headerControls = (
-    <div className="flex flex-wrap items-center gap-3 text-xs text-[#4A4139]">
-      <div className="flex items-center gap-2">
-        <Switch
-          id={lockAspectToggleId}
-          checked={maintainAspect}
-          disabled={disableResize}
-          onCheckedChange={checked => setMaintainAspect(Boolean(checked))}
-          aria-label="Maintain modal aspect ratio while resizing"
-        />
-        <label
-          htmlFor={lockAspectToggleId}
-          className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#6F5C4B]"
-        >
-          Lock ratio
-        </label>
-      </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className="text-xs font-semibold tracking-wide text-[#4A4139] hover:bg-[#F5F3EE]"
-        onClick={handleResetModalSize}
-      >
-        Reset size
-      </Button>
-    </div>
-  );
+  const headerControls = null;
 
   const footerContent = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
@@ -1532,8 +1485,8 @@ export default function WhatsAppActionModal({
       <ResizableModal
         isOpen={open}
         onClose={onClose}
-        title="Configure WhatsApp Action"
-        subtitle="Build a complete WhatsApp message with variables, media, send windows, and testing."
+        title="WhatsApp Message"
+        subtitle="Select a template, map variables, and preview your message."
         persistKey={WHATSAPP_MODAL_SIZE_KEY}
         maintainAspectRatio={maintainAspect}
         headerActions={headerControls}
@@ -1545,32 +1498,13 @@ export default function WhatsAppActionModal({
         disableResize={disableResize}
         resetSignal={resetToken}
         closeOnOverlay={!disableResize}
-        contentClassName="flex h-full flex-col gap-6 overflow-hidden"
+        contentClassName="flex h-full flex-col overflow-hidden"
       >
-        <div className="flex h-full flex-col gap-6 overflow-hidden">
-          <div className="flex flex-col gap-2 rounded-2xl border border-[#E8E4DE] bg-white px-4 py-3 shadow-sm">
-            <div className="flex items-center justify-between text-sm text-[#4A4139]">
-              <span className="font-semibold">{currentStep.title}</span>
-            </div>
-            <p className="text-xs text-[#8B7F76]">{currentStep.description}</p>
-          </div>
-
+        <div className="flex h-full flex-col overflow-hidden">
           {renderErrors()}
 
           <div className="flex-1 min-h-0 overflow-hidden">
-            <div className="h-full overflow-y-auto pr-1">
-              {renderStep()}
-
-              {/* UTM Link Tracking Builder */}
-              <details className="mt-6 rounded-xl border border-[#E8E4DE] bg-[#FAF9F6]">
-                <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-[#4A4139] hover:bg-[#F5F3EE] rounded-xl">
-                  Link Tracking (UTM Builder)
-                </summary>
-                <div className="border-t border-[#E8E4DE] px-4 py-4">
-                  <UTMBuilder journeyName={config.templateName || undefined} />
-                </div>
-              </details>
-            </div>
+            {renderStep()}
           </div>
         </div>
       </ResizableModal>

@@ -4,11 +4,11 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Send, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
+import { Send, CheckCircle2, XCircle, Loader2, Search, MessageSquare, Link2 } from "lucide-react";
 import { MobilePreview } from "@/components/journeys/MobilePreview";
 import { WhatsAppMessageEditor } from "./WhatsAppMessageEditor";
+import { UTMBuilder } from "@/components/journeys/builder/utm/UTMBuilder";
 import type { WhatsAppTemplate, WhatsAppActionConfig, WhatsAppBodyField, VariableMapping } from "@/lib/types/whatsapp-config";
 import { normalizeVariableToken } from "@/lib/whatsapp/template-utils";
 import { cn } from "@/lib/utils";
@@ -59,32 +59,28 @@ export function UnifiedWhatsAppConfig({
   const layoutRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Filter templates based on search
   const filteredTemplates = useMemo(() => {
     if (!searchQuery.trim()) return templates;
     const query = searchQuery.toLowerCase();
-    return templates.filter(t => 
+    return templates.filter(t =>
       t.name.toLowerCase().includes(query) ||
       t.category.toLowerCase().includes(query) ||
       t.body?.toLowerCase().includes(query)
     );
   }, [templates, searchQuery]);
 
-  // Handle test send
   const handleSendTest = async () => {
     if (!testPhone || !onSendTest) return;
-    
     setTestStatus('sending');
     setTestResult(null);
-    
     try {
       await onSendTest(testPhone);
       setTestStatus('success');
       setTestResult({ messageId: 'test-' + Date.now() });
     } catch (error) {
       setTestStatus('error');
-      setTestResult({ 
-        error: error instanceof Error ? error.message : 'Failed to send test message' 
+      setTestResult({
+        error: error instanceof Error ? error.message : 'Failed to send test message'
       });
     }
   };
@@ -93,234 +89,222 @@ export function UnifiedWhatsAppConfig({
     if (!layoutRef.current) return;
     const observer = new ResizeObserver(entries => {
       const entry = entries[0];
-      if (entry) {
-        setContainerWidth(entry.contentRect.width);
-      }
+      if (entry) setContainerWidth(entry.contentRect.width);
     });
     observer.observe(layoutRef.current);
     return () => observer.disconnect();
   }, []);
 
-  const layoutMode = useMemo(() => {
-    if (!containerWidth) return "desktop";
-    if (containerWidth <= 400) return "xxs";
-    if (containerWidth <= 600) return "xs";
-    if (containerWidth <= 800) return "sm";
-    if (containerWidth <= 1100) return "md";
-    return "lg";
-  }, [containerWidth]);
-
-  const shouldStackPanels = layoutMode !== "lg";
-  const previewScale =
-    layoutMode === "xxs" ? 0.82 : layoutMode === "xs" ? 0.88 : layoutMode === "sm" ? 0.94 : layoutMode === "md" ? 0.97 : 1;
+  const shouldStack = containerWidth > 0 && containerWidth < 680;
+  const previewScale = containerWidth < 400 ? 0.75 : containerWidth < 700 ? 0.82 : 0.9;
 
   return (
     <div
       ref={layoutRef}
       className={cn(
-        "grid h-full min-h-0 gap-6 transition-all duration-300",
-        shouldStackPanels ? "grid-cols-1" : "grid-cols-[minmax(300px,1fr)_minmax(280px,0.8fr)]",
+        "h-full min-h-0 gap-4",
+        shouldStack ? "flex flex-col overflow-y-auto" : "grid grid-cols-[1fr_320px]",
       )}
     >
-      {/* Left Column: Configuration */}
-      <div
-        className={cn(
-          "min-w-[300px] rounded-2xl border border-[#E8E4DE] bg-white/95 shadow-sm transition-all duration-300",
-          "flex min-h-0 flex-col",
-        )}
-      >
-        <div className="flex items-center justify-between border-b border-[#F0EAE3] px-4 py-3 text-sm text-[#4A4139]">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-[#B9AA9F]">Template & Content</p>
-            <p className="font-semibold">Configure Message</p>
-          </div>
-          {selectedTemplate ? (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] font-semibold",
-                selectedTemplate.status === "APPROVED" && "border-green-200 bg-green-50 text-green-700",
-                selectedTemplate.status === "PENDING" && "border-yellow-200 bg-yellow-50 text-yellow-700",
-                selectedTemplate.status === "REJECTED" && "border-red-200 bg-red-50 text-red-700",
-              )}
-            >
-              {selectedTemplate.status}
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="space-y-5">
-            {/* Template Selection */}
-            <section className="space-y-3">
-              <label className="text-sm font-semibold text-[#4A4139]">
-                Select WhatsApp Template <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    placeholder="Search templates..."
-                    value={searchQuery}
-                    onChange={event => setSearchQuery(event.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-              <Select
-                value={selectedTemplate?.id || ""}
-                onValueChange={value => {
-                  const template = filteredTemplates.find(t => t.id === value);
-                  if (template) onTemplateSelect(template);
-                }}
-                disabled={templatesLoading}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={templatesLoading ? "Loading templates..." : "Select template"} />
-                </SelectTrigger>
-                <SelectContent className="max-h-[280px]">
-                  {filteredTemplates.length ? (
-                    filteredTemplates.map(template => (
-                      <SelectItem key={template.id} value={template.id} className="py-2">
-                        <div className="flex flex-col">
-                          <span className="font-medium leading-tight">{template.name}</span>
-                          <span className="text-xs text-gray-500">
-                            {template.category} • {template.language.toUpperCase()}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <div className="px-2 py-6 text-center text-sm text-gray-500">
-                      {templatesLoading ? "Loading templates..." : "No templates found"}
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
+      {/* ── Left: Configuration ── */}
+      <div className={cn("flex min-h-0 flex-col", shouldStack ? "" : "overflow-hidden")}>
+        <div className={cn("space-y-4", shouldStack ? "" : "h-full overflow-y-auto pr-1")}>
 
-              {selectedTemplate ? (
-                <div className="rounded-lg border border-[#E8E4DE] bg-[#FAF9F6] p-3 text-sm">
-                  <p className="mb-1 text-[#4A4139] font-medium">{selectedTemplate.name}</p>
-                  <p className="text-xs text-[#8B7F76] line-clamp-3">
-                    {selectedTemplate.body || selectedTemplate.content || "No description"}
+          {/* Template Selection */}
+          <section className="space-y-2.5">
+            <label className="flex items-center gap-2 text-[13px] font-semibold text-[#4A4139]">
+              <MessageSquare className="h-3.5 w-3.5 text-[#D4A574]" />
+              Template
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#B9AA9F]" />
+              <Input
+                placeholder="Search templates..."
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+                className="h-9 border-[#E8E4DE] pl-9 text-sm focus-visible:ring-[#D4A574]"
+              />
+            </div>
+            <Select
+              value={selectedTemplate?.id || ""}
+              onValueChange={value => {
+                const template = filteredTemplates.find(t => t.id === value);
+                if (template) onTemplateSelect(template);
+              }}
+              disabled={templatesLoading}
+            >
+              <SelectTrigger className="h-9 w-full border-[#E8E4DE] text-sm focus:ring-[#D4A574]">
+                <SelectValue placeholder={templatesLoading ? "Loading..." : "Choose a template"} />
+              </SelectTrigger>
+              <SelectContent className="max-h-[260px]">
+                {filteredTemplates.length ? (
+                  filteredTemplates.map(template => (
+                    <SelectItem key={template.id} value={template.id} className="py-2">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium leading-tight">{template.name}</span>
+                        <span className="text-[11px] text-[#8B7F76]">
+                          {template.category} &middot; {template.language.toUpperCase()}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-6 text-center text-sm text-[#8B7F76]">
+                    {templatesLoading ? "Loading templates..." : "No templates found"}
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+
+            {/* Selected template info pill */}
+            {selectedTemplate ? (
+              <div className="flex items-center gap-2 rounded-lg border border-[#E8E4DE] bg-[#FAF9F6] px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-[#4A4139] truncate">{selectedTemplate.name}</p>
+                  <p className="text-[11px] text-[#8B7F76] line-clamp-2 leading-relaxed">
+                    {selectedTemplate.body || selectedTemplate.content || "No preview available"}
                   </p>
                 </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    selectedTemplate.status === "APPROVED" && "bg-green-50 text-green-700",
+                    selectedTemplate.status === "PENDING" && "bg-yellow-50 text-yellow-700",
+                    selectedTemplate.status === "REJECTED" && "bg-red-50 text-red-700",
+                  )}
+                >
+                  {selectedTemplate.status}
+                </span>
+              </div>
+            ) : null}
+          </section>
+
+          {/* Variable Mapping */}
+          {selectedTemplate ? (
+            <section className="space-y-2.5">
+              <label className="text-[13px] font-semibold text-[#4A4139]">Variables</label>
+              <WhatsAppMessageEditor
+                template={selectedTemplate}
+                bodyFields={bodyFields}
+                onBodyFieldChange={handleBodyFieldChange}
+                onInsertVariable={() => undefined}
+                variableMappings={variableMappings}
+                onVariableMappingsChange={onVariableMappingsChange}
+                variableErrors={{}}
+                dataSources={dataSources}
+                triggerContext={triggerContext}
+                useEnhancedMapper={true}
+              />
+            </section>
+          ) : null}
+
+          {/* Test Send — compact inline */}
+          {selectedTemplate && onSendTest ? (
+            <section className="space-y-2">
+              <label className="flex items-center gap-2 text-[13px] font-semibold text-[#4A4139]">
+                <Send className="h-3.5 w-3.5 text-[#D4A574]" />
+                Send Test
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="+91 98765 43210"
+                  value={testPhone}
+                  onChange={event => setTestPhone(event.target.value)}
+                  className="h-9 flex-1 border-[#E8E4DE] text-sm focus-visible:ring-[#D4A574]"
+                />
+                <Button
+                  onClick={handleSendTest}
+                  disabled={!testPhone || testStatus === "sending"}
+                  size="sm"
+                  className="h-9 bg-[#D4A574] text-white hover:bg-[#B8835D]"
+                >
+                  {testStatus === "sending" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
+
+              {testStatus === "success" ? (
+                <p className="flex items-center gap-1.5 text-[12px] text-green-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Sent successfully
+                </p>
+              ) : null}
+
+              {testStatus === "error" && testResult?.error ? (
+                <p className="flex items-center gap-1.5 text-[12px] text-red-600">
+                  <XCircle className="h-3.5 w-3.5" /> {testResult.error}
+                </p>
               ) : null}
             </section>
+          ) : null}
 
-            {/* Variable Mapping */}
-            {selectedTemplate ? (
-              <section className="space-y-3">
-                <label className="text-sm font-semibold text-[#4A4139]">Configure Variables</label>
-                <div className="rounded-2xl border border-[#E8E4DE] bg-white p-3">
-                  <WhatsAppMessageEditor
-                    template={selectedTemplate}
-                    bodyFields={bodyFields}
-                    onBodyFieldChange={handleBodyFieldChange}
-                    onInsertVariable={() => undefined}
-                    variableMappings={variableMappings}
-                    onVariableMappingsChange={onVariableMappingsChange}
-                    variableErrors={{}}
-                    dataSources={dataSources}
-                    triggerContext={triggerContext}
-                    useEnhancedMapper={true}
-                  />
-                </div>
-              </section>
-            ) : null}
+          {/* UTM Builder */}
+          <details className="group rounded-lg border border-[#E8E4DE]">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[13px] font-semibold text-[#4A4139] hover:bg-[#FAF9F6] rounded-lg select-none">
+              <Link2 className="h-3.5 w-3.5 text-[#D4A574]" />
+              Link Tracking (UTM)
+              <span className="ml-auto text-[11px] font-normal text-[#B9AA9F] group-open:hidden">expand</span>
+            </summary>
+            <div className="border-t border-[#E8E4DE] px-3 py-3">
+              <UTMBuilder journeyName={config.templateName || undefined} />
+            </div>
+          </details>
 
-            {/* Test Send */}
-            {selectedTemplate && onSendTest ? (
-              <section className="space-y-3 rounded-2xl border border-[#E8E4DE] bg-white p-4">
-                <label className="text-sm font-semibold text-[#4A4139]">Test Message</label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    placeholder="Enter phone number (e.g., +1234567890)"
-                    value={testPhone}
-                    onChange={event => setTestPhone(event.target.value)}
-                    className="flex-1"
-                  />
-                  <Button onClick={handleSendTest} disabled={!testPhone || testStatus === "sending"} size="sm">
-                    {testStatus === "sending" ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="mr-2 h-4 w-4" />
-                        Send Test
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {testStatus === "success" ? (
-                  <Alert className="border-green-200 bg-green-50">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">Test message sent successfully!</AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {testStatus === "error" && testResult?.error ? (
-                  <Alert className="border-red-200 bg-red-50">
-                    <XCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800">{testResult.error}</AlertDescription>
-                  </Alert>
-                ) : null}
-              </section>
-            ) : null}
-
-            {/* Validation Errors */}
-            {validationErrors.length ? (
-              <Alert className="border-red-200 bg-red-50">
-                <XCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription>
-                  <ul className="list-disc list-inside space-y-1">
-                    {validationErrors.map((error, idx) => (
-                      <li key={idx} className="text-sm text-red-800">
-                        {error}
-                      </li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
+          {/* Validation Errors */}
+          {validationErrors.length ? (
+            <Alert className="border-red-200 bg-red-50">
+              <XCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationErrors.map((error, idx) => (
+                    <li key={idx} className="text-sm text-red-800">{error}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </div>
       </div>
 
-      {/* Right Column: Mobile Preview */}
+      {/* ── Right: Live Preview ── */}
       <div
         className={cn(
-          "min-w-[280px] rounded-2xl border border-[#E8E4DE] bg-white/95 shadow-sm transition-all duration-300",
-          "flex min-h-0 flex-col",
+          "flex flex-col rounded-xl border border-[#E8E4DE] bg-[#FAF9F6]",
+          shouldStack ? "mt-2" : "min-h-0",
         )}
       >
-        <div className="flex items-center justify-between border-b border-[#F0EAE3] px-4 py-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-[#B9AA9F]">Live Preview</p>
-            <p className="text-sm font-semibold text-[#4A4139]">Phone Mockup</p>
-          </div>
-          <span className="text-xs text-[#8B7F76]">
-            {Math.round(previewScale * 100)}
-            %
-          </span>
+        <div className="flex items-center justify-between border-b border-[#E8E4DE] px-3 py-2">
+          <span className="text-[12px] font-semibold text-[#8B7F76]">Preview</span>
+          {selectedTemplate ? (
+            <span className="text-[11px] text-[#B9AA9F]">{selectedTemplate.language?.toUpperCase()}</span>
+          ) : null}
         </div>
-        <div className="flex-1 overflow-y-auto px-2 py-4">
-          <div className="flex justify-center">
-            <div
-              className="origin-top"
-              style={{
-                transform: `scale(${previewScale})`,
-                transition: "transform 200ms ease",
-              }}
-            >
-              <MobilePreview template={selectedTemplate} variableValues={variablePreview} />
-            </div>
+        <div className={cn("flex-1 overflow-y-auto", shouldStack ? "py-4" : "py-3")}>
+          <div className="flex justify-center px-2">
+            {selectedTemplate ? (
+              <div
+                className="origin-top"
+                style={{
+                  transform: `scale(${previewScale})`,
+                  transition: "transform 200ms ease",
+                }}
+              >
+                <MobilePreview template={selectedTemplate} variableValues={variablePreview} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#E8E4DE]">
+                  <MessageSquare className="h-5 w-5 text-[#8B7F76]" />
+                </div>
+                <p className="text-[13px] font-medium text-[#8B7F76]">No template selected</p>
+                <p className="mt-1 text-[11px] text-[#B9AA9F]">Choose a template to see the preview</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
-
