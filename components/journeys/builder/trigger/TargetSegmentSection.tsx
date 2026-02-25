@@ -215,41 +215,40 @@ export function TargetSegmentSection({
   );
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#8B7DD6] bg-white shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-[#E8E4DE] bg-white">
       <header
-        className="flex cursor-pointer flex-col gap-4 bg-[#8B7DD6] px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6"
+        className="flex cursor-pointer items-center justify-between gap-3 bg-[#F5F3EE] px-4 py-3"
         onClick={handleToggleCollapsed}
         role="button"
       >
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/20">
-            <Users className="h-5 w-5" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#D4A574]/15 text-[#D4A574]">
+            <Users className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <div className="text-sm font-semibold uppercase tracking-[0.3em]">Who</div>
-            <p className="text-xs text-white/80 sm:text-sm">Define the audience eligible to enter this journey</p>
+            <div className="text-xs font-semibold text-[#4A4139]">Who enters this journey</div>
+            <p className="text-[11px] text-[#8B7F76]">{totalRules} rule{totalRules === 1 ? '' : 's'} configured</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold text-white/80">{totalRules} rule{totalRules === 1 ? '' : 's'}</span>
-          {collapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+        <div className="flex items-center">
+          {collapsed ? <ChevronDown className="h-4 w-4 text-[#8B7F76]" /> : <ChevronUp className="h-4 w-4 text-[#8B7F76]" />}
         </div>
       </header>
 
       {!collapsed ? (
-        <div className="space-y-6 px-4 py-6 sm:px-6">
+        <div className="space-y-4 px-4 py-4">
           <div
             className={cn(
               'space-y-2',
               highlightMain &&
-                'rounded-2xl border border-[#8B7DD6]/60 bg-[#EEF2FF]/60 p-4 shadow-sm shadow-[#C7D2FE]/40 sm:p-5',
+                'rounded-lg border border-[#D4A574]/40 bg-[#D4A574]/5 p-3',
             )}
           >
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Target Segment</label>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-[#8B7F76]">Target Segment</label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1">
                 <select
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#8B7DD6] focus:outline-none focus:ring-2 focus:ring-[#8B7DD6]/30"
+                  className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139] focus:border-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]/20"
                   value={segment.type}
                   onChange={event => onSegmentTypeChange(event.target.value as CleverTapStyleTargetSegment['type'])}
                 >
@@ -260,20 +259,20 @@ export function TargetSegmentSection({
               <button
                 type="button"
                 onClick={onAddRuleGroup}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#8B7DD6] px-4 py-2 text-sm font-semibold text-[#8B7DD6] transition hover:bg-[#8B7DD6]/10 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#E8E4DE] px-3 py-2 text-xs font-semibold text-[#4A4139] transition hover:bg-[#F5F3EE] sm:w-auto"
               >
-                <Plus className="h-4 w-4" />
-                Add rule group
+                <Plus className="h-3.5 w-3.5" />
+                Add group
               </button>
             </div>
           </div>
 
-        {advancedPanel ? <div>{advancedPanel}</div> : null}
+          {advancedPanel ? <div>{advancedPanel}</div> : null}
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {segment.rules.length === 0 ? null : (
-              <div className={cn('space-y-4', segment.rules.length > 0 && 'pt-1')}>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Main Rules</div>
+              <div className={cn('space-y-3', segment.rules.length > 0 && 'pt-1')}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8B7F76]">Rules</div>
                 {segment.rules.map((rule, index) =>
                   renderRuleRow(rule, {
                     type: 'main',
@@ -286,32 +285,32 @@ export function TargetSegmentSection({
             {segment.ruleGroups.map(group => renderGroup(group))}
 
             {segment.rules.length === 0 && segment.ruleGroups.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center text-sm text-slate-500 space-y-3">
-                <p className="font-medium text-slate-600">No rules configured yet</p>
+              <div className="rounded-lg border border-dashed border-[#E8E4DE] bg-[#F5F3EE]/50 px-4 py-6 text-center text-xs text-[#8B7F76] space-y-2">
+                <p className="font-medium text-[#4A4139]">No rules configured yet</p>
                 <p>Add your first rule to define who should enter this journey.</p>
                 <button
                   type="button"
                   onClick={() => onAddRule({ type: 'main', index: 0 })}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#8B7DD6] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#7c6cd0]"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#D4A574] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#B8835D]"
                 >
-                  <Plus className="h-4 w-4" />
-                  Add your first rule
+                  <Plus className="h-3.5 w-3.5" />
+                  Add first rule
                 </button>
               </div>
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => onAddRule({ type: 'main', index: segment.rules.length })}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#8B7DD6] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#7c6cd0] sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#D4A574] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#B8835D] sm:w-auto"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Add rule
             </button>
-            <span className="text-xs text-slate-500">
-              Rules in the main section combine with <strong>AND</strong>.
+            <span className="text-[11px] text-[#8B7F76]">
+              Rules combine with <strong>AND</strong>.
             </span>
           </div>
         </div>

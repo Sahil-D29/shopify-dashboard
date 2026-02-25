@@ -9,6 +9,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname?.startsWith('/auth');
   const isChatPage = pathname?.startsWith('/chat');
+  const isBuilderPage = /^\/(journeys|flows)\/[^/]+\/builder/.test(pathname ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Close sidebar when route changes on mobile
@@ -28,7 +29,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
     };
   }, [sidebarOpen]);
 
-  if (isAuthPage) {
+  if (isAuthPage || isBuilderPage) {
     return <>{children}</>;
   }
 

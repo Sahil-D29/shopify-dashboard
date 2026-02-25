@@ -780,18 +780,17 @@ export function TriggerConfigPanel({
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#FAF9F6] transition-[flex-grow,flex-basis,width] duration-200 ease-in-out">
-      <header className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-[#E8E4DE] bg-white px-3 py-3">
+      <header className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-[#E8E4DE] bg-white px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#B8977F]">Trigger</p>
           <h2 className="text-sm font-semibold text-[#4A4139] truncate">Trigger Config</h2>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
-          <div className="inline-flex items-center gap-0.5 rounded-full border border-[#E8E4DE] bg-white p-0.5 text-[11px] font-semibold">
+          <div className="inline-flex items-center gap-0.5 rounded-full border border-[#E8E4DE] bg-[#F5F3EE] p-0.5 text-[11px] font-semibold">
             <button
               type="button"
               onClick={() => handleStatusToggle('draft')}
-              className={`rounded-full px-3 py-1 transition ${
-                status === 'draft' ? 'bg-[#8B7DD6] text-white shadow-sm' : 'text-[#8B7F76]'
+              className={`rounded-full px-2.5 py-1 transition ${
+                status === 'draft' ? 'bg-[#4A4139] text-white shadow-sm' : 'text-[#8B7F76] hover:text-[#4A4139]'
               }`}
             >
               Draft
@@ -799,8 +798,8 @@ export function TriggerConfigPanel({
             <button
               type="button"
               onClick={() => handleStatusToggle('active')}
-              className={`rounded-full px-3 py-1 transition ${
-                status === 'active' ? 'bg-[#8B7DD6] text-white shadow-sm' : 'text-[#8B7F76]'
+              className={`rounded-full px-2.5 py-1 transition ${
+                status === 'active' ? 'bg-[#4A4139] text-white shadow-sm' : 'text-[#8B7F76] hover:text-[#4A4139]'
               }`}
             >
               Active
@@ -809,7 +808,7 @@ export function TriggerConfigPanel({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-[#8B7F76] transition hover:border-[#E8E4DE] hover:bg-white"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8B7F76] transition hover:bg-[#F5F3EE]"
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -821,16 +820,16 @@ export function TriggerConfigPanel({
         <div
           role="region"
           aria-label="Trigger configuration"
-          className="custom-scroll flex h-full flex-col gap-4 overflow-y-auto px-3 pb-24 pt-3 sm:px-4"
+          className="custom-scroll flex h-full flex-col gap-3 overflow-y-auto px-3 pb-24 pt-3"
         >
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#4A4139]">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E9D8FD] text-xs font-bold text-[#6B46C1]">
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#4A4139]">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#D4A574] text-[10px] font-bold text-white">
                 1
               </span>
-              <span>Select rule type</span>
+              <span>Audience Rules</span>
               {totalRuleCount > 0 ? (
-                <span className="rounded-full bg-[#EEF2FF] px-2 py-1 text-[11px] font-semibold text-[#4C51BF]">
+                <span className="rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[11px] font-medium text-[#8B7F76]">
                   {totalRuleCount} rule{totalRuleCount !== 1 ? 's' : ''}
                 </span>
               ) : null}
@@ -874,9 +873,9 @@ export function TriggerConfigPanel({
         </div>
       </div>
 
-      <footer className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-[#E8E4DE] bg-[#F5F3EE] px-3 py-2.5">
+      <footer className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-[#E8E4DE] bg-white px-4 py-2.5">
         <p className="hidden sm:block text-[11px] text-[#8B7F76] leading-tight">Auto-saved</p>
-        <Button type="button" onClick={handleSave} className="flex items-center gap-1.5 bg-[#8B7DD6] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#7C6CD0]">
+        <Button type="button" onClick={handleSave} className="flex items-center gap-1.5 bg-[#D4A574] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#B8835D] rounded-lg">
           <Save className="h-3.5 w-3.5" />
           Save
         </Button>
