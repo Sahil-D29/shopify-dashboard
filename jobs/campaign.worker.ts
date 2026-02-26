@@ -1,6 +1,7 @@
 /**
  * Campaign worker - process one pending CampaignQueueItem per invocation.
- * Fetches segment, resolves customers, sends via EMAIL/SMS/WHATSAPP, logs and updates stats.
+ * Supports multi-segment targeting, sending speed rate-limiting, and preserves
+ * queue items for audit trail instead of deleting them.
  */
 import { ShopifyClient } from '@/lib/shopify/client';
 import { prisma } from '@/lib/prisma';
@@ -14,6 +15,13 @@ import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
 const currentPeriod = (): string => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Rate limit delays based on sendingSpeed */
+const SPEED_DELAY_MS: Record<string, number> = {
+  FAST: 60,     // ~1000/min
+  MEDIUM: 120,  // ~500/min
+  SLOW: 600,    // ~100/min
 };
 
 function personalizeBody(body: string, customer: ShopifyCustomer): string {
@@ -68,6 +76,8 @@ async function sendWhatsAppText(phone: string, body: string): Promise<{ success:
   }
 }
 
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
 export async function runCampaignWorkerStep(): Promise<{ processed: number; campaignId?: string; error?: string }> {
   const now = new Date();
   const candidate = await prisma.campaignQueueItem.findFirst({
@@ -100,6 +110,10 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
   const body = messageTemplate.body ?? messageTemplate.messageContent?.body ?? '';
   const subject = messageTemplate.subject ?? messageTemplate.messageContent?.subject ?? '';
 
+  // Rate-limiting delay based on sendingSpeed
+  const sendingSpeed = (campaign as any).sendingSpeed ?? 'MEDIUM';
+  const delayBetweenMessages = SPEED_DELAY_MS[sendingSpeed] ?? SPEED_DELAY_MS.MEDIUM;
+
   try {
     if (!store?.shopifyDomain || !store?.accessToken) {
       throw new Error('Store or access token missing');
@@ -110,23 +124,48 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
       accessToken: store.accessToken,
     });
 
-    const conditionGroups: SegmentGroup[] =
-      (campaign.segment?.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
-    const hasSegment = campaign.segmentId && conditionGroups.length > 0;
+    // Multi-segment support: use segmentIds array if available, fallback to single segmentId
+    const segmentIds: string[] = (campaign as any).segmentIds ?? [];
+    const allSegmentIds = segmentIds.length > 0
+      ? segmentIds
+      : campaign.segmentId
+        ? [campaign.segmentId]
+        : [];
 
+    // Load all selected segments
+    const segments = allSegmentIds.length > 0
+      ? await prisma.segment.findMany({ where: { id: { in: allSegmentIds } } })
+      : [];
+
+    const hasSegmentFilters = segments.length > 0 && segments.some(
+      s => {
+        const groups = (s.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
+        return groups.length > 0;
+      }
+    );
+
+    // Fetch all customers
     const rawCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-    const matchingCustomers = !hasSegment || campaign.segment?.name?.toLowerCase() === 'all'
+
+    // Filter: customer must match ALL selected segments (AND logic)
+    const matchingCustomers = !hasSegmentFilters
       ? rawCustomers
       : rawCustomers.filter((c) => {
-          try {
-            return matchesGroups(c, conditionGroups);
-          } catch {
-            return false;
-          }
+          return segments.every((segment) => {
+            if (segment.name?.toLowerCase() === 'all') return true;
+            const conditionGroups = (segment.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
+            if (conditionGroups.length === 0) return true;
+            try {
+              return matchesGroups(c, conditionGroups);
+            } catch {
+              return false;
+            }
+          });
         });
 
     let sent = 0;
     let delivered = 0;
+    let failed = 0;
 
     for (const customer of matchingCustomers) {
       const customerId = String(customer.id);
@@ -153,10 +192,13 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
         });
       };
 
-      if (campaign.type === 'EMAIL') {
+      const campaignType = campaign.type;
+
+      if (campaignType === 'EMAIL') {
         const email = customer.email ?? null;
         if (!email) {
           await logFailure('No email');
+          failed++;
           continue;
         }
         try {
@@ -173,11 +215,16 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
           const err = e instanceof Error ? e.message : String(e);
           await logFailure(err);
           sent++;
+          failed++;
         }
-      } else if (campaign.type === 'WHATSAPP') {
-        const phone = sanitizePhone(customer.phone ?? (customer as { default_address?: { phone?: string } })?.default_address?.phone ?? null);
+      } else if (campaignType === 'WHATSAPP' || campaignType === 'ONE_TIME' || campaignType === 'RECURRING' || campaignType === 'DRIP' || campaignType === 'TRIGGER_BASED') {
+        // All new campaign types default to WhatsApp delivery
+        const phone = sanitizePhone(
+          customer.phone ?? (customer as { default_address?: { phone?: string } })?.default_address?.phone ?? null,
+        );
         if (!phone) {
           await logFailure('No phone');
+          failed++;
           continue;
         }
         const result = await sendWhatsAppText(phone, personalizedBody);
@@ -188,28 +235,42 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
         } else {
           await logFailure(result.error ?? 'Send failed');
           sent++;
+          failed++;
         }
-      } else if (campaign.type === 'SMS' || campaign.type === 'PUSH') {
-        // No SMS/PUSH provider in app – log as sent for tracking
-        await logSuccess(`Channel ${campaign.type} not configured`);
+      } else if (campaignType === 'SMS' || campaignType === 'PUSH') {
+        await logSuccess(`Channel ${campaignType} not configured`);
         sent++;
         delivered++;
       }
+
+      // Rate-limiting delay between messages
+      if (delayBetweenMessages > 0) {
+        await sleep(delayBetweenMessages);
+      }
     }
 
+    // Update campaign metrics
     await prisma.campaign.update({
       where: { id: campaign.id },
       data: {
         status: 'COMPLETED',
         completedAt: now,
-        executedAt: now,
-        totalSent: (campaign.totalSent ?? 0) + sent,
-        totalDelivered: (campaign.totalDelivered ?? 0) + delivered,
+        executedAt: campaign.executedAt ?? now,
+        totalSent: { increment: sent },
+        totalDelivered: { increment: delivered },
+        totalFailed: { increment: failed },
       },
     });
 
-    await prisma.campaignQueueItem.delete({ where: { id: candidate.id } });
+    // Mark queue item as COMPLETED instead of deleting (audit trail)
+    await prisma.campaignQueueItem.update({
+      where: { id: candidate.id },
+      data: {
+        status: 'COMPLETED',
+      },
+    });
 
+    // Usage tracking (best-effort)
     const period = currentPeriod();
     const usageUserId = 'store';
     await prisma.usageMetric.upsert({

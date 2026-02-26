@@ -1,51 +1,18 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import type { Campaign } from '@/lib/types/campaign';
-import type { CustomerSegment } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
+import { transformCampaign } from '@/lib/utils/db-transformers';
 import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
 import { getShopifyClient } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
-import { calculateBestSendTime } from '@/lib/utils/bestTime';
+import { auth } from '@/lib/auth';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 export const runtime = 'nodejs';
 
-interface CampaignMessage {
-  messageId: string;
-  campaignId: string;
-  customerId: string;
-  customerPhone: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  sentAt: string | null;
-  deliveredAt: string | null;
-  readAt: string | null;
-  failedAt: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-}
-
-interface FailedMessage {
-  customerId: string;
-  error: string;
-}
-
-interface ScheduledMessage {
-  customerId: string;
-  scheduledFor: number;
-}
-
-const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const loadCampaigns = (): Campaign[] => readJsonFile<Campaign>('campaigns.json');
-const loadSegments = (): CustomerSegment[] => readJsonFile<CustomerSegment>('segments.json');
-const loadCampaignMessages = (): CampaignMessage[] => readJsonFile<CampaignMessage>('campaign-messages.json');
-
-const saveCampaigns = (campaigns: Campaign[]): void => writeJsonFile('campaigns.json', campaigns);
-const saveCampaignMessages = (messages: CampaignMessage[]): void => writeJsonFile('campaign-messages.json', messages);
-
-const generateId = (prefix: string, uniqueSeed: string | number): string =>
-  `${prefix}_${Date.now()}_${uniqueSeed}`;
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const sanitizePhoneNumber = (value: string | null | undefined): string | null => {
   if (!value) return null;
@@ -67,24 +34,32 @@ const personalizeMessageBody = (body: string, customer: ShopifyCustomer): string
     .replace(/\{\{email\}\}/g, customer.email ?? '');
 };
 
-const matchesSegments = (customer: ShopifyCustomer, segments: CustomerSegment[]): boolean =>
-  segments.every(segment => matchesGroups(customer, segment.conditionGroups ?? []));
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id: campaignId } = await params;
+    const storeId = await getCurrentStoreId(request);
 
-    const campaigns = loadCampaigns();
-    const campaignIndex = campaigns.findIndex(campaign => campaign.id === campaignId);
+    // Load campaign from Prisma
+    const dbCampaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, storeId: storeId || undefined },
+      include: { segment: true, store: true, creator: { select: { id: true, name: true, email: true } } },
+    });
 
-    if (campaignIndex === -1) {
+    if (!dbCampaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const campaign = campaigns[campaignIndex];
+    const campaign = transformCampaign(dbCampaign);
+
+    // Validate WhatsApp config
     const whatsappValidation = validateWhatsAppConfig();
     if (!whatsappValidation.valid) {
       return NextResponse.json(
@@ -94,57 +69,49 @@ export async function POST(
     }
 
     const whatsappConfig = whatsappValidation.config;
-    const segments = loadSegments();
-    const selectedSegments = segments.filter(segment => campaign.segmentIds.includes(segment.id));
 
+    // Load segments from Prisma
+    const selectedSegments = campaign.segmentIds.length > 0
+      ? await prisma.segment.findMany({ where: { id: { in: campaign.segmentIds } } })
+      : [];
+
+    // Fetch customers from Shopify
     const client = getShopifyClient(request);
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-    const matchingCustomers = selectedSegments.length
-      ? shopifyCustomers.filter(customer => matchesSegments(customer, selectedSegments))
+
+    // Filter by segments
+    const matchingCustomers = selectedSegments.length > 0
+      ? shopifyCustomers.filter((customer) =>
+          selectedSegments.every((segment) => {
+            const conditionGroups = (segment.filters as any)?.conditionGroups || [];
+            return matchesGroups(customer, conditionGroups);
+          }),
+        )
       : shopifyCustomers;
 
-    campaigns[campaignIndex] = {
-      ...campaign,
-      status: 'RUNNING',
-      startedAt: campaign.startedAt ?? Date.now(),
-      updatedAt: Date.now(),
-    };
-    saveCampaigns(campaigns);
+    // Update campaign status to RUNNING
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        status: 'RUNNING',
+        executedAt: dbCampaign.executedAt ?? new Date(),
+      },
+    });
 
-    const campaignMessages = loadCampaignMessages();
-    const sentMessages: string[] = [];
-    const failedMessages: FailedMessage[] = [];
-    const scheduledMessages: ScheduledMessage[] = [];
+    let sentCount = 0;
+    let failedCount = 0;
 
     for (const customer of matchingCustomers) {
-      const phone = sanitizePhoneNumber(customer.phone ?? customer.default_address?.phone ?? null);
-      if (!phone) {
-        continue;
-      }
-
-      if (campaign.useSmartTiming) {
-        try {
-          const bestTime = await calculateBestSendTime(String(customer.id), client);
-          const now = new Date();
-          const scheduledDate = new Date();
-          scheduledDate.setHours(bestTime.hour, 0, 0, 0);
-
-          if (scheduledDate <= now) {
-            scheduledDate.setDate(scheduledDate.getDate() + 1);
-          }
-
-          scheduledMessages.push({
-            customerId: String(customer.id),
-            scheduledFor: scheduledDate.getTime(),
-          });
-          continue;
-        } catch (error) {
-          console.error(`[API] Error calculating best time for customer ${customer.id}:`, error);
-        }
-      }
+      const phone = sanitizePhoneNumber(
+        customer.phone ?? customer.default_address?.phone ?? null,
+      );
+      if (!phone) continue;
 
       try {
-        const messageBody = personalizeMessageBody(campaign.messageContent.body ?? '', customer);
+        const messageBody = personalizeMessageBody(
+          campaign.messageContent.body ?? '',
+          customer,
+        );
         const payload = {
           messaging_product: 'whatsapp',
           to: phone,
@@ -162,74 +129,69 @@ export async function POST(
           body: JSON.stringify(payload),
         });
 
-        const json = (await response.json()) as { messages?: Array<{ id: string }>; error?: { code?: unknown; message?: string } };
+        const json = (await response.json()) as {
+          messages?: Array<{ id: string }>;
+          error?: { code?: unknown; message?: string };
+        };
 
         if (response.ok && json.messages?.[0]?.id) {
-          const messageId = json.messages[0].id;
-          sentMessages.push(messageId);
-
-          campaignMessages.push({
-            messageId,
-            campaignId,
-            customerId: String(customer.id),
-            customerPhone: phone,
-            status: 'sent',
-            sentAt: new Date().toISOString(),
-            deliveredAt: null,
-            readAt: null,
-            failedAt: null,
-            errorCode: null,
-            errorMessage: null,
+          sentCount++;
+          // Log success to Prisma
+          await prisma.campaignLog.create({
+            data: {
+              campaignId,
+              customerId: String(customer.id),
+              status: 'SUCCESS',
+              message: json.messages[0].id,
+              metadata: { phone, messageBody: messageBody.slice(0, 200) },
+            },
           });
         } else {
-          const errorCode = json.error?.code?.toString() ?? 'UNKNOWN';
+          failedCount++;
           const errorMessage = json.error?.message ?? 'Failed to send message';
-          const failureId = generateId('failed', customer.id);
-
-          campaignMessages.push({
-            messageId: failureId,
-            campaignId,
-            customerId: String(customer.id),
-            customerPhone: phone,
-            status: 'failed',
-            sentAt: null,
-            deliveredAt: null,
-            readAt: null,
-            failedAt: new Date().toISOString(),
-            errorCode,
-            errorMessage,
+          await prisma.campaignLog.create({
+            data: {
+              campaignId,
+              customerId: String(customer.id),
+              status: 'FAILED',
+              error: errorMessage,
+              metadata: { phone, errorCode: String(json.error?.code ?? '') },
+            },
           });
-          failedMessages.push({ customerId: String(customer.id), error: errorMessage });
         }
       } catch (error) {
-        const errorMessage = getErrorMessage(error);
-        failedMessages.push({ customerId: String(customer.id), error: errorMessage });
+        failedCount++;
+        await prisma.campaignLog.create({
+          data: {
+            campaignId,
+            customerId: String(customer.id),
+            status: 'FAILED',
+            error: getErrorMessage(error),
+            metadata: { phone },
+          },
+        });
       }
     }
 
-    saveCampaignMessages(campaignMessages);
-
-    campaigns[campaignIndex] = {
-      ...campaigns[campaignIndex],
-      metrics: {
-        ...campaigns[campaignIndex].metrics,
-        sent: campaigns[campaignIndex].metrics.sent + sentMessages.length,
-        failed: campaigns[campaignIndex].metrics.failed + failedMessages.length,
+    // Update campaign metrics in Prisma
+    const updatedCampaign = await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        totalSent: { increment: sentCount },
+        totalFailed: { increment: failedCount },
+        status: 'COMPLETED',
+        completedAt: new Date(),
       },
-      updatedAt: Date.now(),
-    };
-    saveCampaigns(campaigns);
+      include: { segment: true, store: true, creator: { select: { id: true, name: true, email: true } } },
+    });
 
     return NextResponse.json({
-      campaign: campaigns[campaignIndex],
+      campaign: transformCampaign(updatedCampaign),
       success: true,
-      message: campaign.useSmartTiming
-        ? `Campaign launched successfully. ${scheduledMessages.length} messages scheduled for optimal send times.`
-        : 'Campaign launched successfully',
+      message: 'Campaign launched successfully',
       stats: {
-        sent: sentMessages.length,
-        failed: failedMessages.length,
-        scheduled: scheduledMessages.length,
+        sent: sentCount,
+        failed: failedCount,
         total: matchingCustomers.length,
       },
     });
@@ -244,4 +206,3 @@ export async function POST(
     );
   }
 }
-

@@ -288,13 +288,17 @@ export async function POST(request: NextRequest) {
       }),
     ) as Prisma.InputJsonValue;
 
+    const campaignType = data.type || 'ONE_TIME';
+    const validTypes = ['ONE_TIME', 'RECURRING', 'DRIP', 'TRIGGER_BASED'];
+    const dbType = validTypes.includes(campaignType) ? campaignType : 'ONE_TIME';
+
     const dbCampaign = await prisma.campaign.create({
       data: {
         id: `camp_${randomUUID()}`,
         storeId,
         name: data.name,
         description: data.description ?? null,
-        type: 'WHATSAPP',
+        type: dbType as any,
         status:
           status === 'RUNNING'
             ? 'RUNNING'
@@ -305,6 +309,7 @@ export async function POST(request: NextRequest) {
           data.segmentIds && data.segmentIds.length > 0
             ? data.segmentIds[0]
             : null,
+        segmentIds: data.segmentIds ?? [],
         messageTemplate,
         scheduleType:
           scheduleType === 'IMMEDIATE'
@@ -317,10 +322,33 @@ export async function POST(request: NextRequest) {
           : null,
         executedAt:
           scheduleType === 'IMMEDIATE' ? new Date() : null,
+        // Audience & Delivery
+        estimatedReach,
+        sendingSpeed: data.sendingSpeed ?? 'MEDIUM',
+        timezone: data.timezone ?? 'Asia/Kolkata',
+        useSmartTiming: data.useSmartTiming ?? false,
+        templateId: (data as any).templateId ?? null,
+        // Labels & Tags
+        tags: data.tags ?? [],
+        labels: data.labels ?? [],
+        // Advanced config
+        whatsappConfig: (data as any).whatsappConfig ?? undefined,
+        abTestConfig: (data as any).abTest ?? undefined,
+        dripSteps: (data as any).dripSteps ?? undefined,
+        triggerEvent: (data as any).triggerEvent ?? null,
+        triggerDelay: (data as any).triggerDelay ?? null,
+        triggerConditions: (data as any).triggerConditions ?? undefined,
+        goalTracking: (data as any).goalTracking ?? undefined,
+        recurringConfig: (data as any).recurringConfig ?? undefined,
+        // Metrics
         totalSent: 0,
         totalDelivered: 0,
         totalOpened: 0,
         totalClicked: 0,
+        totalFailed: 0,
+        totalConverted: 0,
+        totalUnsubscribed: 0,
+        totalRevenue: 0,
         createdBy: userId,
       },
       include: {
@@ -337,14 +365,6 @@ export async function POST(request: NextRequest) {
     });
 
     const campaign = transformCampaign(dbCampaign);
-
-    campaign.segmentIds = data.segmentIds ?? [];
-    campaign.estimatedReach = estimatedReach;
-    campaign.timezone = data.timezone ?? 'Asia/Kolkata';
-    campaign.sendingSpeed = data.sendingSpeed ?? 'MEDIUM';
-    campaign.tags = data.tags ?? [];
-    campaign.labels = data.labels ?? [];
-    campaign.useSmartTiming = data.useSmartTiming ?? false;
 
     return NextResponse.json({ campaign, success: true });
   } catch (error) {

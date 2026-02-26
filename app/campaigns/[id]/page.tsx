@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/lib/hooks/useToast';
 import type { Campaign } from '@/lib/types/campaign';
 import {
-  ArrowLeft, 
-  Send, 
-  Eye, 
-  MousePointer, 
+  ArrowLeft,
+  Send,
+  Eye,
+  MousePointer,
   ShoppingCart,
   TrendingUp,
   Users,
@@ -23,6 +23,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  FlaskConical,
+  Target,
+  Zap,
 } from 'lucide-react';
 
 interface MessageStats {
@@ -52,6 +55,7 @@ export default function CampaignDetailPage() {
   const [messageStats, setMessageStats] = useState<MessageStats | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [showFailedModal, setShowFailedModal] = useState(false);
+  const [segmentNames, setSegmentNames] = useState<Record<string, string>>({});
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -121,11 +125,25 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId]);
 
+  // Load segment names for display
+  const loadSegmentNames = useCallback(async () => {
+    try {
+      const response = await fetch('/api/segments', { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        const map: Record<string, string> = {};
+        (data.segments ?? []).forEach((s: { id: string; name: string }) => { map[s.id] = s.name; });
+        if (isMountedRef.current) setSegmentNames(map);
+      }
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     if (!campaignId) return;
     void loadCampaign();
     void loadMessageStats();
-  }, [campaignId, loadCampaign, loadMessageStats]);
+    void loadSegmentNames();
+  }, [campaignId, loadCampaign, loadMessageStats, loadSegmentNames]);
 
   // Poll message stats every 10 seconds when campaign is running
   const campaignStatus = campaign?.status;
@@ -579,7 +597,7 @@ export default function CampaignDetailPage() {
             <h3 className="font-semibold text-gray-900">ROI</h3>
           </div>
           <div className="text-4xl font-bold text-blue-600 mb-2">
-            {campaign.metrics.revenue > 0 ? '458%' : '0%'}
+            {calculateROI()}%
           </div>
           <p className="text-sm text-gray-600">
             Estimated cost: ₹{((campaign.metrics.sent * 0.5) / 1000).toFixed(1)}k
@@ -637,6 +655,93 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      {/* Goal Tracking Progress */}
+      {campaign.goalTracking && (campaign.goalTracking as any).enabled && (
+        <div className="bg-white rounded-xl p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-4">
+            <Target className="w-6 h-6 text-green-600" />
+            <h3 className="text-lg font-bold text-gray-900">Goal Tracking</h3>
+          </div>
+          {(() => {
+            const goal = campaign.goalTracking as { enabled: boolean; goalType: string; targetValue: number };
+            const currentValue = goal.goalType === 'REVENUE'
+              ? campaign.metrics.revenue
+              : goal.goalType === 'CONVERSION'
+              ? campaign.metrics.converted
+              : campaign.metrics.opened;
+            const progress = goal.targetValue > 0 ? Math.min((currentValue / goal.targetValue) * 100, 100) : 0;
+            const label = goal.goalType === 'REVENUE' ? `₹${currentValue.toLocaleString()} / ₹${goal.targetValue.toLocaleString()}` : `${currentValue.toLocaleString()} / ${goal.targetValue.toLocaleString()}`;
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">{goal.goalType} Goal</span>
+                  <span className="font-semibold text-gray-900">{label}</span>
+                </div>
+                <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${progress >= 100 ? 'bg-green-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>{progress.toFixed(1)}% complete</span>
+                  {progress >= 100 && <span className="text-green-600 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Goal Achieved!</span>}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* A/B Test Results */}
+      {campaign.abTest && (campaign.abTest as any).enabled && (
+        <div className="bg-white rounded-xl p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-4">
+            <FlaskConical className="w-6 h-6 text-purple-600" />
+            <h3 className="text-lg font-bold text-gray-900">A/B Test Results</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {((campaign.abTest as any).variants ?? []).map((variant: { id: string; name: string; percentage: number; messageContent: { body: string } }, idx: number) => (
+              <div key={variant.id} className={`rounded-xl border-2 p-4 ${idx === 0 ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-gray-900">{variant.name}</span>
+                  <span className="text-xs bg-gray-200 px-2 py-0.5 rounded-full">{variant.percentage}%</span>
+                </div>
+                <p className="text-xs text-gray-600 line-clamp-2 mb-3">{variant.messageContent.body || 'No content'}</p>
+                <div className="text-xs text-gray-500">
+                  Winner Criteria: {(campaign.abTest as any).winnerCriteria?.replace(/_/g, ' ')}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-gray-500">
+            Test Duration: {(campaign.abTest as any).testDuration ?? 24} hours
+          </p>
+        </div>
+      )}
+
+      {/* Trigger Info */}
+      {campaign.type === 'TRIGGER_BASED' && campaign.triggerEvent && (
+        <div className="bg-white rounded-xl p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-4">
+            <Zap className="w-6 h-6 text-amber-600" />
+            <h3 className="text-lg font-bold text-gray-900">Trigger Configuration</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Trigger Event</span>
+              <div className="font-semibold text-gray-900 mt-1">{campaign.triggerEvent.replace(/_/g, ' ')}</div>
+            </div>
+            {campaign.triggerDelay != null && (
+              <div>
+                <span className="text-gray-500">Delay</span>
+                <div className="font-semibold text-gray-900 mt-1">{campaign.triggerDelay} minutes</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Message Preview */}
       <div className="bg-white rounded-xl p-6 border border-gray-200">
         <h3 className="text-lg font-bold text-gray-900 mb-4">Message Content</h3>
@@ -686,9 +791,11 @@ export default function CampaignDetailPage() {
           {campaign.segmentIds.length > 0 ? (
             campaign.segmentIds.map((segmentId, idx) => (
               <div key={idx} className="bg-gray-50 rounded-lg p-4">
-                <div className="font-semibold text-gray-900 mb-2">Segment {idx + 1}</div>
+                <div className="font-semibold text-gray-900 mb-2">
+                  {segmentNames[segmentId] || `Segment ${idx + 1}`}
+                </div>
                 <div className="text-sm text-gray-600">
-                  <div>ID: {segmentId}</div>
+                  <div className="text-xs text-gray-400 truncate">ID: {segmentId}</div>
                   <div className="mt-1">• Part of campaign audience</div>
                 </div>
               </div>
@@ -766,8 +873,8 @@ export default function CampaignDetailPage() {
               </p>
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <p className="text-sm text-red-800">
-                  Failed messages are tracked in the campaign-messages.json file. 
-                  Check the errorCode and errorMessage fields for details.
+                  Failed messages are tracked in the campaign logs database.
+                  Check the error field in CampaignLog entries for details.
                 </p>
               </div>
               <div className="flex justify-end mt-6">

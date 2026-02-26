@@ -7,17 +7,29 @@ import CampaignCard from '@/components/campaigns/CampaignCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/useToast';
-import type { Campaign, CampaignStatus } from '@/lib/types/campaign';
-import { 
-  Plus, 
-  Search, 
+import type { Campaign, CampaignStatus, CampaignType } from '@/lib/types/campaign';
+import {
+  Plus,
+  Search,
   Calendar,
   TrendingUp,
   Send,
   DollarSign,
   Zap,
   PlayCircle,
+  MousePointerClick,
+  Target,
+  Filter,
+  X,
 } from 'lucide-react';
+
+const CAMPAIGN_TYPE_OPTIONS: Array<{ value: CampaignType | 'ALL'; label: string; emoji: string }> = [
+  { value: 'ALL', label: 'All Types', emoji: '📊' },
+  { value: 'ONE_TIME', label: 'One-Time', emoji: '📨' },
+  { value: 'RECURRING', label: 'Recurring', emoji: '🔄' },
+  { value: 'DRIP', label: 'Drip Series', emoji: '💧' },
+  { value: 'TRIGGER_BASED', label: 'Trigger-Based', emoji: '⚡' },
+];
 
 export default function CampaignsPage() {
   const router = useRouter();
@@ -26,6 +38,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<CampaignStatus | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<CampaignType | 'ALL'>('ALL');
   const [channelFilter, setChannelFilter] = useState('ALL');
   const [timeRange, setTimeRange] = useState('all');
   const [labelFilter, setLabelFilter] = useState('ALL');
@@ -98,9 +111,10 @@ export default function CampaignsPage() {
   const filteredCampaigns = campaigns.filter(campaign => {
     const matchesSearch = campaign.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || campaign.status === statusFilter;
+    const matchesType = typeFilter === 'ALL' || campaign.type === typeFilter;
     const matchesChannel = channelFilter === 'ALL' || campaign.channel === channelFilter;
     const matchesLabel = labelFilter === 'ALL' || (campaign.labels || []).includes(labelFilter);
-    return matchesSearch && matchesStatus && matchesChannel && matchesLabel;
+    return matchesSearch && matchesStatus && matchesType && matchesChannel && matchesLabel;
   });
 
   const handleStatusFilterChange = useCallback((value: string) => {
@@ -114,15 +128,51 @@ export default function CampaignsPage() {
     }
   }, []);
 
+  const handleTypeFilterChange = useCallback((value: string) => {
+    if (value === 'ALL') {
+      setTypeFilter('ALL');
+      return;
+    }
+    const types: CampaignType[] = ['ONE_TIME', 'RECURRING', 'DRIP', 'TRIGGER_BASED'];
+    if (types.includes(value as CampaignType)) {
+      setTypeFilter(value as CampaignType);
+    }
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setStatusFilter('ALL');
+    setTypeFilter('ALL');
+    setChannelFilter('ALL');
+    setLabelFilter('ALL');
+    setTimeRange('all');
+  }, []);
+
+  const hasActiveFilters = searchQuery || statusFilter !== 'ALL' || typeFilter !== 'ALL' || channelFilter !== 'ALL' || labelFilter !== 'ALL' || timeRange !== 'all';
+
   // Calculate summary stats
   const stats = {
     totalCampaigns: campaigns.length,
     activeCampaigns: campaigns.filter(c => c.status === 'RUNNING').length,
     totalSent: campaigns.reduce((sum, c) => sum + c.metrics.sent, 0),
     totalRevenue: campaigns.reduce((sum, c) => sum + c.metrics.revenue, 0),
-    avgOpenRate: campaigns.length > 0 
-      ? campaigns.reduce((sum, c) => sum + (c.metrics.opened / (c.metrics.sent || 1) * 100), 0) / campaigns.length 
+    avgOpenRate: campaigns.length > 0
+      ? campaigns.reduce((sum, c) => sum + (c.metrics.opened / (c.metrics.sent || 1) * 100), 0) / campaigns.length
       : 0,
+    avgClickRate: campaigns.length > 0
+      ? campaigns.reduce((sum, c) => sum + (c.metrics.clicked / (c.metrics.opened || 1) * 100), 0) / campaigns.length
+      : 0,
+    avgConversionRate: campaigns.length > 0
+      ? campaigns.reduce((sum, c) => sum + (c.metrics.converted / (c.metrics.sent || 1) * 100), 0) / campaigns.length
+      : 0,
+  };
+
+  // Count campaigns by type for quick type overview
+  const typeCounts = {
+    ONE_TIME: campaigns.filter(c => c.type === 'ONE_TIME').length,
+    RECURRING: campaigns.filter(c => c.type === 'RECURRING').length,
+    DRIP: campaigns.filter(c => c.type === 'DRIP').length,
+    TRIGGER_BASED: campaigns.filter(c => c.type === 'TRIGGER_BASED').length,
   };
 
   return (
@@ -156,51 +206,114 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+      {/* Stats Cards — Row 1: Main Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <Zap className="w-8 h-8 opacity-80" />
+            <Zap className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">{stats.totalCampaigns}</div>
           <div className="text-sm opacity-90">Total Campaigns</div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <PlayCircle className="w-8 h-8 opacity-80" />
+            <PlayCircle className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">{stats.activeCampaigns}</div>
           <div className="text-sm opacity-90">Active Campaigns</div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <Send className="w-8 h-8 opacity-80" />
+            <Send className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">{stats.totalSent.toLocaleString()}</div>
           <div className="text-sm opacity-90">Messages Sent</div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-8 h-8 opacity-80" />
+            <DollarSign className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">₹{(stats.totalRevenue / 1000).toFixed(0)}k</div>
           <div className="text-sm opacity-90">Revenue Generated</div>
         </div>
 
-        <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <TrendingUp className="w-8 h-8 opacity-80" />
+            <TrendingUp className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">{stats.avgOpenRate.toFixed(1)}%</div>
           <div className="text-sm opacity-90">Avg Open Rate</div>
         </div>
       </div>
 
+      {/* Stats Cards — Row 2: Engagement + Type Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        {/* Click Rate */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-2 mb-1">
+            <MousePointerClick className="w-5 h-5 text-indigo-500" />
+            <span className="text-xs font-medium text-gray-500">Avg Click Rate</span>
+          </div>
+          <div className="text-2xl font-bold text-indigo-600">{stats.avgClickRate.toFixed(1)}%</div>
+        </div>
+
+        {/* Conversion Rate */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-2 mb-1">
+            <Target className="w-5 h-5 text-emerald-500" />
+            <span className="text-xs font-medium text-gray-500">Avg Conversion</span>
+          </div>
+          <div className="text-2xl font-bold text-emerald-600">{stats.avgConversionRate.toFixed(1)}%</div>
+        </div>
+
+        {/* Type breakdown chips */}
+        <div className="lg:col-span-4 bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <span className="text-xs font-medium text-gray-500">Campaign Types</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {CAMPAIGN_TYPE_OPTIONS.filter(t => t.value !== 'ALL').map(opt => {
+              const count = typeCounts[opt.value as keyof typeof typeCounts] || 0;
+              const isActive = typeFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setTypeFilter(isActive ? 'ALL' : opt.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  {opt.emoji} {opt.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-700">Filters</span>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              <X className="w-3 h-3" />
+              Clear All
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           {/* Search */}
           <div className="md:col-span-2">
@@ -232,15 +345,18 @@ export default function CampaignsPage() {
             </select>
           </div>
 
-          {/* Channel Filter - Only WhatsApp for now */}
+          {/* Campaign Type Filter */}
           <div>
             <select
-              value={channelFilter}
-              onChange={(e) => setChannelFilter(e.target.value)}
+              value={typeFilter}
+              onChange={event => handleTypeFilterChange(event.target.value)}
               className="w-full h-11 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="ALL">All Channels</option>
-              <option value="WHATSAPP">📱 WhatsApp</option>
+              {CAMPAIGN_TYPE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.emoji} {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -282,6 +398,18 @@ export default function CampaignsPage() {
       {/* Campaigns List */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="p-6">
+          {/* Results count header */}
+          {!loading && campaigns.length > 0 && (
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-gray-500">
+                Showing <span className="font-semibold text-gray-900">{filteredCampaigns.length}</span>
+                {filteredCampaigns.length !== campaigns.length && (
+                  <> of <span className="font-semibold text-gray-900">{campaigns.length}</span></>
+                )} campaign{campaigns.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          )}
+
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map(i => (
@@ -292,16 +420,25 @@ export default function CampaignsPage() {
             <div className="text-center py-16">
               <Zap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {searchQuery || statusFilter !== 'ALL' || channelFilter !== 'ALL'
+                {hasActiveFilters
                   ? 'No campaigns match your filters'
                   : 'No campaigns yet'}
               </h3>
               <p className="text-gray-600 mb-6">
-                {searchQuery || statusFilter !== 'ALL' || channelFilter !== 'ALL'
+                {hasActiveFilters
                   ? 'Try adjusting your search or filters'
                   : 'Create your first WhatsApp campaign to start engaging with customers'}
               </p>
-              {!searchQuery && statusFilter === 'ALL' && channelFilter === 'ALL' && (
+              {hasActiveFilters ? (
+                <Button
+                  onClick={clearAllFilters}
+                  variant="outline"
+                  className="mr-3"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear Filters
+                </Button>
+              ) : (
                 <Button
                   onClick={() => router.push('/campaigns/create')}
                   className="bg-blue-600 hover:bg-blue-700"
@@ -327,4 +464,3 @@ export default function CampaignsPage() {
     </div>
   );
 }
-

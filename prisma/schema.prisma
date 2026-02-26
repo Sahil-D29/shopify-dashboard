@@ -40,6 +40,11 @@ enum MemberStatus {
 }
 
 enum CampaignType {
+  ONE_TIME
+  RECURRING
+  DRIP
+  TRIGGER_BASED
+  // Legacy values kept for backward compatibility
   EMAIL
   SMS
   WHATSAPP
@@ -51,6 +56,7 @@ enum CampaignStatus {
   SCHEDULED
   QUEUED
   RUNNING
+  PAUSED
   COMPLETED
   FAILED
   CANCELLED
@@ -325,20 +331,46 @@ model Campaign {
   storeId         String
   name            String
   description     String?
-  type            CampaignType
+  type            CampaignType   @default(ONE_TIME)
   status          CampaignStatus @default(DRAFT)
   segmentId       String?
+  segmentIds      String[]       @default([])
   messageTemplate Json // Message content
   scheduleType    ScheduleType
   scheduledAt     DateTime?
   executedAt      DateTime?
   completedAt     DateTime?
 
+  // Audience & Delivery
+  estimatedReach Int     @default(0)
+  sendingSpeed   String? @default("MEDIUM")
+  timezone       String? @default("Asia/Kolkata")
+  useSmartTiming Boolean @default(false)
+  templateId     String?
+
+  // Labels & Tags
+  tags   String[] @default([])
+  labels String[] @default([])
+
+  // Advanced config (JSON)
+  whatsappConfig    Json? // delivery rules, exit paths, variable mappings
+  abTestConfig      Json? // { enabled, variants[], winnerCriteria, testDuration }
+  dripSteps         Json? // [{ id, name, delay, messageContent, conditions }]
+  triggerEvent      String? // order_placed, cart_abandoned, etc.
+  triggerDelay      Int? // minutes after trigger
+  triggerConditions Json? // filter conditions
+  goalTracking      Json? // { enabled, goalType, targetValue }
+  recurringConfig   Json? // { frequency, interval, daysOfWeek, time, endDate }
+
   // Metrics
-  totalSent      Int @default(0)
-  totalDelivered Int @default(0)
-  totalOpened    Int @default(0)
-  totalClicked   Int @default(0)
+  totalSent         Int   @default(0)
+  totalDelivered    Int   @default(0)
+  totalOpened       Int   @default(0)
+  totalClicked      Int   @default(0)
+  totalFailed       Int   @default(0)
+  totalConverted    Int   @default(0)
+  totalUnsubscribed Int   @default(0)
+  totalRevenue      Float @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -356,6 +388,7 @@ model Campaign {
   @@index([segmentId])
   @@index([scheduledAt])
   @@index([createdBy])
+  @@index([type])
   @@map("campaigns")
 }
 

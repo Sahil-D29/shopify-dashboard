@@ -1,71 +1,72 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import type { Campaign } from '@/lib/types/campaign';
-import { readJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
+import { auth } from '@/lib/auth';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 export const runtime = 'nodejs';
 
-interface CampaignMessage {
-  messageId: string;
-  campaignId: string;
-  customerId: string;
-  customerPhone: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  sentAt: string | null;
-  deliveredAt: string | null;
-  readAt: string | null;
-  failedAt: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-}
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
-const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const filterByCampaign = (messages: CampaignMessage[], campaignId: string): CampaignMessage[] =>
-  messages.filter(message => message.campaignId === campaignId);
-
-const countWhere = <T>(items: T[], predicate: (item: T) => boolean): number =>
-  items.reduce((total, item) => (predicate(item) ? total + 1 : total), 0);
-
-const toTwoDecimal = (value: number): number => Math.round(value * 100) / 100;
+const toTwoDecimal = (value: number): number =>
+  Math.round(value * 100) / 100;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: campaignId } = await params;
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const campaigns = readJsonFile<Campaign>('campaigns.json');
-    const campaign = campaigns.find(current => current.id === campaignId);
+    const { id: campaignId } = await params;
+    const storeId = await getCurrentStoreId(request);
+
+    // Load campaign from Prisma
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, storeId: storeId || undefined },
+    });
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const messages = readJsonFile<CampaignMessage>('campaign-messages.json');
-    const campaignMessages = filterByCampaign(messages, campaignId);
+    // Aggregate message stats from CampaignLog
+    const logStats = await prisma.campaignLog.groupBy({
+      by: ['status'],
+      where: { campaignId },
+      _count: true,
+    });
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of logStats) {
+      statusCounts[row.status] = row._count;
+    }
 
     const toSend = campaign.estimatedReach ?? 0;
-    const sent = countWhere(campaignMessages, message =>
-      message.status === 'sent' || message.status === 'delivered' || message.status === 'read',
-    );
-    const delivered = countWhere(campaignMessages, message =>
-      message.status === 'delivered' || message.status === 'read',
-    );
-    const read = countWhere(campaignMessages, message => message.status === 'read');
-    const failed = countWhere(campaignMessages, message => message.status === 'failed');
+    const sent = (statusCounts['SUCCESS'] ?? 0) + (statusCounts['DELIVERED'] ?? 0) + (statusCounts['READ'] ?? 0);
+    const delivered = (statusCounts['DELIVERED'] ?? 0) + (statusCounts['READ'] ?? 0);
+    const read = statusCounts['READ'] ?? 0;
+    const failed = statusCounts['FAILED'] ?? 0;
 
-    const sentRate = toSend > 0 ? (sent / toSend) * 100 : 0;
-    const deliveryRate = sent > 0 ? (delivered / sent) * 100 : 0;
-    const readRate = delivered > 0 ? (read / delivered) * 100 : 0;
+    // Also factor in campaign-level metrics for backward compat
+    const totalSent = Math.max(sent, campaign.totalSent ?? 0);
+    const totalDelivered = Math.max(delivered, campaign.totalDelivered ?? 0);
+    const totalFailed = Math.max(failed, campaign.totalFailed ?? 0);
+
+    const sentRate = toSend > 0 ? (totalSent / toSend) * 100 : 0;
+    const deliveryRate = totalSent > 0 ? (totalDelivered / totalSent) * 100 : 0;
+    const readRate = totalDelivered > 0 ? (read / totalDelivered) * 100 : 0;
 
     return NextResponse.json({
       toSend,
-      sent,
-      delivered,
+      sent: totalSent,
+      delivered: totalDelivered,
       read,
-      failed,
+      failed: totalFailed,
       sentRate: toTwoDecimal(sentRate),
       deliveryRate: toTwoDecimal(deliveryRate),
       readRate: toTwoDecimal(readRate),
@@ -78,4 +79,3 @@ export async function GET(
     );
   }
 }
-

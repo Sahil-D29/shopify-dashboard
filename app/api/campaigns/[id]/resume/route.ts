@@ -1,31 +1,36 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import type { Campaign } from '@/lib/types/campaign';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
+import { auth } from '@/lib/auth';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { transformCampaign } from '@/lib/utils/db-transformers';
 
-// Ensure this route runs on Node.js runtime (not edge)
 export const runtime = 'nodejs';
 
-const resolveParams = async (params: { id: string } | Promise<{ id: string }>): Promise<{ id: string }> =>
-  (params instanceof Promise ? params : Promise.resolve(params));
-
-const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: campaignId } = await params;
-
-    const campaigns = readJsonFile<Campaign>('campaigns.json');
-    const index = campaigns.findIndex(campaign => campaign.id === campaignId);
-
-    if (index === -1) {
-      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const campaign = campaigns[index];
+    const { id: campaignId } = await params;
+    const storeId = await getCurrentStoreId(request);
+
+    // Find the campaign
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, storeId: storeId || undefined },
+    });
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
 
     if (campaign.status !== 'PAUSED') {
       return NextResponse.json(
@@ -37,27 +42,23 @@ export async function POST(
       );
     }
 
-    campaigns[index] = {
-      ...campaign,
-      status: 'RUNNING',
-      updatedAt: Date.now(),
-    };
-
-    writeJsonFile('campaigns.json', campaigns);
+    // Update to RUNNING
+    const updated = await prisma.campaign.update({
+      where: { id: campaignId },
+      data: { status: 'RUNNING' },
+      include: { segment: true, store: true, creator: { select: { id: true, name: true, email: true } } },
+    });
 
     return NextResponse.json({
-      campaign: campaigns[index],
+      campaign: transformCampaign(updated),
       success: true,
       message: 'Campaign resumed successfully',
     });
   } catch (error) {
+    console.error('[API] Error resuming campaign:', error);
     return NextResponse.json(
-      {
-        error: 'Failed to resume campaign',
-        details: getErrorMessage(error),
-      },
+      { error: 'Failed to resume campaign', details: getErrorMessage(error) },
       { status: 500 },
     );
   }
 }
-

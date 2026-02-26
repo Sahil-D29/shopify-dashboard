@@ -1,6 +1,6 @@
 // Transform database models to frontend types and vice versa
 
-import type { Campaign } from '@/lib/types/campaign';
+import type { Campaign, CampaignType } from '@/lib/types/campaign';
 import type { CustomerSegment } from '@/lib/types/segment';
 import type { Prisma } from '@prisma/client';
 
@@ -30,7 +30,12 @@ type DbSegment = Prisma.SegmentGetPayload<{
  */
 export function transformCampaign(dbCampaign: DbCampaign): Campaign {
   const messageTemplate = dbCampaign.messageTemplate as any;
-  
+  const goalTracking = dbCampaign.goalTracking as any;
+  const abTestConfig = dbCampaign.abTestConfig as any;
+  const dripSteps = dbCampaign.dripSteps as any;
+  const recurringConfig = dbCampaign.recurringConfig as any;
+  const triggerConditions = dbCampaign.triggerConditions as any;
+
   return {
     id: dbCampaign.id,
     name: dbCampaign.name,
@@ -38,8 +43,15 @@ export function transformCampaign(dbCampaign: DbCampaign): Campaign {
     type: mapCampaignType(dbCampaign.type),
     channel: 'WHATSAPP',
     status: mapCampaignStatus(dbCampaign.status),
-    segmentIds: dbCampaign.segmentId ? [dbCampaign.segmentId] : [],
-    estimatedReach: 0, // Calculate from segment if needed
+
+    // Audience
+    segmentIds: dbCampaign.segmentIds.length > 0
+      ? dbCampaign.segmentIds
+      : dbCampaign.segmentId ? [dbCampaign.segmentId] : [],
+    estimatedReach: dbCampaign.estimatedReach || 0,
+
+    // Content
+    templateId: dbCampaign.templateId || undefined,
     messageContent: messageTemplate?.messageContent || {
       body: messageTemplate?.body || '',
       subject: messageTemplate?.subject,
@@ -47,26 +59,49 @@ export function transformCampaign(dbCampaign: DbCampaign): Campaign {
       buttons: messageTemplate?.buttons,
       variables: messageTemplate?.variables,
     },
+
+    // Scheduling
     scheduleType: mapScheduleType(dbCampaign.scheduleType),
     scheduledAt: dbCampaign.scheduledAt ? dbCampaign.scheduledAt.getTime() : undefined,
-    timezone: 'Asia/Kolkata', // Default
+    timezone: dbCampaign.timezone || 'Asia/Kolkata',
+    recurringConfig: recurringConfig || undefined,
+
+    // Trigger-based
+    triggerEvent: (dbCampaign.triggerEvent as Campaign['triggerEvent']) || undefined,
+    triggerDelay: dbCampaign.triggerDelay || undefined,
+    triggerConditions: triggerConditions || undefined,
+
+    // A/B Testing
+    abTest: abTestConfig || undefined,
+
+    // Drip Campaign
+    dripSteps: dripSteps || undefined,
+
+    // Metrics
     metrics: {
       sent: dbCampaign.totalSent || 0,
       delivered: dbCampaign.totalDelivered || 0,
       opened: dbCampaign.totalOpened || 0,
       clicked: dbCampaign.totalClicked || 0,
-      converted: 0,
-      failed: 0,
-      unsubscribed: 0,
-      revenue: 0,
+      converted: dbCampaign.totalConverted || 0,
+      failed: dbCampaign.totalFailed || 0,
+      unsubscribed: dbCampaign.totalUnsubscribed || 0,
+      revenue: dbCampaign.totalRevenue || 0,
     },
+
+    // Metadata
     createdBy: dbCampaign.createdBy,
     createdAt: dbCampaign.createdAt.getTime(),
     updatedAt: dbCampaign.updatedAt.getTime(),
     startedAt: dbCampaign.executedAt ? dbCampaign.executedAt.getTime() : undefined,
     completedAt: dbCampaign.completedAt ? dbCampaign.completedAt.getTime() : undefined,
-    tags: [],
-    labels: [],
+    tags: dbCampaign.tags || [],
+    labels: dbCampaign.labels || [],
+
+    // Advanced
+    goalTracking: goalTracking || undefined,
+    sendingSpeed: (dbCampaign.sendingSpeed as Campaign['sendingSpeed']) || 'MEDIUM',
+    useSmartTiming: dbCampaign.useSmartTiming || false,
   };
 }
 
@@ -80,7 +115,14 @@ export function transformCampaignToDb(campaign: Partial<Campaign>, storeId: stri
     description: campaign.description || null,
     type: mapCampaignTypeToDb(campaign.type || 'ONE_TIME'),
     status: mapCampaignStatusToDb(campaign.status || 'DRAFT'),
+
+    // Audience
     segmentId: campaign.segmentIds && campaign.segmentIds.length > 0 ? campaign.segmentIds[0] : null,
+    segmentIds: campaign.segmentIds || [],
+    estimatedReach: campaign.estimatedReach || 0,
+
+    // Content
+    templateId: campaign.templateId || null,
     messageTemplate: {
       messageContent: campaign.messageContent,
       body: campaign.messageContent?.body,
@@ -89,14 +131,47 @@ export function transformCampaignToDb(campaign: Partial<Campaign>, storeId: stri
       buttons: campaign.messageContent?.buttons,
       variables: campaign.messageContent?.variables,
     },
+
+    // Scheduling
     scheduleType: mapScheduleTypeToDb(campaign.scheduleType || 'IMMEDIATE'),
     scheduledAt: campaign.scheduledAt ? new Date(campaign.scheduledAt) : null,
     executedAt: campaign.startedAt ? new Date(campaign.startedAt) : null,
     completedAt: campaign.completedAt ? new Date(campaign.completedAt) : null,
+    timezone: campaign.timezone || 'Asia/Kolkata',
+    recurringConfig: campaign.recurringConfig || undefined,
+
+    // Delivery
+    sendingSpeed: campaign.sendingSpeed || 'MEDIUM',
+    useSmartTiming: campaign.useSmartTiming || false,
+
+    // Labels & Tags
+    tags: campaign.tags || [],
+    labels: campaign.labels || [],
+
+    // Trigger-based
+    triggerEvent: campaign.triggerEvent || null,
+    triggerDelay: campaign.triggerDelay || null,
+    triggerConditions: campaign.triggerConditions || undefined,
+
+    // A/B Testing
+    abTestConfig: campaign.abTest || undefined,
+
+    // Drip
+    dripSteps: campaign.dripSteps || undefined,
+
+    // Goal Tracking
+    goalTracking: campaign.goalTracking || undefined,
+
+    // Metrics
     totalSent: campaign.metrics?.sent || 0,
     totalDelivered: campaign.metrics?.delivered || 0,
     totalOpened: campaign.metrics?.opened || 0,
     totalClicked: campaign.metrics?.clicked || 0,
+    totalFailed: campaign.metrics?.failed || 0,
+    totalConverted: campaign.metrics?.converted || 0,
+    totalUnsubscribed: campaign.metrics?.unsubscribed || 0,
+    totalRevenue: campaign.metrics?.revenue || 0,
+
     createdBy,
   };
 }
@@ -122,8 +197,13 @@ export function transformSegment(dbSegment: DbSegment): CustomerSegment {
 }
 
 // Helper mapping functions
-function mapCampaignType(type: string): Campaign['type'] {
-  const mapping: Record<string, Campaign['type']> = {
+function mapCampaignType(type: string): CampaignType {
+  const mapping: Record<string, CampaignType> = {
+    ONE_TIME: 'ONE_TIME',
+    RECURRING: 'RECURRING',
+    DRIP: 'DRIP',
+    TRIGGER_BASED: 'TRIGGER_BASED',
+    // Legacy values fallback
     EMAIL: 'ONE_TIME',
     SMS: 'ONE_TIME',
     WHATSAPP: 'ONE_TIME',
@@ -132,8 +212,9 @@ function mapCampaignType(type: string): Campaign['type'] {
   return mapping[type] || 'ONE_TIME';
 }
 
-function mapCampaignTypeToDb(type: Campaign['type']): 'EMAIL' | 'SMS' | 'WHATSAPP' | 'PUSH' {
-  return 'WHATSAPP'; // Default to WhatsApp
+function mapCampaignTypeToDb(type: CampaignType): string {
+  const valid = ['ONE_TIME', 'RECURRING', 'DRIP', 'TRIGGER_BASED'];
+  return valid.includes(type) ? type : 'ONE_TIME';
 }
 
 function mapCampaignStatus(status: string): Campaign['status'] {
