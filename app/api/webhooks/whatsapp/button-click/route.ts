@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 
 interface ButtonClickPayload {
@@ -43,6 +44,38 @@ export async function POST(request: NextRequest) {
           const buttonText = interactive.button_reply?.title || interactive.list_reply?.title;
 
           if (!buttonId || !context.id) continue;
+
+          // ─── Campaign tracking: Update CampaignLog on button click ────────
+          try {
+            const campaignLog = await prisma.campaignLog.findFirst({
+              where: { whatsappMessageId: context.id },
+            });
+
+            if (campaignLog) {
+              await prisma.campaignLog.update({
+                where: { id: campaignLog.id },
+                data: {
+                  status: 'CLICKED',
+                  clickedAt: new Date(),
+                  metadata: {
+                    ...(typeof campaignLog.metadata === 'object' && campaignLog.metadata !== null
+                      ? campaignLog.metadata as Record<string, unknown>
+                      : {}),
+                    buttonId,
+                    buttonText,
+                  },
+                },
+              });
+
+              await prisma.campaign.update({
+                where: { id: campaignLog.campaignId },
+                data: { totalClicked: { increment: 1 } },
+              });
+            }
+          } catch (err) {
+            console.error('[Button Click] CampaignLog update error:', err);
+            // Non-fatal: don't break webhook processing
+          }
 
           // Find enrollment by original message ID
           const enrollments = readJsonFile<any>('journey-enrollments.json');

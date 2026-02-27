@@ -41,6 +41,7 @@ import { UnifiedWhatsAppConfig } from '@/components/journeys/nodes/whatsapp/Unif
 import { AdvancedWhatsAppSettings } from '@/components/campaigns/AdvancedWhatsAppSettings';
 import { CreateSegmentModal } from '@/components/segments/CreateSegmentModal';
 import { CAMPAIGN_PRESETS, PRESET_CATEGORIES, type CampaignPreset } from '@/lib/data/campaign-presets';
+import FollowUpBuilder, { type FollowUpStep } from '@/components/campaigns/FollowUpBuilder';
 
 interface CampaignWizardProps {
   campaignId?: string;
@@ -108,6 +109,7 @@ interface CampaignFormData {
     mediaUrl?: string;
     useDynamicMedia?: boolean;
   };
+  followUpSteps?: FollowUpStep[];
 }
 
 interface CampaignResponse {
@@ -791,6 +793,9 @@ function StepMessage({ campaignData, setCampaignData, TemplateSelector: _Templat
           </div>
         )}
       </div>
+
+      {/* ─── Follow-Up Messages ─── */}
+      <FollowUpSection campaignData={campaignData} setCampaignData={setCampaignData} />
     </div>
   );
 }
@@ -990,6 +995,16 @@ function StepReview({ campaignData, selectedSegments, estimatedReach }: { campai
         ]} />
       )}
 
+      {/* Follow-up steps review */}
+      {(campaignData.followUpSteps?.length ?? 0) > 0 && (
+        <ReviewCard title="Follow-Up Messages" icon={<Zap className="h-5 w-5 text-amber-600" />} items={
+          campaignData.followUpSteps!.map(step => ({
+            label: `Step ${step.stepIndex}: ${step.name}`,
+            value: `${step.condition.replace(/_/g, ' ')} → after ${step.delayMinutes < 60 ? `${step.delayMinutes}m` : `${Math.floor(step.delayMinutes / 60)}h`}${step.useSmartWindow ? ' · 🟢 Smart window' : ''}`,
+          }))
+        } />
+      )}
+
       {/* Goal tracking review */}
       {campaignData.goalTracking?.enabled && (
         <ReviewCard title="Goal Tracking" icon={<Target className="h-5 w-5 text-green-600" />} items={[
@@ -1005,6 +1020,51 @@ function StepReview({ campaignData, selectedSegments, estimatedReach }: { campai
           {selectedSegments.map(seg => <li key={seg.id}>{seg.name} — {(seg.customerCount ?? 0).toLocaleString()} customers</li>)}
         </ul>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   Follow-Up Section (collapsible in Step 3)
+   ═══════════════════════════════════════════ */
+function FollowUpSection({ campaignData, setCampaignData }: { campaignData: CampaignFormData; setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>> }) {
+  const [showFollowUps, setShowFollowUps] = useState((campaignData.followUpSteps?.length ?? 0) > 0);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50">
+      <button
+        type="button"
+        onClick={() => {
+          setShowFollowUps(!showFollowUps);
+          if (!showFollowUps && (!campaignData.followUpSteps || campaignData.followUpSteps.length === 0)) {
+            // Initialize with empty array — user clicks "Add Step" to begin
+          }
+        }}
+        className="flex w-full items-center justify-between p-4 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-600" />
+          <span className="font-semibold text-gray-900">Follow-Up Messages</span>
+          {(campaignData.followUpSteps?.length ?? 0) > 0 && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              {campaignData.followUpSteps!.length} step{campaignData.followUpSteps!.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        {showFollowUps ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+      </button>
+
+      {showFollowUps && (
+        <div className="border-t border-gray-200 p-4 space-y-3">
+          <p className="text-xs text-gray-500 mb-2">
+            Add conditional follow-up messages based on customer engagement. Messages within the 24-hour window are sent as free text — outside the window, templates are used.
+          </p>
+          <FollowUpBuilder
+            steps={campaignData.followUpSteps ?? []}
+            onChange={(steps) => setCampaignData(p => ({ ...p, followUpSteps: steps }))}
+          />
+        </div>
+      )}
     </div>
   );
 }

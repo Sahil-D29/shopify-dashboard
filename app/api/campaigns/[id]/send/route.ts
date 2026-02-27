@@ -136,13 +136,17 @@ export async function POST(
 
         if (response.ok && json.messages?.[0]?.id) {
           sentCount++;
-          // Log success to Prisma
+          const waMessageId = json.messages[0].id;
+          // Log success to Prisma with follow-up tracking fields
           await prisma.campaignLog.create({
             data: {
               campaignId,
               customerId: String(customer.id),
               status: 'SUCCESS',
-              message: json.messages[0].id,
+              message: waMessageId,
+              whatsappMessageId: waMessageId,
+              stepIndex: 0,
+              windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
               metadata: { phone, messageBody: messageBody.slice(0, 200) },
             },
           });

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         for (const status of change.value?.statuses || []) {
           const { id: messageId, status: messageStatus, recipient_id, timestamp, errors } = status;
 
-          // ─── PHASE 2: Update Prisma Message status ────────
+          // ─── Update Prisma Message status ────────
           try {
             const statusMap: Record<string, string> = {
               sent: 'SENT',
@@ -55,6 +55,60 @@ export async function POST(request: NextRequest) {
             }
           } catch (err) {
             console.error('[DLR] Prisma message update error:', err);
+          }
+
+          // ─── Update CampaignLog + Campaign metrics ────────
+          try {
+            if (messageId) {
+              const campaignLog = await prisma.campaignLog.findFirst({
+                where: { whatsappMessageId: messageId },
+              });
+
+              if (campaignLog) {
+                const logUpdates: Record<string, unknown> = {};
+
+                if (messageStatus === 'delivered') {
+                  logUpdates.status = 'DELIVERED';
+                  logUpdates.deliveredAt = new Date();
+                } else if (messageStatus === 'read') {
+                  logUpdates.status = 'READ';
+                  logUpdates.readAt = new Date();
+                  // Reset 24hr free messaging window — customer engaged
+                  logUpdates.windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                } else if (messageStatus === 'failed') {
+                  logUpdates.status = 'FAILED';
+                  logUpdates.error = errors?.[0]?.message || 'Delivery failed';
+                }
+
+                if (Object.keys(logUpdates).length > 0) {
+                  await prisma.campaignLog.update({
+                    where: { id: campaignLog.id },
+                    data: logUpdates as any,
+                  });
+                }
+
+                // Update campaign-level aggregate metrics
+                if (messageStatus === 'delivered') {
+                  await prisma.campaign.update({
+                    where: { id: campaignLog.campaignId },
+                    data: { totalDelivered: { increment: 1 } },
+                  });
+                } else if (messageStatus === 'read') {
+                  await prisma.campaign.update({
+                    where: { id: campaignLog.campaignId },
+                    data: { totalOpened: { increment: 1 } },
+                  });
+                } else if (messageStatus === 'failed') {
+                  await prisma.campaign.update({
+                    where: { id: campaignLog.campaignId },
+                    data: { totalFailed: { increment: 1 } },
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[DLR] CampaignLog update error:', err);
+            // Non-fatal: don't break webhook processing
           }
 
           // Find journey enrollment with this message ID

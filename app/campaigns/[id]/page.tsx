@@ -26,6 +26,8 @@ import {
   FlaskConical,
   Target,
   Zap,
+  ArrowDown,
+  MessageCircle,
 } from 'lucide-react';
 
 interface MessageStats {
@@ -720,6 +722,9 @@ export default function CampaignDetailPage() {
         </div>
       )}
 
+      {/* Follow-Up Funnel Analytics */}
+      <FollowUpFunnel campaignId={campaignId} />
+
       {/* Trigger Info */}
       {campaign.type === 'TRIGGER_BASED' && campaign.triggerEvent && (
         <div className="bg-white rounded-xl p-6 border border-gray-200">
@@ -882,6 +887,154 @@ export default function CampaignDetailPage() {
                   Close
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   Follow-Up Funnel Analytics Component
+   ═══════════════════════════════════════════ */
+interface FollowUpStepData {
+  id: string;
+  stepIndex: number;
+  name: string;
+  condition: string;
+  delayMinutes: number;
+  totalSent: number;
+  totalDelivered: number;
+  totalRead: number;
+  totalFreeForm: number;
+}
+
+function FollowUpFunnel({ campaignId }: { campaignId: string }) {
+  const [steps, setSteps] = useState<FollowUpStepData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/campaigns/${campaignId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.followUpSteps && data.followUpSteps.length > 0) {
+          setSteps(data.followUpSteps);
+        }
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [campaignId]);
+
+  if (loading || steps.length === 0) return null;
+
+  const CONDITION_LABELS: Record<string, { emoji: string; label: string; color: string }> = {
+    NOT_READ: { emoji: '🔕', label: 'Not Opened', color: '#E8685A' },
+    READ: { emoji: '👁️', label: 'Opened', color: '#4CAF50' },
+    NOT_CLICKED: { emoji: '🔗', label: 'Opened, No Click', color: '#FF9800' },
+    CLICKED: { emoji: '🖱️', label: 'Clicked', color: '#2196F3' },
+    NOT_CONVERTED: { emoji: '🛒', label: 'No Purchase', color: '#FF5722' },
+    CONVERTED: { emoji: '✅', label: 'Purchased', color: '#4CAF50' },
+    REPLIED: { emoji: '💬', label: 'Replied', color: '#9C27B0' },
+    NOT_REPLIED: { emoji: '🤫', label: 'No Reply', color: '#795548' },
+  };
+
+  const formatDelay = (mins: number) => {
+    if (mins < 60) return `${mins}m`;
+    const h = Math.floor(mins / 60);
+    return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h`;
+  };
+
+  const totalFreeForm = steps.reduce((s, st) => s + st.totalFreeForm, 0);
+  const totalTemplates = steps.reduce((s, st) => s + st.totalSent - st.totalFreeForm, 0);
+  const estimatedSavings = totalFreeForm * 0.5; // ₹0.50 per template saved
+
+  return (
+    <div className="bg-white rounded-xl p-6 border border-gray-200">
+      <div className="flex items-center gap-3 mb-4">
+        <Zap className="w-6 h-6 text-amber-600" />
+        <h3 className="text-lg font-bold text-gray-900">Follow-Up Funnel</h3>
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+          {steps.length} step{steps.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Funnel visualization */}
+      <div className="space-y-1">
+        {steps.map((step, idx) => {
+          const condInfo = CONDITION_LABELS[step.condition] ?? { emoji: '📬', label: step.condition, color: '#8B7F76' };
+          const deliveryRate = step.totalSent > 0 ? Math.round((step.totalDelivered / step.totalSent) * 100) : 0;
+          const readRate = step.totalSent > 0 ? Math.round((step.totalRead / step.totalSent) * 100) : 0;
+
+          return (
+            <div key={step.id}>
+              {/* Connector */}
+              <div className="flex flex-col items-center py-1">
+                <div className="w-0.5 h-3 bg-amber-300" />
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full border border-amber-200 text-[10px] text-amber-700">
+                  <Clock className="w-3 h-3" />
+                  {formatDelay(step.delayMinutes)}
+                </div>
+                <ArrowDown className="w-3 h-3 text-amber-400" />
+              </div>
+
+              {/* Step card */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ background: condInfo.color }}
+                    >
+                      {step.stepIndex}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">{step.name}</span>
+                  </div>
+                  <span className="text-xs bg-gray-200 px-2 py-0.5 rounded-full">
+                    {condInfo.emoji} {condInfo.label}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-900">{step.totalSent.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-500">Sent</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-blue-600">{step.totalDelivered.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-500">Delivered ({deliveryRate}%)</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-green-600">{step.totalRead.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-500">Read ({readRate}%)</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-emerald-600">{step.totalFreeForm.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-500">Free-form 🟢</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cost savings summary */}
+      {totalFreeForm > 0 && (
+        <div className="mt-4 rounded-lg bg-green-50 border border-green-200 p-3 flex items-center gap-3">
+          <div className="text-lg">💰</div>
+          <div>
+            <div className="text-sm font-semibold text-green-800">
+              {totalFreeForm} follow-ups sent as free-form text
+            </div>
+            <div className="text-xs text-green-600">
+              Estimated savings: ₹{estimatedSavings.toLocaleString('en-IN')} (vs template sends)
+              {totalTemplates > 0 && ` · ${totalTemplates} template sends`}
             </div>
           </div>
         </div>

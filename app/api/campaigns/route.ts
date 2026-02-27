@@ -364,6 +364,36 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Save follow-up steps if provided
+    const followUpSteps = (data as any).followUpSteps as
+      | Array<{
+          id?: string;
+          stepIndex: number;
+          name: string;
+          condition: string;
+          delayMinutes: number;
+          messageBody: string;
+          templateName?: string;
+          useSmartWindow?: boolean;
+        }>
+      | undefined;
+
+    if (followUpSteps && followUpSteps.length > 0) {
+      await prisma.campaignFollowUp.createMany({
+        data: followUpSteps.map((step) => ({
+          campaignId: dbCampaign.id,
+          stepIndex: step.stepIndex,
+          name: step.name,
+          condition: step.condition,
+          delayMinutes: step.delayMinutes,
+          messageBody: step.messageBody,
+          templateName: step.templateName ?? null,
+          useSmartWindow: step.useSmartWindow ?? true,
+          isActive: true,
+        })),
+      });
+    }
+
     const campaign = transformCampaign(dbCampaign);
 
     return NextResponse.json({ campaign, success: true });

@@ -178,6 +178,9 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
             customerId,
             status: 'SUCCESS',
             message: msg ?? undefined,
+            whatsappMessageId: msg ?? undefined,
+            stepIndex: 0,
+            windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },
         });
       };

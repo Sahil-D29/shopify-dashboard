@@ -110,6 +110,17 @@ export async function POST(request: NextRequest) {
     console.error('[webhooks][shopify] Journey execution failed:', error);
   }
 
+  // ─── Campaign conversion attribution (orders/create) ────────
+  try {
+    if (topic === 'orders/create') {
+      attributeOrderToCampaign(payload).catch(err => {
+        console.error('[webhooks][shopify] Campaign attribution failed:', err);
+      });
+    }
+  } catch (error) {
+    console.error('[webhooks][shopify] Campaign attribution error:', error);
+  }
+
   // Queue segment re-evaluation for customer/order events
   try {
     if (topic === 'customers/create' || topic === 'customers/update' || topic === 'orders/create') {
@@ -166,6 +177,78 @@ async function queueSegmentReevaluation(topic: string, payload: any): Promise<vo
     }
   } catch (error) {
     console.error('Error queuing segment re-evaluation:', error);
+  }
+}
+
+/**
+ * Campaign conversion attribution (72-hour attribution window, last-touch)
+ * When a Shopify order is created, check if the customer received a campaign
+ * message within the last 72 hours and attribute the conversion.
+ */
+async function attributeOrderToCampaign(payload: JsonRecord): Promise<void> {
+  try {
+    const customerEmail = (payload.email as string) || (payload.customer as JsonRecord)?.email as string || '';
+    const customerPhone = (payload.customer as JsonRecord)?.phone as string ||
+      (payload.billing_address as JsonRecord)?.phone as string || '';
+    const orderTotal = Number(payload.total_price || 0);
+    const orderId = String(payload.id || '');
+
+    if ((!customerEmail && !customerPhone) || !orderId) return;
+
+    // Normalize phone for matching — campaigns store Shopify customer IDs,
+    // but we can match via phone or email in the customerId field
+    const searchTerms: string[] = [];
+    if (customerEmail) searchTerms.push(customerEmail);
+    if (customerPhone) {
+      // Strip non-digits for flexible matching
+      const digits = customerPhone.replace(/[\s\-+()]/g, '');
+      if (digits) searchTerms.push(digits);
+    }
+
+    // Also try Shopify customer ID if available
+    const shopifyCustomerId = (payload.customer as JsonRecord)?.id;
+    if (shopifyCustomerId) searchTerms.push(String(shopifyCustomerId));
+
+    // 72-hour attribution window
+    const attributionCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000);
+
+    // Find recent campaign logs for this customer (last-touch attribution)
+    for (const term of searchTerms) {
+      const recentLog = await prisma.campaignLog.findFirst({
+        where: {
+          customerId: { contains: term },
+          status: { in: ['SUCCESS', 'DELIVERED', 'READ', 'CLICKED'] },
+          createdAt: { gte: attributionCutoff },
+          convertedAt: null, // Not already attributed
+        },
+        orderBy: { createdAt: 'desc' }, // Last-touch
+      });
+
+      if (recentLog) {
+        await prisma.campaignLog.update({
+          where: { id: recentLog.id },
+          data: {
+            status: 'CONVERTED',
+            convertedAt: new Date(),
+            convertedOrderId: orderId,
+            convertedAmount: orderTotal,
+          },
+        });
+
+        await prisma.campaign.update({
+          where: { id: recentLog.campaignId },
+          data: {
+            totalConverted: { increment: 1 },
+            totalRevenue: { increment: orderTotal },
+          },
+        });
+
+        console.log(`[Campaign Attribution] Order ${orderId} attributed to campaign ${recentLog.campaignId} (₹${orderTotal})`);
+        return; // Only attribute once (last-touch)
+      }
+    }
+  } catch (error) {
+    console.error('[Campaign Attribution] Error:', error);
   }
 }
 

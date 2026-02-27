@@ -93,8 +93,14 @@ enum EnrollmentStatus {
 
 enum LogStatus {
   PENDING
-  SUCCESS
+  SUCCESS      // Sent successfully (API returned 200)
+  DELIVERED    // Meta DLR confirmed delivery
+  READ         // Customer opened/read the message
+  CLICKED      // Customer clicked a button/link
+  REPLIED      // Customer replied within context
+  CONVERTED    // Customer made a purchase after this message
   FAILED
+  UNSUBSCRIBED
 }
 
 enum SubscriptionStatus {
@@ -381,6 +387,7 @@ model Campaign {
   createdBy  String
   creator    User                @relation("CampaignCreator", fields: [createdBy], references: [id])
   logs       CampaignLog[]
+  followUps  CampaignFollowUp[]
   queueItems CampaignQueueItem[] @relation("CampaignQueueItems")
 
   @@index([storeId])
@@ -402,13 +409,69 @@ model CampaignLog {
   metadata   Json?
   createdAt  DateTime  @default(now())
 
+  // Follow-up tracking fields
+  whatsappMessageId String?    // Link to Meta wamid for DLR matching
+  stepIndex         Int        @default(0) // 0 = initial, 1+ = follow-up step
+  stepId            String?    // Follow-up step UUID reference
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  clickedAt         DateTime?
+  convertedAt       DateTime?
+  convertedOrderId  String?    // Shopify order ID if converted
+  convertedAmount   Float?     // Order total amount
+  windowExpiresAt   DateTime?  // 24hr free messaging window expiry
+  followUpSent      Boolean    @default(false) // Whether next follow-up already triggered
+  usedFreeForm      Boolean    @default(false) // True if sent as free-form text (no template cost)
+
   // Relations
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([status])
   @@index([createdAt])
+  @@index([whatsappMessageId])
+  @@index([campaignId, stepIndex])
+  @@index([campaignId, status])
+  @@index([followUpSent, status])
   @@map("campaign_logs")
+}
+
+model CampaignFollowUp {
+  id             String   @id @default(uuid())
+  campaignId     String
+  stepIndex      Int      // 1, 2, 3... (0 is initial message)
+  name           String   // "Nudge: Not Read", "CTA: Read but not clicked"
+
+  // Trigger condition
+  condition      String   // READ | NOT_READ | CLICKED | NOT_CLICKED | REPLIED | NOT_REPLIED | CONVERTED | NOT_CONVERTED
+  delayMinutes   Int      // Wait time after prev step before checking condition
+
+  // Message content
+  messageBody    String   // Follow-up message text (used for free-form in 24hr window)
+  templateName   String?  // Meta template name (used when outside 24hr window)
+  templateId     String?  // Prisma Template ID
+  useSmartWindow Boolean  @default(true) // If true, prefer free-form text when in 24hr window
+
+  // Buttons / Media
+  buttons        Json?    // CampaignButton[] for interactive messages
+  mediaUrl       String?
+  mediaType      String?  // image | video | document
+
+  // Metrics
+  isActive       Boolean  @default(true)
+  totalSent      Int      @default(0)
+  totalDelivered Int      @default(0)
+  totalRead      Int      @default(0)
+  totalFreeForm  Int      @default(0) // Count sent as free-form (cost savings)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, stepIndex])
+  @@index([campaignId])
+  @@map("campaign_follow_ups")
 }
 
 model Journey {

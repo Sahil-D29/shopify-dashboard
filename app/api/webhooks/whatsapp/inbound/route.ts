@@ -130,6 +130,64 @@ export async function POST(request: NextRequest) {
                 },
               });
 
+              // ─── Refresh campaign 24hr free window on customer reply ────────
+              try {
+                const newWindowExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                // Find active CampaignLog entries for this customer and refresh window
+                const campaignLogs = await prisma.campaignLog.findMany({
+                  where: {
+                    customerId: { contains: normalizedPhone },
+                    status: { in: ['SUCCESS', 'DELIVERED', 'READ', 'CLICKED'] },
+                    windowExpiresAt: { not: null },
+                    createdAt: { gte: new Date(Date.now() - 72 * 60 * 60 * 1000) }, // Within 72hrs
+                  },
+                  select: { id: true, campaignId: true },
+                });
+
+                if (campaignLogs.length > 0) {
+                  // Batch update window expiry
+                  await prisma.campaignLog.updateMany({
+                    where: {
+                      id: { in: campaignLogs.map(l => l.id) },
+                    },
+                    data: {
+                      windowExpiresAt: newWindowExpiry,
+                    },
+                  });
+
+                  // Also check for REPLIED condition follow-ups
+                  // Update the most recent log to REPLIED status
+                  const mostRecentLog = campaignLogs[0];
+                  if (mostRecentLog) {
+                    await prisma.campaignLog.update({
+                      where: { id: mostRecentLog.id },
+                      data: { status: 'REPLIED' },
+                    });
+                  }
+                }
+
+                // Also try matching by shopifyCustomerId
+                const logsById = await prisma.campaignLog.findMany({
+                  where: {
+                    customerId: contact.shopifyCustomerId ?? '__never__',
+                    status: { in: ['SUCCESS', 'DELIVERED', 'READ', 'CLICKED'] },
+                    windowExpiresAt: { not: null },
+                    createdAt: { gte: new Date(Date.now() - 72 * 60 * 60 * 1000) },
+                  },
+                  select: { id: true },
+                });
+
+                if (logsById.length > 0) {
+                  await prisma.campaignLog.updateMany({
+                    where: { id: { in: logsById.map(l => l.id) } },
+                    data: { windowExpiresAt: newWindowExpiry },
+                  });
+                }
+              } catch (err) {
+                console.error('[Inbound] Campaign window refresh error:', err);
+                // Non-fatal
+              }
+
               // ─── Check Auto-Reply Rules ────────
               if (text?.body) {
                 await checkAutoReplyRules(storeId, contact.id, conversation.id, normalizedPhone, text.body);

@@ -26,6 +26,10 @@ export async function GET(
             email: true,
           },
         },
+        followUps: {
+          where: { isActive: true },
+          orderBy: { stepIndex: 'asc' },
+        },
       },
     });
 
@@ -34,7 +38,24 @@ export async function GET(
     }
 
     const campaign = transformCampaign(dbCampaign);
-    return NextResponse.json({ campaign });
+
+    // Attach follow-up steps to response
+    const followUpSteps = dbCampaign.followUps.map((fu) => ({
+      id: fu.id,
+      stepIndex: fu.stepIndex,
+      name: fu.name,
+      condition: fu.condition,
+      delayMinutes: fu.delayMinutes,
+      messageBody: fu.messageBody,
+      templateName: fu.templateName,
+      useSmartWindow: fu.useSmartWindow,
+      totalSent: fu.totalSent,
+      totalDelivered: fu.totalDelivered,
+      totalRead: fu.totalRead,
+      totalFreeForm: fu.totalFreeForm,
+    }));
+
+    return NextResponse.json({ campaign, followUpSteps });
   } catch (error) {
     return NextResponse.json(
       {
@@ -115,6 +136,43 @@ export async function PUT(
         },
       },
     });
+
+    // Sync follow-up steps if provided
+    const followUpSteps = (updates as any).followUpSteps as
+      | Array<{
+          id?: string;
+          stepIndex: number;
+          name: string;
+          condition: string;
+          delayMinutes: number;
+          messageBody: string;
+          templateName?: string;
+          useSmartWindow?: boolean;
+        }>
+      | undefined;
+
+    if (followUpSteps !== undefined) {
+      // Delete existing follow-ups and recreate
+      await prisma.campaignFollowUp.deleteMany({
+        where: { campaignId: id },
+      });
+
+      if (followUpSteps.length > 0) {
+        await prisma.campaignFollowUp.createMany({
+          data: followUpSteps.map((step) => ({
+            campaignId: id,
+            stepIndex: step.stepIndex,
+            name: step.name,
+            condition: step.condition,
+            delayMinutes: step.delayMinutes,
+            messageBody: step.messageBody,
+            templateName: step.templateName ?? null,
+            useSmartWindow: step.useSmartWindow ?? true,
+            isActive: true,
+          })),
+        });
+      }
+    }
 
     const campaign = transformCampaign(dbCampaign);
     return NextResponse.json({ campaign, success: true });
