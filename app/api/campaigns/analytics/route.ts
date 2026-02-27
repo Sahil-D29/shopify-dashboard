@@ -2,23 +2,41 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { auth } from '@/lib/auth';
+
+const ZERO_ANALYTICS = {
+  totalCampaigns: 0,
+  totalMessagesSent: 0,
+  totalDelivered: 0,
+  totalOpened: 0,
+  totalClicked: 0,
+  totalConverted: 0,
+  campaignRevenue: 0,
+  deliveryRate: 0,
+  readRate: 0,
+  conversionRate: 0,
+};
 
 export async function GET(request: NextRequest) {
   try {
-    const storeId = await getCurrentStoreId(request);
+    let storeId = await getCurrentStoreId(request);
+
+    // Fallback: if no store context from request, look up user's own store
     if (!storeId) {
-      return NextResponse.json({
-        totalCampaigns: 0,
-        totalMessagesSent: 0,
-        totalDelivered: 0,
-        totalOpened: 0,
-        totalClicked: 0,
-        totalConverted: 0,
-        campaignRevenue: 0,
-        deliveryRate: 0,
-        readRate: 0,
-        conversionRate: 0,
-      });
+      try {
+        const session = await auth();
+        if (session?.user?.id) {
+          const userStore = await prisma.store.findFirst({
+            where: { ownerId: session.user.id },
+            select: { id: true },
+          });
+          if (userStore) storeId = userStore.id;
+        }
+      } catch { /* ignore auth fallback errors */ }
+    }
+
+    if (!storeId) {
+      return NextResponse.json(ZERO_ANALYTICS);
     }
 
     const campaigns = await prisma.campaign.findMany({
@@ -59,17 +77,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Campaign Analytics] Error:', error);
-    return NextResponse.json({
-      totalCampaigns: 0,
-      totalMessagesSent: 0,
-      totalDelivered: 0,
-      totalOpened: 0,
-      totalClicked: 0,
-      totalConverted: 0,
-      campaignRevenue: 0,
-      deliveryRate: 0,
-      readRate: 0,
-      conversionRate: 0,
-    });
+    return NextResponse.json(ZERO_ANALYTICS);
   }
 }

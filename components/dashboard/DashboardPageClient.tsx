@@ -810,7 +810,7 @@ function DashboardContent() {
             fetchWithConfig(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetch(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
+            fetchWithConfig(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
           ]);
 
         // Helper: get Response from Promise.allSettled; return null if failed/rejected so we can use fallback without throwing

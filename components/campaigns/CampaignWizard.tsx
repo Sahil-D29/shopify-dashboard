@@ -42,6 +42,7 @@ import { AdvancedWhatsAppSettings } from '@/components/campaigns/AdvancedWhatsAp
 import { CreateSegmentModal } from '@/components/segments/CreateSegmentModal';
 import { CAMPAIGN_PRESETS, PRESET_CATEGORIES, type CampaignPreset } from '@/lib/data/campaign-presets';
 import FollowUpBuilder, { type FollowUpStep } from '@/components/campaigns/FollowUpBuilder';
+import { fetchWithConfig } from '@/lib/fetch-with-config';
 
 interface CampaignWizardProps {
   campaignId?: string;
@@ -267,7 +268,13 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
   const loadSegments = useCallback(async () => {
     setLoadingSegments(true);
     try {
-      const response = await fetch('/api/segments', { cache: 'no-store' });
+      // Use fetchWithConfig to include store headers; fall back to plain fetch
+      let response: Response;
+      try {
+        response = await fetchWithConfig('/api/segments', { cache: 'no-store' });
+      } catch {
+        response = await fetch('/api/segments', { cache: 'no-store' });
+      }
       const payload = (await response.json().catch(() => ({}))) as SegmentListResponse;
       if (!response.ok) throw new Error(payload.error ?? 'Unable to load segments');
       setSegments(payload.segments ?? []);

@@ -56,6 +56,23 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   // Predictive
   { value: 'churn_risk', label: 'Churn Risk', type: 'number', group: 'Predictive' },
   { value: 'lifetime_value_prediction', label: 'Lifetime Value Prediction', type: 'number', group: 'Predictive' },
+
+  // Shopify Events / Triggers
+  { value: 'event_order_created', label: 'Order Created', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_order_paid', label: 'Order Paid', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_order_fulfilled', label: 'Order Fulfilled', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_order_cancelled', label: 'Order Cancelled', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_order_refunded', label: 'Order Refunded', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_checkout_started', label: 'Checkout Started', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_checkout_abandoned', label: 'Checkout Abandoned', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_product_viewed', label: 'Product Viewed', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_product_added_to_cart', label: 'Product Added to Cart', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_subscription_created', label: 'Subscription Created', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_subscription_renewed', label: 'Subscription Renewed', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_subscription_cancelled', label: 'Subscription Cancelled', type: 'boolean', group: 'Shopify Events' },
 ];
 
 export const SEGMENT_OPERATORS: Record<SegmentFieldType, { value: string; label: string }[]> = {

@@ -96,13 +96,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Get store ID from request
-    const requestedStoreId = await getCurrentStoreId(request);
-    
+    let requestedStoreId = await getCurrentStoreId(request);
+
     // Build store filter based on user role
-    const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
-    
+    let storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
+
+    // Fallback: if no store ID resolved from request or userContext, look up user's own store
+    if (!storeFilter.allowAll && !storeFilter.storeId) {
+      try {
+        const userStore = await prisma.store.findFirst({
+          where: { ownerId: userContext.userId },
+          select: { id: true },
+        });
+        if (userStore) {
+          storeFilter = { storeId: userStore.id, allowAll: false };
+        }
+      } catch (e) {
+        console.warn('[Segments] Fallback store lookup failed:', e);
+      }
+    }
+
     const rows = await prisma.segment.findMany({
-      where: storeFilter.allowAll ? undefined : storeFilter.storeId ? { storeId: storeFilter.storeId } : { storeId: '__NO_STORE__' },
+      where: storeFilter.allowAll ? undefined : storeFilter.storeId ? { storeId: storeFilter.storeId } : undefined,
       orderBy: { createdAt: 'desc' },
     });
     const segments = rows.map(toCustomerSegment);
@@ -190,15 +205,19 @@ export async function GET(request: NextRequest) {
         }, { status: 200 });
       }
 
-      const storeFilter = buildStoreFilter(userContext, await getCurrentStoreId(request) || undefined);
+      let storeFilter = buildStoreFilter(userContext, await getCurrentStoreId(request) || undefined);
+      if (!storeFilter.allowAll && !storeFilter.storeId) {
+        try {
+          const userStore = await prisma.store.findFirst({ where: { ownerId: userContext.userId }, select: { id: true } });
+          if (userStore) storeFilter = { storeId: userStore.id, allowAll: false };
+        } catch { /* ignore */ }
+      }
       const rows = await prisma.segment.findMany({
-        where: storeFilter.allowAll ? undefined : storeFilter.storeId ? { storeId: storeFilter.storeId } : { storeId: '__NO_STORE__' },
+        where: storeFilter.allowAll ? undefined : storeFilter.storeId ? { storeId: storeFilter.storeId } : undefined,
         orderBy: { createdAt: 'desc' },
       });
       const segments = rows.map(toCustomerSegment);
-      
-      let filteredSegments = segments;
-      if (!storeFilter.allowAll && !storeFilter.storeId) filteredSegments = [];
+      const filteredSegments = segments;
 
       return NextResponse.json({
         success: false,

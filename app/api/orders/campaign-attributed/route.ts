@@ -2,10 +2,26 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { auth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const storeId = await getCurrentStoreId(request);
+    let storeId = await getCurrentStoreId(request);
+
+    // Fallback: look up user's own store
+    if (!storeId) {
+      try {
+        const session = await auth();
+        if (session?.user?.id) {
+          const userStore = await prisma.store.findFirst({
+            where: { ownerId: session.user.id },
+            select: { id: true },
+          });
+          if (userStore) storeId = userStore.id;
+        }
+      } catch { /* ignore */ }
+    }
+
     if (!storeId) {
       return NextResponse.json({ attributedOrders: [] });
     }
