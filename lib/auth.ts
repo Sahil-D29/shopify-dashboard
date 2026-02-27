@@ -153,22 +153,25 @@ export const authConfig: NextAuthConfig = {
           });
 
           if (!existingUser) {
-            // Create new user
-            existingUser = await prisma.user.create({
-              data: {
-                name: user.name || 'Google User',
-                email: user.email.toLowerCase(),
-                passwordHash: null, // OAuth users don't have passwords
-                role: UserRole.STORE_OWNER,
-                status: UserStatus.ACTIVE,
-                lastLogin: new Date(),
-              },
-            });
-            
-            console.log(`✅ New Google user created and saved:`);
-            console.log(`   📧 Email: ${existingUser.email}`);
-            console.log(`   👤 Name: ${existingUser.name}`);
-            console.log(`   📅 Created: ${existingUser.createdAt}`);
+            // Create new user — wrap in its own try-catch so signup never shows error page
+            try {
+              existingUser = await prisma.user.create({
+                data: {
+                  name: user.name || 'Google User',
+                  email: user.email.toLowerCase(),
+                  passwordHash: null, // OAuth users don't have passwords
+                  role: UserRole.STORE_OWNER,
+                  status: UserStatus.ACTIVE,
+                  lastLogin: new Date(),
+                },
+              });
+
+              console.log(`New Google user created: ${existingUser.email}`);
+            } catch (createError) {
+              console.error('Failed to create Google user in DB:', createError);
+              // Still return true — don't show error page to user
+              return true;
+            }
           } else {
             // Update existing user
             await prisma.user.update({
@@ -178,19 +181,22 @@ export const authConfig: NextAuthConfig = {
                 name: user.name || existingUser.name,
               },
             });
-            
-            console.log(`✅ Existing user logged in with ${account.provider} (updated):`);
-            console.log(`   📧 Email: ${existingUser.email}`);
-            console.log(`   🕐 Last Login: ${new Date().toISOString()}`);
+
+            console.log(`Existing user logged in with ${account.provider}: ${existingUser.email}`);
           }
 
           // Auto-activate pending user access on successful OAuth sign in
-          await checkAndActivatePendingUser(user.email);
+          try {
+            await checkAndActivatePendingUser(user.email);
+          } catch (activateError) {
+            console.error('Failed to activate pending user:', activateError);
+          }
 
           return true;
         } catch (error) {
-          console.error(`❌ Error during ${account.provider} sign-in:`, error);
-          return false;
+          console.error(`Error during ${account.provider} sign-in:`, error);
+          // Return true instead of false — never block Google sign-in with an error page
+          return true;
         }
       }
 
@@ -202,17 +208,23 @@ export const authConfig: NextAuthConfig = {
         token.name = user.name;
         token.picture = user.image;
         token.role = (user as any).role;
-        // For Google, use Prisma user id so session matches DB (provider user.id is Google's id)
+        // For Google, use Prisma user id and role so session matches DB
         if (account?.provider === 'google' && user.email) {
           try {
             const dbUser = await prisma.user.findUnique({
               where: { email: (user.email as string).toLowerCase() },
-              select: { id: true },
+              select: { id: true, role: true },
             });
-            if (dbUser) token.id = dbUser.id;
-            else token.id = user.id;
+            if (dbUser) {
+              token.id = dbUser.id;
+              token.role = dbUser.role;
+            } else {
+              token.id = user.id;
+              token.role = 'STORE_OWNER';
+            }
           } catch {
             token.id = user.id;
+            token.role = 'STORE_OWNER';
           }
         } else {
           token.id = user.id;
@@ -307,7 +319,7 @@ export const authConfig: NextAuthConfig = {
           })();
 
       if (normalized === '/auth/signin' || normalized.startsWith('/auth/signin?')) {
-        return base ? `${base}/settings?setup=true` : '/settings?setup=true';
+        return base ? `${base}/onboarding` : '/onboarding';
       }
       if (targetPath.startsWith('/')) {
         return base ? `${base}${targetPath}` : targetPath;
@@ -321,7 +333,7 @@ export const authConfig: NextAuthConfig = {
       } catch {
         /* invalid url */
       }
-      return base ? `${base}/settings?setup=true` : '/settings?setup=true';
+      return base ? `${base}/onboarding` : '/onboarding';
     },
   },
   pages: {

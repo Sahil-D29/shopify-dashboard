@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,44 +9,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Segment, SegmentFilter } from '@/lib/types';
 import { fetchWithConfig } from '@/lib/fetch-with-config';
+import {
+  SEGMENT_FIELD_OPTIONS,
+  SEGMENT_OPERATORS,
+  getFieldOptionsByGroup,
+  type SegmentFieldType,
+} from '@/lib/constants/segment-fields';
 
 interface CreateSegmentModalProps {
   segment?: Segment | null;
   onClose: () => void;
   onSave?: (segment: Segment) => void;
 }
-
-const FIELD_OPTIONS = [
-  { value: 'first_name', label: 'First Name', type: 'text', group: 'Customer Attributes' },
-  { value: 'last_name', label: 'Last Name', type: 'text', group: 'Customer Attributes' },
-  { value: 'email', label: 'Email', type: 'text', group: 'Customer Attributes' },
-  { value: 'phone', label: 'Phone', type: 'text', group: 'Customer Attributes' },
-  { value: 'total_spent', label: 'Total Spent', type: 'number', group: 'Order Data' },
-  { value: 'orders_count', label: 'Number of Orders', type: 'number', group: 'Order Data' },
-  { value: 'tags', label: 'Tags', type: 'text', group: 'Customer Attributes' },
-  { value: 'accepts_marketing', label: 'Marketing Opt-in', type: 'boolean', group: 'Engagement' },
-];
-
-const OPERATOR_MAP: Record<string, Array<{ value: string; label: string }>> = {
-  text: [
-    { value: 'equals', label: 'equals' },
-    { value: 'contains', label: 'contains' },
-    { value: 'starts_with', label: 'starts with' },
-    { value: 'ends_with', label: 'ends with' },
-    { value: 'is_empty', label: 'is empty' },
-    { value: 'is_not_empty', label: 'is not empty' },
-  ],
-  number: [
-    { value: 'equals', label: 'equals' },
-    { value: 'greater_than', label: 'greater than' },
-    { value: 'less_than', label: 'less than' },
-    { value: 'between', label: 'between' },
-  ],
-  boolean: [
-    { value: 'is_true', label: 'is true' },
-    { value: 'is_false', label: 'is false' },
-  ],
-};
 
 type FilterValue = string | number | string[];
 
@@ -72,6 +46,16 @@ const serializeFilter = (filter: EditableFilter): SegmentFilter => ({
 
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+function getFieldType(field: string): SegmentFieldType {
+  const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
+  return meta?.type ?? 'text';
+}
+
+function getOperatorsForField(field: string) {
+  const type = getFieldType(field);
+  return SEGMENT_OPERATORS[type] ?? SEGMENT_OPERATORS.text;
+}
+
 export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentModalProps) {
   const [name, setName] = useState(segment?.name || '');
   const [description, setDescription] = useState(segment?.description || '');
@@ -83,6 +67,8 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const grouped = getFieldOptionsByGroup();
 
   const addFilter = () => {
     setFilters([...filters, { ...EMPTY_FILTER }]);
@@ -100,28 +86,13 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
     setPreviewCount(null);
   };
 
-  const getFieldType = (field: string): string => {
-    const fieldOption = FIELD_OPTIONS.find(f => f.value === field);
-    return fieldOption?.type || 'text';
-  };
-
-  const getOperatorsForField = (field: string) => {
-    const type = getFieldType(field);
-    return OPERATOR_MAP[type] || OPERATOR_MAP.text;
-  };
+  const isNoValueOp = (op: string) =>
+    op === 'is_empty' || op === 'is_not_empty' || op === 'is_true' || op === 'is_false';
 
   const handlePreview = async () => {
-    // Validate filters before preview
     const validFilters = filters.filter(filter => {
       if (!filter.field || !filter.operator) return false;
-      if (
-        filter.operator === 'is_empty' ||
-        filter.operator === 'is_not_empty' ||
-        filter.operator === 'is_true' ||
-        filter.operator === 'is_false'
-      ) {
-        return true; // No value needed for these operators
-      }
+      if (isNoValueOp(filter.operator)) return true;
       return !!filter.value;
     });
 
@@ -161,13 +132,11 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
   };
 
   const handleSave = async () => {
-    // Validate
     const newErrors: Record<string, string> = {};
     if (!name.trim()) {
       newErrors.name = 'Segment name is required';
     }
 
-    // Remove empty filters before validation
     const validFilters = filters.filter(filter => filter.field && filter.operator);
 
     if (validFilters.length === 0) {
@@ -181,7 +150,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
       if (!filter.operator) {
         newErrors[`filter_${index}_operator`] = 'Operator is required';
       }
-      if (filter.operator !== 'is_empty' && filter.operator !== 'is_not_empty' && filter.operator !== 'is_true' && filter.operator !== 'is_false' && !filter.value) {
+      if (!isNoValueOp(filter.operator) && !filter.value) {
         newErrors[`filter_${index}_value`] = 'Value is required';
       }
     });
@@ -232,7 +201,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
 
   return (
     <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-3xl overflow-hidden">
+      <Card className="w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -251,7 +220,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
           </div>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="overflow-y-auto">
           <div className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="segment-name">Segment Name *</Label>
@@ -306,91 +275,122 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
               </div>
 
               <div className="space-y-3">
-                {filters.map((filter, index) => (
-                  <div key={index} className="flex items-start gap-2 p-3 border rounded-md">
-                    <div className="flex-1 grid grid-cols-3 gap-2">
-                      <div>
-                        <select
-                          value={filter.field}
-                          onChange={(e) => {
-                            updateFilter(index, { field: e.target.value, operator: '', value: '' });
-                            if (errors[`filter_${index}_field`]) setErrors({ ...errors, [`filter_${index}_field`]: '' });
-                          }}
-                          className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                        >
-                          <option value="">Select field...</option>
-                          {Object.entries(
-                            FIELD_OPTIONS.reduce((acc, field) => {
-                              if (!acc[field.group]) acc[field.group] = [];
-                              acc[field.group].push(field);
-                              return acc;
-                            }, {} as Record<string, typeof FIELD_OPTIONS>)
-                          ).map(([group, fields]) => (
-                            <optgroup key={group} label={group}>
-                              {fields.map((f) => (
-                                <option key={f.value} value={f.value}>
-                                  {f.label}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                        {errors[`filter_${index}_field`] && (
-                          <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_field`]}</p>
-                        )}
+                {filters.map((filter, index) => {
+                  const fieldType = getFieldType(filter.field);
+                  const noValue = isNoValueOp(filter.operator) || fieldType === 'boolean';
+
+                  return (
+                    <div key={index} className="flex items-start gap-2 p-3 border rounded-md">
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                        {/* Field */}
+                        <div>
+                          <select
+                            value={filter.field}
+                            onChange={(e) => {
+                              const nextField = e.target.value;
+                              updateFilter(index, { field: nextField, operator: '', value: '' });
+                              if (errors[`filter_${index}_field`]) setErrors({ ...errors, [`filter_${index}_field`]: '' });
+                            }}
+                            className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                          >
+                            <option value="">Select field...</option>
+                            {Object.entries(grouped).map(([group, fields]) => (
+                              <optgroup key={group} label={group}>
+                                {fields.map((f) => (
+                                  <option key={f.value} value={f.value}>
+                                    {f.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          {errors[`filter_${index}_field`] && (
+                            <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_field`]}</p>
+                          )}
+                        </div>
+
+                        {/* Operator */}
+                        <div>
+                          <select
+                            value={filter.operator}
+                            onChange={(e) => {
+                              updateFilter(index, { operator: e.target.value, value: '' });
+                              if (errors[`filter_${index}_operator`]) setErrors({ ...errors, [`filter_${index}_operator`]: '' });
+                            }}
+                            className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                            disabled={!filter.field}
+                          >
+                            <option value="">Operator...</option>
+                            {getOperatorsForField(filter.field).map((op) => (
+                              <option key={op.value} value={op.value}>
+                                {op.label}
+                              </option>
+                            ))}
+                          </select>
+                          {errors[`filter_${index}_operator`] && (
+                            <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_operator`]}</p>
+                          )}
+                        </div>
+
+                        {/* Value */}
+                        <div>
+                          {noValue ? (
+                            <div className="h-9 flex items-center text-xs text-muted-foreground px-3">
+                              {fieldType === 'boolean' ? 'No value needed' : '—'}
+                            </div>
+                          ) : fieldType === 'date' ? (
+                            <Input
+                              type={filter.operator === 'in_last_days' ? 'number' : 'date'}
+                              value={filter.value || ''}
+                              onChange={(e) => {
+                                updateFilter(index, {
+                                  value: filter.operator === 'in_last_days' ? Number(e.target.value) : e.target.value,
+                                });
+                                if (errors[`filter_${index}_value`]) setErrors({ ...errors, [`filter_${index}_value`]: '' });
+                              }}
+                              placeholder={filter.operator === 'in_last_days' ? 'Days' : ''}
+                              className={errors[`filter_${index}_value`] ? 'border-red-500' : ''}
+                            />
+                          ) : fieldType === 'number' ? (
+                            <Input
+                              type="number"
+                              value={filter.value || ''}
+                              onChange={(e) => {
+                                updateFilter(index, { value: Number(e.target.value) });
+                                if (errors[`filter_${index}_value`]) setErrors({ ...errors, [`filter_${index}_value`]: '' });
+                              }}
+                              placeholder={filter.operator === 'between' ? 'min, max' : 'Value...'}
+                              className={errors[`filter_${index}_value`] ? 'border-red-500' : ''}
+                            />
+                          ) : (
+                            <Input
+                              value={filter.value || ''}
+                              onChange={(e) => {
+                                updateFilter(index, { value: e.target.value });
+                                if (errors[`filter_${index}_value`]) setErrors({ ...errors, [`filter_${index}_value`]: '' });
+                              }}
+                              disabled={!filter.operator}
+                              placeholder="Value..."
+                              className={errors[`filter_${index}_value`] ? 'border-red-500' : ''}
+                            />
+                          )}
+                          {errors[`filter_${index}_value`] && (
+                            <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_value`]}</p>
+                          )}
+                        </div>
                       </div>
 
-                      <div>
-                        <select
-                          value={filter.operator}
-                          onChange={(e) => {
-                            updateFilter(index, { operator: e.target.value, value: '' });
-                            if (errors[`filter_${index}_operator`]) setErrors({ ...errors, [`filter_${index}_operator`]: '' });
-                          }}
-                          className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                          disabled={!filter.field}
-                        >
-                          <option value="">Operator...</option>
-                          {getOperatorsForField(filter.field).map((op) => (
-                            <option key={op.value} value={op.value}>
-                              {op.label}
-                            </option>
-                          ))}
-                        </select>
-                        {errors[`filter_${index}_operator`] && (
-                          <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_operator`]}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <Input
-                          value={filter.value || ''}
-                          onChange={(e) => {
-                            updateFilter(index, { value: e.target.value });
-                            if (errors[`filter_${index}_value`]) setErrors({ ...errors, [`filter_${index}_value`]: '' });
-                          }}
-                          disabled={!filter.operator || filter.operator === 'is_empty' || filter.operator === 'is_not_empty'}
-                          placeholder={
-                            filter.operator === 'between' ? 'min, max' : 'Value...'
-                          }
-                          className={errors[`filter_${index}_value`] ? 'border-red-500' : ''}
-                        />
-                        {errors[`filter_${index}_value`] && (
-                          <p className="text-xs text-red-500 mt-1">{errors[`filter_${index}_value`]}</p>
-                        )}
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeFilter(index)}
+                        className="flex-shrink-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeFilter(index)}
-                      className="flex-shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <Button variant="outline" onClick={addFilter} className="w-full">
@@ -413,10 +413,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
                     Counting...
                   </>
                 ) : (
-                  <>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Preview Count
-                  </>
+                  'Preview Count'
                 )}
               </Button>
               {previewCount !== null && (
@@ -459,4 +456,3 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
     </div>
   );
 }
-

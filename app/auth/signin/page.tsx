@@ -53,23 +53,33 @@ function SignInForm() {
   useEffect(() => {
     if (status === 'authenticated') {
       const go = async () => {
-        let targetUrl = '/settings?setup=true';
+        let targetUrl = '/onboarding';
         try {
-          const statusResponse = await fetch('/api/settings/status');
-          const statusData = await statusResponse.json();
-          const setupCompleted = statusData.success && statusData.status?.settingsCompleted;
-          if (setupCompleted) {
-            // Returning user: go to callbackUrl if valid, else dashboard
-            const validCallback =
-              callbackUrl &&
-              callbackUrl !== '/settings?setup=true' &&
-              !callbackUrl.startsWith('/auth') &&
-              callbackUrl.startsWith('/');
-            targetUrl = validCallback ? callbackUrl : '/dashboard';
+          // Check onboarding first
+          const onboardingRes = await fetch('/api/onboarding');
+          const onboardingData = await onboardingRes.json();
+
+          if (!onboardingData.onboardingComplete) {
+            targetUrl = '/onboarding';
+          } else {
+            // User onboarded — check settings setup
+            const statusResponse = await fetch('/api/settings/status');
+            const statusData = await statusResponse.json();
+            const setupCompleted = statusData.success && statusData.status?.settingsCompleted;
+            if (setupCompleted) {
+              const validCallback =
+                callbackUrl &&
+                callbackUrl !== '/settings?setup=true' &&
+                callbackUrl !== '/onboarding' &&
+                !callbackUrl.startsWith('/auth') &&
+                callbackUrl.startsWith('/');
+              targetUrl = validCallback ? callbackUrl : '/dashboard';
+            } else {
+              targetUrl = '/settings?setup=true';
+            }
           }
-          // First-time user: keep /settings?setup=true
         } catch {
-          targetUrl = '/settings?setup=true';
+          targetUrl = '/onboarding';
         }
         setTimeout(() => {
           window.location.href = targetUrl;

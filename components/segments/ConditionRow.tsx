@@ -2,53 +2,12 @@
 
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-
-type FieldOption = {
-  value: string;
-  label: string;
-  type: 'text' | 'number' | 'date' | 'tags';
-};
-
-const FIELD_OPTIONS: FieldOption[] = [
-  { value: 'customer_name', label: 'Customer Name', type: 'text' },
-  { value: 'customer_email', label: 'Email', type: 'text' },
-  { value: 'customer_phone', label: 'Phone', type: 'text' },
-  { value: 'customer_tags', label: 'Tags', type: 'tags' },
-  { value: 'location_country', label: 'Country', type: 'text' },
-  { value: 'location_city', label: 'City', type: 'text' },
-  { value: 'location_state', label: 'State', type: 'text' },
-  { value: 'total_orders', label: 'Total Orders', type: 'number' },
-  { value: 'total_spent', label: 'Total Spent', type: 'number' },
-  { value: 'average_order_value', label: 'Average Order Value', type: 'number' },
-  { value: 'days_since_last_order', label: 'Days Since Last Order', type: 'number' },
-];
-
-const OPERATORS: Record<FieldOption['type'], { value: string; label: string }[]> = {
-  text: [
-    { value: 'contains', label: 'contains' },
-    { value: 'starts_with', label: 'starts with' },
-    { value: 'ends_with', label: 'ends with' },
-    { value: 'equals', label: 'equals' },
-    { value: 'not_equals', label: 'not equals' },
-    { value: 'is_empty', label: 'is empty' },
-    { value: 'is_not_empty', label: 'is not empty' },
-  ],
-  number: [
-    { value: 'equals', label: '=' },
-    { value: 'greater_than', label: '>' },
-    { value: 'less_than', label: '<' },
-    { value: 'between', label: 'between' },
-  ],
-  date: [
-    { value: 'in_last_days', label: 'in last X days' },
-    { value: 'after_date', label: 'after date' },
-    { value: 'before_date', label: 'before date' },
-  ],
-  tags: [
-    { value: 'contains', label: 'contains' },
-    { value: 'not_contains', label: 'does not contain' },
-  ],
-};
+import {
+  SEGMENT_FIELD_OPTIONS,
+  SEGMENT_OPERATORS,
+  getFieldOptionsByGroup,
+  type SegmentFieldType,
+} from '@/lib/constants/segment-fields';
 
 type NumberRange = [number, number];
 
@@ -67,6 +26,11 @@ const ensureNumberRange = (value: ConditionValue['value']): NumberRange => {
   return [0, 0];
 };
 
+function getFieldType(field: string): SegmentFieldType {
+  const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
+  return meta?.type ?? 'text';
+}
+
 export default function ConditionRow({
   condition,
   onChange,
@@ -76,78 +40,99 @@ export default function ConditionRow({
   onChange: (next: ConditionValue) => void;
   onRemove: () => void;
 }) {
-  const fieldMeta = FIELD_OPTIONS.find(f => f.value === condition.field) || FIELD_OPTIONS[0];
-  const operators = OPERATORS[fieldMeta.type];
+  const fieldType = getFieldType(condition.field);
+  const operators = SEGMENT_OPERATORS[fieldType] ?? SEGMENT_OPERATORS.text;
+  const grouped = getFieldOptionsByGroup();
+
+  const isNoValueOp =
+    condition.operator === 'is_empty' ||
+    condition.operator === 'is_not_empty' ||
+    condition.operator === 'is_true' ||
+    condition.operator === 'is_false';
 
   return (
     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
+      {/* Field selector with optgroup */}
       <select
         value={condition.field}
         onChange={(e) => {
           const nextField = e.target.value;
-          const fm = FIELD_OPTIONS.find(f => f.value === nextField) || FIELD_OPTIONS[0];
-          onChange({ ...condition, field: nextField, operator: OPERATORS[fm.type][0].value, value: '' });
+          const nextType = getFieldType(nextField);
+          const defaultOp = SEGMENT_OPERATORS[nextType]?.[0]?.value ?? '';
+          onChange({ ...condition, field: nextField, operator: defaultOp, value: '' });
         }}
-        className="px-3 py-2 border rounded-lg"
+        className="px-3 py-2 border rounded-lg text-sm"
       >
-        {FIELD_OPTIONS.map(f => (
-          <option key={f.value} value={f.value}>{f.label}</option>
+        {Object.entries(grouped).map(([group, fields]) => (
+          <optgroup key={group} label={group}>
+            {fields.map(f => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
 
+      {/* Operator selector */}
       <select
         value={condition.operator}
         onChange={(e) => onChange({ ...condition, operator: e.target.value })}
-        className="px-3 py-2 border rounded-lg"
+        className="px-3 py-2 border rounded-lg text-sm"
       >
         {operators.map(op => (
           <option key={op.value} value={op.value}>{op.label}</option>
         ))}
       </select>
 
-      {fieldMeta.type === 'number' && condition.operator === 'between' ? (
+      {/* Value input — conditional based on field type */}
+      {isNoValueOp ? null : fieldType === 'boolean' ? null : fieldType === 'number' && condition.operator === 'between' ? (
         <div className="flex items-center gap-2">
           {(() => {
             const [minValue, maxValue] = ensureNumberRange(condition.value);
             return (
               <>
-          <Input
-            type="number"
-            placeholder="Min"
-            value={String(minValue)}
-            onChange={event => {
-              const min = Number(event.target.value || 0);
-              onChange({ ...condition, value: [min, maxValue] });
-            }}
-            className="w-28"
-          />
-          <span className="text-sm text-gray-500">and</span>
-          <Input
-            type="number"
-            placeholder="Max"
-            value={String(maxValue)}
-            onChange={event => {
-              const max = Number(event.target.value || 0);
-              onChange({ ...condition, value: [minValue, max] });
-            }}
-            className="w-28"
-          />
+                <Input
+                  type="number"
+                  placeholder="Min"
+                  value={String(minValue)}
+                  onChange={event => {
+                    const min = Number(event.target.value || 0);
+                    onChange({ ...condition, value: [min, maxValue] });
+                  }}
+                  className="w-28"
+                />
+                <span className="text-sm text-gray-500">and</span>
+                <Input
+                  type="number"
+                  placeholder="Max"
+                  value={String(maxValue)}
+                  onChange={event => {
+                    const max = Number(event.target.value || 0);
+                    onChange({ ...condition, value: [minValue, max] });
+                  }}
+                  className="w-28"
+                />
               </>
             );
           })()}
         </div>
-      ) : fieldMeta.type === 'number' ? (
+      ) : fieldType === 'number' ? (
         <Input
           type="number"
           value={typeof condition.value === 'number' ? condition.value : Number(condition.value ?? 0)}
           onChange={event => onChange({ ...condition, value: Number(event.target.value) })}
           className="w-40"
         />
-      ) : fieldMeta.type === 'date' ? (
+      ) : fieldType === 'date' ? (
         <Input
-          type="date"
-          value={typeof condition.value === 'string' ? condition.value : ''}
-          onChange={event => onChange({ ...condition, value: event.target.value })}
+          type={condition.operator === 'in_last_days' ? 'number' : 'date'}
+          placeholder={condition.operator === 'in_last_days' ? 'Days' : ''}
+          value={typeof condition.value === 'string' ? condition.value : String(condition.value ?? '')}
+          onChange={event =>
+            onChange({
+              ...condition,
+              value: condition.operator === 'in_last_days' ? Number(event.target.value) : event.target.value,
+            })
+          }
           className="w-52"
         />
       ) : (
@@ -165,5 +150,3 @@ export default function ConditionRow({
     </div>
   );
 }
-
-

@@ -2,258 +2,156 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTenant } from '@/lib/tenant/tenant-context';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { CheckCircle2, ArrowRight, Store, MessageSquare, Zap, BarChart3, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-
-const steps = [
-  {
-    id: 'welcome',
-    title: 'Welcome',
-    description: 'Let\'s get your store set up in just a few steps',
-    icon: Store,
-  },
-  {
-    id: 'whatsapp',
-    title: 'Connect WhatsApp',
-    description: 'Set up your WhatsApp Business API credentials',
-    icon: MessageSquare,
-  },
-  {
-    id: 'complete',
-    title: 'You\'re All Set!',
-    description: 'Start creating journeys and campaigns',
-    icon: CheckCircle2,
-  },
-];
+import { useSession } from 'next-auth/react';
+import { Loader2, Sparkles, Store } from 'lucide-react';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { currentStore } = useTenant();
-  const [currentStep, setCurrentStep] = useState(0);
+  const { status } = useSession();
+  const [brandName, setBrandName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    // If no store, redirect to install
-    if (!currentStore) {
-      router.push('/install');
+    if (status === 'unauthenticated') {
+      router.replace('/auth/signin');
+      return;
     }
-  }, [currentStore, router]);
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      // Complete onboarding
-      handleComplete();
+    if (status === 'authenticated') {
+      fetch('/api/onboarding')
+        .then(r => r.json())
+        .then(data => {
+          if (data.onboardingComplete) {
+            router.replace('/settings?setup=true');
+          } else {
+            setChecking(false);
+          }
+        })
+        .catch(() => setChecking(false));
     }
-  };
+  }, [status, router]);
 
-  const handleSkip = () => {
-    router.push('/');
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = brandName.trim();
 
-  const handleComplete = async () => {
+    if (trimmed.length < 2) {
+      setError('Brand name must be at least 2 characters');
+      return;
+    }
+
     setLoading(true);
+    setError('');
+
     try {
-      // Mark onboarding as complete (could store in user preferences)
-      const storage = typeof window !== 'undefined' ? localStorage : null;
-      if (storage) {
-        storage.setItem('onboarding_complete', 'true');
+      const res = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandName: trimmed }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Something went wrong');
+        return;
       }
-      
-      toast.success('Onboarding complete!');
-      router.push('/');
-    } catch (error) {
-      console.error('Error completing onboarding:', error);
-      toast.error('Failed to complete onboarding');
+
+      router.push('/settings?setup=true');
+    } catch {
+      setError('Failed to save. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!currentStore) {
+  if (status === 'loading' || checking) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FAF9F6' }}>
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#D4A574' }} />
       </div>
     );
   }
 
-  const currentStepData = steps[currentStep];
-  const StepIcon = currentStepData.icon;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Progress Indicator */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center flex-1">
-                <div className="flex flex-col items-center flex-1">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                      index <= currentStep
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'bg-white border-gray-300 text-gray-400'
-                    }`}
-                  >
-                    {index < currentStep ? (
-                      <CheckCircle2 className="h-5 w-5" />
-                    ) : (
-                      <span className="font-semibold">{index + 1}</span>
-                    )}
-                  </div>
-                  <p className="text-xs mt-2 text-center max-w-[100px]">{step.title}</p>
-                </div>
-                {index < steps.length - 1 && (
-                  <div
-                    className={`h-1 flex-1 mx-2 ${
-                      index < currentStep ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#FAF9F6' }}>
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
+            style={{ backgroundColor: '#D4A574' }}
+          >
+            <Store className="h-8 w-8 text-white" />
           </div>
+          <h1 className="text-3xl font-bold" style={{ color: '#4A4139' }}>
+            Welcome!
+          </h1>
+          <p className="mt-2 text-base" style={{ color: '#8B7F76' }}>
+            Let&apos;s get your brand set up in just a moment.
+          </p>
         </div>
 
-        {/* Step Content */}
-        <Card>
-          <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-              <StepIcon className="h-8 w-8 text-blue-600" />
+        <div
+          className="rounded-2xl border p-8 shadow-sm"
+          style={{ backgroundColor: '#FFFFFF', borderColor: '#E8E4DE' }}
+        >
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label
+                htmlFor="brandName"
+                className="block text-sm font-semibold mb-2"
+                style={{ color: '#4A4139' }}
+              >
+                What&apos;s your brand name?
+              </label>
+              <input
+                id="brandName"
+                type="text"
+                value={brandName}
+                onChange={e => {
+                  setBrandName(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder="e.g., Acme Store"
+                maxLength={100}
+                autoFocus
+                className="w-full px-4 py-3 rounded-xl border text-base outline-none transition-all focus:ring-2"
+                style={{
+                  borderColor: error ? '#EF4444' : '#E8E4DE',
+                  color: '#4A4139',
+                  backgroundColor: '#FAF9F6',
+                }}
+              />
+              {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
             </div>
-            <CardTitle className="text-2xl">{currentStepData.title}</CardTitle>
-            <CardDescription className="text-base">
-              {currentStepData.description}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {currentStep === 0 && (
-              <div className="space-y-4">
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h3 className="font-semibold mb-2">Store Connected</h3>
-                  <p className="text-sm text-gray-700">
-                    <strong>{currentStore.name}</strong> ({currentStore.shopDomain})
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <Zap className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium">Automated Customer Journeys</h4>
-                      <p className="text-sm text-gray-600">
-                        Create powerful automation workflows for your customers
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <BarChart3 className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium">Advanced Analytics</h4>
-                      <p className="text-sm text-gray-600">
-                        Track performance and optimize your campaigns
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <MessageSquare className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium">WhatsApp Integration</h4>
-                      <p className="text-sm text-gray-600">
-                        Send personalized messages to your customers
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {currentStep === 1 && (
-              <div className="space-y-4">
-                <p className="text-gray-600">
-                  Connect your WhatsApp Business API to start sending messages to customers.
-                </p>
-                <Button
-                  onClick={() => router.push('/settings?tab=whatsapp')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Go to WhatsApp Settings
-                </Button>
-                <p className="text-xs text-gray-500 text-center">
-                  You can set this up later from Settings
-                </p>
-              </div>
-            )}
-
-            {currentStep === 2 && (
-              <div className="space-y-4 text-center">
-                <div className="mx-auto w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
-                  <CheckCircle2 className="h-10 w-10 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">All Set!</h3>
-                  <p className="text-gray-600">
-                    Your store is connected and ready to use. Start creating journeys and campaigns to engage your customers.
-                  </p>
-                </div>
-                <div className="pt-4">
-                  <Button
-                    onClick={handleComplete}
-                    disabled={loading}
-                    size="lg"
-                    className="w-full"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Completing...
-                      </>
-                    ) : (
-                      <>
-                        Go to Dashboard
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Navigation */}
-            <div className="flex justify-between pt-4 border-t">
-              {currentStep > 0 ? (
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentStep(currentStep - 1)}
-                >
-                  Previous
-                </Button>
+            <button
+              type="submit"
+              disabled={loading || brandName.trim().length < 2}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              style={{ backgroundColor: '#D4A574' }}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Setting up...
+                </>
               ) : (
-                <div />
+                <>
+                  <Sparkles className="h-5 w-5" />
+                  Continue
+                </>
               )}
-              <div className="flex gap-2">
-                {currentStep < steps.length - 1 && (
-                  <Button variant="ghost" onClick={handleSkip}>
-                    Skip
-                  </Button>
-                )}
-                <Button onClick={handleNext}>
-                  {currentStep === steps.length - 1 ? 'Complete' : 'Next'}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </button>
+          </form>
+
+          <p className="mt-4 text-center text-xs" style={{ color: '#8B7F76' }}>
+            You can change this later in Settings
+          </p>
+        </div>
       </div>
     </div>
   );
 }
-

@@ -5,13 +5,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { ShoppingCart, RefreshCw } from 'lucide-react';
+import { ShoppingCart, RefreshCw, MessageSquare, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyOrder, ShopifyOrderListResponse } from '@/lib/types/shopify-order';
+
+interface AttributedOrder {
+  convertedOrderId: string;
+  convertedAmount: number | null;
+  convertedAt: string | null;
+  campaignId: string;
+  campaignName: string;
+}
 
 const formatCurrency = (value: string | number | null | undefined): string => {
   const numeric = Number(value ?? 0);
@@ -52,6 +60,9 @@ function OrdersContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [lastSynced, setLastSynced] = useState<number | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'campaigns'>('all');
+  const [attributedOrders, setAttributedOrders] = useState<AttributedOrder[]>([]);
+  const [attributedLoaded, setAttributedLoaded] = useState(false);
 
   const fetchOrders = useCallback(
     async (forceRefresh = false) => {
@@ -88,6 +99,20 @@ function OrdersContent() {
     [isMounted]
   );
 
+  const fetchAttributedOrders = useCallback(async () => {
+    try {
+      const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
+      const baseUrl = getBaseUrl();
+      const res = await fetch(`${baseUrl}/api/orders/campaign-attributed`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({ attributedOrders: [] }));
+      setAttributedOrders(data.attributedOrders ?? []);
+      setAttributedLoaded(true);
+    } catch {
+      setAttributedOrders([]);
+      setAttributedLoaded(true);
+    }
+  }, []);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -95,30 +120,57 @@ function OrdersContent() {
   useEffect(() => {
     if (isMounted) {
       fetchOrders();
+      fetchAttributedOrders();
     }
-  }, [isMounted, fetchOrders]);
+  }, [isMounted, fetchOrders, fetchAttributedOrders]);
 
   // Auto-refresh on config change
   useConfigRefresh(() => {
-    console.log('🔄 Config changed, reloading orders...');
     fetchOrders(true);
+    fetchAttributedOrders();
   });
 
   // Auto-refresh every 30 seconds for live syncing
   useAutoRefresh(async () => {
     await fetchOrders(true);
-  }, { interval: 30000, enabled: true }); // Refresh every 30 seconds
+    await fetchAttributedOrders();
+  }, { interval: 30000, enabled: true });
 
   const handleRefresh = useCallback(() => {
     fetchOrders(true);
-  }, [fetchOrders]);
+    fetchAttributedOrders();
+  }, [fetchOrders, fetchAttributedOrders]);
 
-  const ordersSummary = useMemo(
-    () => ({
-      total: orders.length,
-    }),
-    [orders.length]
-  );
+  // Build a map of Shopify order number/name -> campaign info
+  const attributionMap = useMemo(() => {
+    const map = new Map<string, AttributedOrder>();
+    for (const ao of attributedOrders) {
+      if (ao.convertedOrderId) {
+        map.set(ao.convertedOrderId, ao);
+      }
+    }
+    return map;
+  }, [attributedOrders]);
+
+  // Filter orders based on source
+  const filteredOrders = useMemo(() => {
+    if (sourceFilter === 'all') return orders;
+    // Show only orders that have a campaign attribution
+    return orders.filter(order => {
+      const orderId = String(order.id);
+      const orderName = order.name ?? '';
+      const orderNumber = order.order_number != null ? String(order.order_number) : '';
+      return attributionMap.has(orderId) || attributionMap.has(orderName) || attributionMap.has(orderNumber);
+    });
+  }, [orders, sourceFilter, attributionMap]);
+
+  const getCampaignName = (order: ShopifyOrder): string | null => {
+    const orderId = String(order.id);
+    const orderName = order.name ?? '';
+    const orderNumber = order.order_number != null ? String(order.order_number) : '';
+    const match = attributionMap.get(orderId) || attributionMap.get(orderName) || attributionMap.get(orderNumber);
+    return match?.campaignName ?? null;
+  };
 
   if (isLoading) {
     return (
@@ -134,7 +186,7 @@ function OrdersContent() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground">
-            View and manage all orders • Live syncing every 30s
+            View and manage orders • Live syncing every 30s
             {lastSynced && (
               <span className="ml-2 text-xs text-gray-500">
                 • Last synced: {format(new Date(lastSynced), 'MMM dd, yyyy HH:mm:ss')}
@@ -143,7 +195,7 @@ function OrdersContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="secondary">{ordersSummary.total} total</Badge>
+          <Badge variant="secondary">{filteredOrders.length} orders</Badge>
           <Button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -157,94 +209,121 @@ function OrdersContent() {
         </div>
       </div>
 
+      {/* Source Filter Toggle */}
+      <div className="flex items-center gap-2">
+        <Filter className="h-4 w-4 text-gray-500" />
+        <span className="text-sm text-gray-500 mr-2">Source:</span>
+        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <button
+            onClick={() => setSourceFilter('all')}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              sourceFilter === 'all'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <ShoppingCart className="inline-block h-3.5 w-3.5 mr-1.5 -mt-0.5" />
+            All Orders ({orders.length})
+          </button>
+          <button
+            onClick={() => setSourceFilter('campaigns')}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              sourceFilter === 'campaigns'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <MessageSquare className="inline-block h-3.5 w-3.5 mr-1.5 -mt-0.5" />
+            From Campaigns ({attributedLoaded ? attributedOrders.length : '...'})
+          </button>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Order List</CardTitle>
+          <CardTitle>
+            {sourceFilter === 'campaigns' ? 'Campaign-Attributed Orders' : 'Order List'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {orders.length === 0 ? (
+          {filteredOrders.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No orders found</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                {sourceFilter === 'campaigns' ? 'No campaign-attributed orders' : 'No orders found'}
+              </h3>
               <p className="text-muted-foreground">
-                Orders will appear here once customers make purchases.
+                {sourceFilter === 'campaigns'
+                  ? 'Orders converted from WhatsApp campaigns will appear here.'
+                  : 'Orders will appear here once customers make purchases.'}
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Order #</TableHead>
-                <TableHead>Order Name</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead>Processed</TableHead>
-                <TableHead>Currency</TableHead>
-                <TableHead>Subtotal</TableHead>
-                <TableHead>Tax</TableHead>
-                <TableHead>Discounts</TableHead>
-                <TableHead>Line Items</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Weight (g)</TableHead>
-                <TableHead>Financial</TableHead>
-                <TableHead>Fulfillment</TableHead>
-                <TableHead>Gateway</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Test</TableHead>
-                <TableHead>Tags</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map(order => (
-                <TableRow key={order.id}>
-                  <TableCell className="text-xs text-muted-foreground">{order.id}</TableCell>
-                  <TableCell className="font-medium">
-                    {order.order_number != null ? `#${order.order_number}` : '—'}
-                  </TableCell>
-                  <TableCell>{order.name ?? '—'}</TableCell>
-                  <TableCell>
-                    {order.customer
-                      ? `${order.customer.first_name ?? ''} ${order.customer.last_name ?? ''}`.trim() || 'Customer'
-                      : 'Guest'}
-                  </TableCell>
-                  <TableCell>{order.email ?? '—'}</TableCell>
-                  <TableCell>{formatDate(order.created_at)}</TableCell>
-                  <TableCell>{formatDate(order.updated_at)}</TableCell>
-                  <TableCell>{formatDate(order.processed_at)}</TableCell>
-                  <TableCell>{order.currency ?? '—'}</TableCell>
-                  <TableCell>{formatCurrency(order.subtotal_price)}</TableCell>
-                  <TableCell>{formatCurrency(order.total_tax)}</TableCell>
-                  <TableCell>{formatCurrency(order.total_discounts)}</TableCell>
-                  <TableCell>{order.line_items?.length ?? 0}</TableCell>
-                  <TableCell>{formatCurrency(order.total_price)}</TableCell>
-                  <TableCell>{order.total_weight ?? 0}</TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(order.financial_status)}>
-                      {order.financial_status ?? 'pending'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(order.fulfillment_status ?? 'unfulfilled')}>
-                      {order.fulfillment_status ?? 'unfulfilled'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{order.gateway ?? order.payment_gateway_names?.[0] ?? '—'}</TableCell>
-                  <TableCell>{order.source_name ?? '—'}</TableCell>
-                  <TableCell>{order.test ? 'Yes' : 'No'}</TableCell>
-                  <TableCell className="max-w-[240px]">
-                    {extractTags(order.tags).map(tag => (
-                      <Badge key={tag} variant="outline" className="mr-1 mb-1">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Financial</TableHead>
+                    <TableHead className="hidden md:table-cell">Fulfillment</TableHead>
+                    <TableHead className="hidden md:table-cell">Source</TableHead>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead className="hidden lg:table-cell">Tags</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredOrders.map(order => {
+                    const campaignName = getCampaignName(order);
+                    return (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-medium">
+                          {order.order_number != null ? `#${order.order_number}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {order.customer
+                            ? `${order.customer.first_name ?? ''} ${order.customer.last_name ?? ''}`.trim() || 'Customer'
+                            : 'Guest'}
+                        </TableCell>
+                        <TableCell>{formatDate(order.created_at)}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(order.total_price)}</TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(order.financial_status)}>
+                            {order.financial_status ?? 'pending'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Badge className={getStatusColor(order.fulfillment_status ?? 'unfulfilled')}>
+                            {order.fulfillment_status ?? 'unfulfilled'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-gray-600">
+                          {order.source_name ?? '—'}
+                        </TableCell>
+                        <TableCell>
+                          {campaignName ? (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                              {campaignName}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell max-w-[200px]">
+                          {extractTags(order.tags).map(tag => (
+                            <Badge key={tag} variant="outline" className="mr-1 mb-1 text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

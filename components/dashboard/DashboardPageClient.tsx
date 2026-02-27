@@ -25,6 +25,10 @@ import {
   Settings,
   CheckCircle2,
   XCircle,
+  MessageSquare,
+  Send,
+  Eye,
+  MousePointerClick,
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +61,19 @@ interface ShopifyAnalyticsSummary extends ApiErrorPayload {
   cached?: boolean;
 }
 
+interface CampaignAnalytics {
+  totalCampaigns: number;
+  totalMessagesSent: number;
+  totalDelivered: number;
+  totalOpened: number;
+  totalClicked: number;
+  totalConverted: number;
+  campaignRevenue: number;
+  deliveryRate: number;
+  readRate: number;
+  conversionRate: number;
+}
+
 interface DashboardData {
   analytics: ShopifyAnalyticsSummary;
   orders: ShopifyOrder[];
@@ -64,21 +81,22 @@ interface DashboardData {
   customers: ShopifyCustomer[];
   locations: ShopifyLocation[];
   checkouts: ShopifyCheckout[];
+  campaignAnalytics: CampaignAnalytics;
   lastSynced?: number;
 }
 
 const gradientMap = {
-  blue: 'from-blue-500 to-blue-600',
-  emerald: 'from-green-500 to-emerald-600',
-  purple: 'from-purple-500 to-purple-600',
-  amber: 'from-orange-500 to-orange-600',
+  warm: 'from-amber-700 to-amber-800',
+  sand: 'from-stone-500 to-stone-600',
+  clay: 'from-orange-700 to-orange-800',
+  taupe: 'from-stone-600 to-stone-700',
 };
 
 const accentBorderMap = {
-  blue: 'from-blue-500 to-blue-700',
-  emerald: 'from-emerald-500 to-emerald-600',
-  purple: 'from-purple-500 to-purple-600',
-  amber: 'from-orange-500 to-amber-600',
+  warm: 'from-amber-600 to-amber-800',
+  sand: 'from-stone-400 to-stone-600',
+  clay: 'from-orange-600 to-orange-800',
+  taupe: 'from-stone-500 to-stone-700',
 } as const;
 
 const SHOPIFY_STORE_DATA_KEY = 'shopify:store_data';
@@ -175,7 +193,7 @@ const MetricCard = memo(function MetricCard({ title, value, subtitle, icon: Icon
           <p className="text-sm font-medium text-gray-900">{title}</p>
           {subtitle ? <p className="text-xs text-gray-500">{subtitle}</p> : null}
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       </div>
     </div>
   );
@@ -189,7 +207,7 @@ interface DashboardHeaderProps {
 
 function DashboardHeader({ refreshing, onRefresh, lastSynced }: DashboardHeaderProps) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 shadow-xl">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-stone-700 via-stone-800 to-stone-900 shadow-xl">
       <div
         className="pointer-events-none absolute inset-0 opacity-10"
         style={{
@@ -200,10 +218,10 @@ function DashboardHeader({ refreshing, onRefresh, lastSynced }: DashboardHeaderP
       <div className="relative flex flex-col gap-6 px-8 py-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2 text-white">
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="flex flex-wrap items-center gap-3 text-sm text-blue-100">
+          <p className="flex flex-wrap items-center gap-3 text-sm text-stone-300">
             <span className="flex items-center gap-2">
               <Store className="h-4 w-4" />
-              Live overview of your Shopify store • Auto-syncing every 30s
+              Live overview of your store • Auto-syncing every 30s
             </span>
             {lastSynced ? (
               <span className="rounded bg-white/20 px-2 py-1 text-xs text-white backdrop-blur-sm">
@@ -215,7 +233,7 @@ function DashboardHeader({ refreshing, onRefresh, lastSynced }: DashboardHeaderP
         <Button
           onClick={onRefresh}
           disabled={refreshing}
-          className="flex items-center gap-2 rounded-lg bg-white px-6 py-2.5 text-blue-700 shadow-lg transition-colors hover:bg-blue-50"
+          className="flex items-center gap-2 rounded-lg bg-white px-6 py-2.5 text-stone-700 shadow-lg transition-colors hover:bg-stone-50"
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Syncing...' : 'Sync Now'}
@@ -232,10 +250,10 @@ interface ConnectionStatusProps {
 function ConnectionStatus({ shopUrl }: ConnectionStatusProps) {
   if (!shopUrl) return null;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-6 py-4 text-sm text-gray-700 shadow-sm">
+    <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-6 py-4 text-sm text-gray-700 shadow-sm">
       <div className="flex-shrink-0">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-          <Zap className="h-5 w-5 text-blue-600" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
+          <Zap className="h-5 w-5 text-stone-600" />
         </div>
       </div>
       <div className="flex-1 space-y-1">
@@ -246,7 +264,7 @@ function ConnectionStatus({ shopUrl }: ConnectionStatusProps) {
         </div>
         <p className="text-xs text-gray-600">All systems operational</p>
       </div>
-      <Button variant="ghost" className="text-blue-600 hover:text-blue-700">
+      <Button variant="ghost" className="text-stone-600 hover:text-stone-700">
         Manage
       </Button>
     </div>
@@ -322,10 +340,10 @@ function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
           <ShoppingBag className="h-5 w-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">Recent Orders</h2>
           {orders.length > 0 ? (
-            <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">{orders.length} New</span>
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">{orders.length} New</span>
           ) : null}
         </div>
-        <Button variant="ghost" className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
+        <Button variant="ghost" className="flex items-center gap-1 text-sm font-medium text-stone-600 hover:text-stone-700">
           View All Orders
           <ArrowRight className="h-4 w-4" />
         </Button>
@@ -352,7 +370,7 @@ function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
                 <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                   Status
                 </TableHead>
-                <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                <TableHead className="hidden md:table-cell px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                   Date
                 </TableHead>
               </TableRow>
@@ -382,7 +400,7 @@ function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
                       {order.financial_status ?? 'pending'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="px-6 py-4 text-sm text-gray-600">
+                  <TableCell className="hidden md:table-cell px-6 py-4 text-sm text-gray-600">
                     {formatDateLabel(order.created_at)}
                   </TableCell>
                 </TableRow>
@@ -480,7 +498,7 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
         ) : (
           customers.slice(0, 5).map(customer => (
             <div key={customer.id} className="flex items-center gap-4 rounded-lg border border-transparent p-4 hover:border-gray-200 hover:bg-gray-50">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-semibold text-white">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-stone-500 to-stone-700 text-sm font-semibold text-white">
                 {formatCustomerInitials(customer)}
               </div>
               <div className="flex-1">
@@ -528,7 +546,7 @@ function InventoryLocationsCard({ locations }: InventoryLocationsCardProps) {
           locations.slice(0, 4).map(location => (
             <div
               key={location.id}
-              className="space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:border-blue-200 hover:bg-blue-50"
+              className="space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:border-stone-200 hover:bg-stone-50"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-900">{location.name}</h3>
@@ -643,6 +661,97 @@ function AbandonedCartsCard({ checkouts }: AbandonedCartsCardProps) {
   );
 }
 
+interface CampaignPerformanceCardProps {
+  campaignAnalytics: CampaignAnalytics;
+}
+
+function CampaignPerformanceCard({ campaignAnalytics }: CampaignPerformanceCardProps) {
+  const hasData = campaignAnalytics.totalCampaigns > 0;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-stone-50 to-amber-50 px-6 py-4">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-amber-600" />
+          <h2 className="text-lg font-semibold text-gray-900">WhatsApp Campaign Performance</h2>
+        </div>
+        {hasData && (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+            {campaignAnalytics.totalCampaigns} Campaigns
+          </span>
+        )}
+      </div>
+      <div className="p-6">
+        {!hasData ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+            <MessageSquare className="h-12 w-12 text-gray-300" />
+            <p className="text-sm font-medium text-gray-700">No campaigns yet</p>
+            <p className="text-xs text-gray-500">Create your first WhatsApp campaign to see performance metrics here.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                  <Send className="h-3.5 w-3.5" />
+                  Messages Sent
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {campaignAnalytics.totalMessagesSent.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Delivery Rate
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {campaignAnalytics.deliveryRate}%
+                </p>
+              </div>
+              <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                  <Eye className="h-3.5 w-3.5" />
+                  Read Rate
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {campaignAnalytics.readRate}%
+                </p>
+              </div>
+              <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  Conversion Rate
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">
+                  {campaignAnalytics.conversionRate}%
+                </p>
+              </div>
+            </div>
+
+            {campaignAnalytics.campaignRevenue > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-amber-600">Revenue from Campaigns</p>
+                    <p className="mt-1 text-2xl font-bold text-amber-900">
+                      {formatCurrency(campaignAnalytics.campaignRevenue)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-amber-600">{campaignAnalytics.totalConverted} conversions</p>
+                    <p className="text-xs text-amber-500">from {campaignAnalytics.totalMessagesSent.toLocaleString('en-IN')} messages</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -681,7 +790,7 @@ function DashboardContent() {
         const refreshParam = isRefresh ? '&refresh=true' : '';
 
         // Fetch all data with proper error handling
-        const [analyticsRes, ordersRes, productsRes, customersRes, locationsRes, checkoutsRes] =
+        const [analyticsRes, ordersRes, productsRes, customersRes, locationsRes, checkoutsRes, campaignAnalyticsRes] =
           await Promise.allSettled([
             fetchWithConfig(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, {
               cache: 'no-store',
@@ -701,6 +810,7 @@ function DashboardContent() {
             fetchWithConfig(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
+            fetch(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
           ]);
 
         // Helper: get Response from Promise.allSettled; return null if failed/rejected so we can use fallback without throwing
@@ -798,6 +908,23 @@ function DashboardContent() {
           }
         }
 
+        const defaultCampaignAnalytics: CampaignAnalytics = {
+          totalCampaigns: 0, totalMessagesSent: 0, totalDelivered: 0,
+          totalOpened: 0, totalClicked: 0, totalConverted: 0,
+          campaignRevenue: 0, deliveryRate: 0, readRate: 0, conversionRate: 0,
+        };
+        let campaignAnalytics: CampaignAnalytics;
+        const campaignAnalyticsResSafe = getResponseSafe(campaignAnalyticsRes, 'campaignAnalytics');
+        if (!campaignAnalyticsResSafe) {
+          campaignAnalytics = defaultCampaignAnalytics;
+        } else {
+          try {
+            campaignAnalytics = await campaignAnalyticsResSafe.json();
+          } catch {
+            campaignAnalytics = defaultCampaignAnalytics;
+          }
+        }
+
         const lastSynced = Math.max(
           analytics.lastSynced ?? 0,
           ordersData.lastSynced ?? 0,
@@ -815,6 +942,7 @@ function DashboardContent() {
           customers: customersData.customers ?? [],
           locations: locationsData.locations ?? [],
           checkouts: checkoutsData.checkouts ?? [],
+          campaignAnalytics,
           lastSynced,
         };
 
@@ -862,6 +990,11 @@ function DashboardContent() {
           customers: cachedCustomers ?? [],
           locations: cachedLocations ?? [],
           checkouts: cachedCheckouts ?? [],
+          campaignAnalytics: {
+            totalCampaigns: 0, totalMessagesSent: 0, totalDelivered: 0,
+            totalOpened: 0, totalClicked: 0, totalConverted: 0,
+            campaignRevenue: 0, deliveryRate: 0, readRate: 0, conversionRate: 0,
+          },
           lastSynced: cachedLastSynced ?? cachedAnalytics.lastSynced ?? undefined,
         });
         setLoading(false);
@@ -949,7 +1082,7 @@ function DashboardContent() {
               subtitle="vs last week"
               icon={DollarSign}
               trend={data.analytics.revenueGrowth}
-              accent="blue"
+              accent="warm"
             />
             <MetricCard
               title="Total Orders"
@@ -957,24 +1090,28 @@ function DashboardContent() {
               subtitle="Total orders processed"
               icon={ShoppingCart}
               trend={data.analytics.ordersGrowth}
-              accent="emerald"
+              accent="sand"
             />
             <MetricCard
               title="Total Customers"
               value={data.analytics.totalCustomers.toLocaleString('en-IN')}
               subtitle="Active customers"
               icon={Users}
-              accent="purple"
+              accent="clay"
             />
             <MetricCard
               title="Average Order Value"
               value={formatCurrency(data.analytics.averageOrderValue)}
               subtitle="Per transaction"
               icon={TrendingUp}
-              accent="amber"
+              accent="taupe"
             />
           </div>
         ) : null}
+
+        {data?.campaignAnalytics && (
+          <CampaignPerformanceCard campaignAnalytics={data.campaignAnalytics} />
+        )}
 
         <div className="space-y-6 animate-fade-in">
           <RecentOrdersTable orders={data?.orders ?? []} />
