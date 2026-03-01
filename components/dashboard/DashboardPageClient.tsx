@@ -757,6 +757,7 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [settingsStatus, setSettingsStatus] = useState<{ shopifyConfigured: boolean; whatsappConfigured: boolean; settingsCompleted: boolean; missingConfigs: string[] } | null>(null);
   const router = useRouter();
   const dataRef = useRef<DashboardData | null>(null);
@@ -815,9 +816,11 @@ function DashboardContent() {
           ]);
 
         // Helper: get Response from Promise.allSettled; return null if failed/rejected so we can use fallback without throwing
+        let failedCalls = 0;
+        let lastErrorStatus = 0;
         const getResponseSafe = (result: PromiseSettledResult<Response>, name: string): Response | null => {
-          if (result.status === 'rejected') return null;
-          if (!result.value.ok) return null;
+          if (result.status === 'rejected') { failedCalls++; return null; }
+          if (!result.value.ok) { failedCalls++; lastErrorStatus = result.value.status; return null; }
           return result.value;
         };
 
@@ -947,6 +950,17 @@ function DashboardContent() {
           lastSynced,
         };
 
+        // Track API failures — 6 Shopify calls (exclude campaign analytics)
+        if (failedCalls >= 6) {
+          if (lastErrorStatus === 401 || lastErrorStatus === 403) {
+            setApiError('Invalid Shopify credentials. Please check your Access Token in Settings.');
+          } else {
+            setApiError('Could not fetch data from Shopify. Please verify your store credentials in Settings.');
+          }
+        } else {
+          setApiError(null);
+        }
+
         setData(payload);
 
         if (storage) {
@@ -960,6 +974,7 @@ function DashboardContent() {
         }
       } catch (error) {
         console.error('Error loading dashboard:', getErrorMessage(error, 'Unknown error'));
+        setApiError('Failed to load dashboard data. Please check your Shopify credentials in Settings.');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -1053,6 +1068,7 @@ function DashboardContent() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600 mx-auto mb-4" />
           <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
@@ -1069,6 +1085,18 @@ function DashboardContent() {
           <SettingsIncompleteBanner missingConfigs={settingsStatus.missingConfigs} />
         )}
         <ConnectionStatus shopUrl={config?.shopUrl} />
+
+        {apiError && (
+          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm shadow-sm">
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-800">{apiError}</p>
+              <p className="text-red-600 mt-1">
+                Go to <a href="/settings?setup=true" className="underline font-medium">Settings</a> to verify your Shopify store URL and Access Token.
+              </p>
+            </div>
+          </div>
+        )}
 
         {data?.analytics ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
