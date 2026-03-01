@@ -21,17 +21,20 @@ export default function LogoutButton({
 
   const handleLogout = async () => {
     setIsLoading(true);
-    
+
     try {
-      await signOut({
-        callbackUrl: '/auth/signin',
-        redirect: true,
-      });
-      toast.success('Logged out successfully');
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+
+      // Use redirect: false — signOut with redirect: true is unreliable on mobile browsers
+      await signOut({ redirect: false });
     } catch (error) {
       console.error('Logout error:', error);
-      toast.error('Failed to logout');
-      setIsLoading(false);
+    } finally {
+      // Always force redirect — works reliably on both desktop and mobile
+      window.location.href = '/auth/signin';
     }
   };
 

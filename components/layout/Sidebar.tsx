@@ -73,17 +73,14 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
         sessionStorage.clear();
       }
 
-      await signOut({
-        callbackUrl: '/auth/signin',
-        redirect: true,
-      });
-
-      toast.success('Signed out successfully!', { id: 'signout' });
+      // Use redirect: false — signOut with redirect: true is unreliable on mobile browsers
+      await signOut({ redirect: false });
     } catch (error) {
       console.error('[SignOut] Error:', error);
-      toast.error('Error signing out', { id: 'signout' });
-      setIsSigningOut(false);
-      window.location.replace('/auth/signin');
+    } finally {
+      // Always force redirect — works reliably on both desktop and mobile
+      toast.dismiss('signout');
+      window.location.href = '/auth/signin';
     }
   };
 

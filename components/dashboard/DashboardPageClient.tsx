@@ -781,7 +781,8 @@ function DashboardContent() {
         const config = StoreConfigManager.getConfig();
 
         if (!config || !config.shopUrl || !config.accessToken) {
-          window.location.href = '/settings?setup=true';
+          // ConfigurationGuard handles the unconfigured state UI — just stop loading
+          setLoading(false);
           return;
         }
 
@@ -1023,12 +1024,7 @@ function DashboardContent() {
     }
   }, [isMounted]);
 
-  // Redirect to setup when settings are incomplete (full page so session is applied)
-  useEffect(() => {
-    if (isMounted && settingsStatus && !settingsStatus.settingsCompleted) {
-      window.location.href = '/settings?setup=true';
-    }
-  }, [isMounted, settingsStatus]);
+  // Note: ConfigurationGuard handles the unconfigured state UI, no redirect needed here
 
   // Initial load
   useEffect(() => {

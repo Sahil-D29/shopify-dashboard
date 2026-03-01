@@ -78,7 +78,7 @@ function SignInForm() {
                 callbackUrl !== '/onboarding' &&
                 !callbackUrl.startsWith('/auth') &&
                 callbackUrl.startsWith('/');
-              targetUrl = validCallback ? callbackUrl : '/dashboard';
+              targetUrl = validCallback ? callbackUrl : '/';
             } else {
               targetUrl = '/settings?setup=true';
             }

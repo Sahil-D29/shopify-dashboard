@@ -76,14 +76,6 @@ export function ConfigurationGuard({
       const config = StoreConfigManager.getConfig();
       const configured = !!(config?.shopUrl && config?.accessToken);
       setIsConfigured(configured);
-
-      // Only redirect to settings if user IS authenticated but NOT configured
-      if (!configured && pathname !== '/settings' && status === 'authenticated') {
-        const setupParam = searchParams.get('setup');
-        if (!setupParam) {
-          window.location.href = '/settings?setup=true';
-        }
-      }
     });
 
     return () => cancelAnimationFrame(frame);
@@ -118,7 +110,7 @@ export function ConfigurationGuard({
     return <>{children}</>;
   }
 
-  // Show error state if not configured
+  // Show setup prompt if not configured
   if (!isConfigured && pathname !== '/settings') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
@@ -126,16 +118,16 @@ export function ConfigurationGuard({
           <CardHeader>
             <div className="flex items-center gap-3">
               <AlertCircle className="h-6 w-6 text-yellow-500" />
-              <CardTitle>Configuration Required</CardTitle>
+              <CardTitle>Connect Your Shopify Store</CardTitle>
             </div>
             <CardDescription>
-              Please configure your Shopify store credentials to access this page.
+              You need to connect your Shopify store before you can use the dashboard.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-6">
-              You need to set up your Shopify store connection before accessing this page.
-              Click the button below to go to Settings and configure your store.
+              Head over to Settings to connect your Shopify store and configure WhatsApp.
+              Once connected, your dashboard will be ready to use.
             </p>
             <Link href="/settings?setup=true">
               <Button className="w-full">
