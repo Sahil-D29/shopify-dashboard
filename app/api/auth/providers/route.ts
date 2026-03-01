@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * GET /api/auth/providers
@@ -7,8 +7,9 @@ import { NextResponse } from 'next/server';
  * NextAuth client expects: { [providerId]: { id, name, type } }.
  * Include credentials so manual sign-in/sign-up can use signIn('credentials').
  * Also include googleEnabled for backward compatibility with UI checks.
+ * Returns googleCallbackUrl so the UI can help diagnose redirect_uri_mismatch errors.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const googleEnabled = !!(
     process.env.GOOGLE_CLIENT_ID &&
     process.env.GOOGLE_CLIENT_SECRET
@@ -16,8 +17,18 @@ export async function GET() {
   const providers: Record<string, { id: string; name: string; type: string }> = {
     credentials: { id: 'credentials', name: 'Credentials', type: 'credentials' },
   };
+
+  // Compute the Google callback URL that NextAuth will use, so the UI can help
+  // diagnose redirect_uri_mismatch errors.
+  let googleCallbackUrl: string | undefined;
   if (googleEnabled) {
     providers.google = { id: 'google', name: 'Google', type: 'oauth' };
+    const baseUrl =
+      process.env.AUTH_URL ||
+      process.env.NEXTAUTH_URL ||
+      `${request.nextUrl.protocol}//${request.headers.get('host')}`;
+    googleCallbackUrl = `${baseUrl.replace(/\/$/, '')}/api/auth/callback/google`;
   }
-  return NextResponse.json({ ...providers, googleEnabled });
+
+  return NextResponse.json({ ...providers, googleEnabled, googleCallbackUrl });
 }

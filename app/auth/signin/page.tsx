@@ -37,10 +37,15 @@ function SignInForm() {
   const error = searchParams.get('error');
   const resetSuccess = searchParams.get('reset');
 
+  const [googleCallbackUrl, setGoogleCallbackUrl] = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/api/auth/providers')
       .then((r) => r.json())
-      .then((data) => setGoogleEnabled(!!data?.googleEnabled))
+      .then((data) => {
+        setGoogleEnabled(!!data?.googleEnabled);
+        if (data?.googleCallbackUrl) setGoogleCallbackUrl(data.googleCallbackUrl);
+      })
       .catch(() => setGoogleEnabled(false));
   }, []);
 
@@ -95,8 +100,8 @@ function SignInForm() {
         'Configuration': 'Server configuration error. Please contact support.',
         'AccessDenied': 'Access denied. You may not have permission to sign in.',
         'Verification': 'The verification link may have expired or already been used.',
-        'OAuthSignin': 'Error starting the sign-in process. Please try again.',
-        'OAuthCallback': 'Error during sign-in callback. Please try again.',
+        'OAuthSignin': 'Google sign-in failed — the OAuth redirect URI may not be configured correctly. Check NEXTAUTH_URL in .env.local and the authorized redirect URIs in Google Cloud Console.',
+        'OAuthCallback': 'Google sign-in callback failed. The redirect URI may not match Google Cloud Console settings. Check NEXTAUTH_URL and authorized redirect URIs.',
         'OAuthCreateAccount': 'Could not create account. Please try again.',
         'EmailCreateAccount': 'Could not create account. Please try again.',
         'Callback': 'Error during callback. Please try again.',
@@ -104,7 +109,7 @@ function SignInForm() {
         'CredentialsSignin': 'Invalid email or password. Please check your credentials.',
         'Default': 'An error occurred. Please try again.',
       };
-      
+
       toast.error(errorMessages[error] || errorMessages['Default']);
     }
   }, [error]);
@@ -221,11 +226,18 @@ function SignInForm() {
                 </svg>
                 <div>
                   <p className="text-sm font-medium text-red-800">
-                    {error === 'CredentialsSignin' ? 'Invalid email or password' : 
+                    {error === 'CredentialsSignin' ? 'Invalid email or password' :
                      error === 'Configuration' ? 'Server configuration error. Please contact support.' :
                      error === 'AccessDenied' ? 'Access denied. You may not have permission to sign in.' :
+                     error === 'OAuthSignin' ? 'Google sign-in failed. The OAuth redirect URI may not be configured correctly.' :
+                     error === 'OAuthCallback' ? 'Google sign-in callback failed. Check that the redirect URI matches Google Cloud Console settings.' :
                      'An error occurred. Please try again.'}
                   </p>
+                  {(error === 'OAuthSignin' || error === 'OAuthCallback') && googleCallbackUrl && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Expected callback URL: <code className="bg-red-100 px-1 rounded">{googleCallbackUrl}</code>
+                    </p>
+                  )}
                 </div>
               </div>
             )}

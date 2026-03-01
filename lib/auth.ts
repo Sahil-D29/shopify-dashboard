@@ -74,9 +74,31 @@ async function checkAndActivatePendingUser(email: string) {
   }
 }
 
+// Ensure AUTH_URL is set for NextAuth v5 — it uses AUTH_URL to construct OAuth callback URIs.
+// Without it, redirect_uri_mismatch errors occur because NextAuth cannot determine the correct callback URL.
+// Resolve from: AUTH_URL > NEXTAUTH_URL > NEXT_PUBLIC_APP_URL > RENDER_EXTERNAL_URL
+if (!process.env.AUTH_URL) {
+  const resolvedUrl =
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.RENDER_EXTERNAL_URL;
+  if (resolvedUrl) {
+    process.env.AUTH_URL = resolvedUrl.replace(/\/$/, '');
+    console.log(`[Auth] AUTH_URL resolved to: ${process.env.AUTH_URL}`);
+  }
+}
+
 // Build providers: add Google only when credentials are set (avoids crash when env is missing)
 const providers: NextAuthConfig['providers'] = [];
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  if (!process.env.AUTH_URL) {
+    console.warn(
+      '⚠️  [Auth] AUTH_URL could not be resolved. Google OAuth will likely fail with redirect_uri_mismatch.\n' +
+      '   Set NEXTAUTH_URL in .env.local (e.g. NEXTAUTH_URL=http://localhost:3002)\n' +
+      '   On Render, set NEXTAUTH_URL to your app URL (e.g. https://your-app.onrender.com)\n' +
+      '   See docs/GOOGLE_SIGNIN_SETUP.md for full setup instructions.'
+    );
+  }
   providers.push(
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
