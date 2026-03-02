@@ -4,8 +4,8 @@ import { getWindowStorage } from './window-storage';
 export interface ShopifyConfig {
   shopUrl: string;
   accessToken: string;
-  apiKey: string;
-  apiSecret: string;
+  apiKey?: string;
+  apiSecret?: string;
 }
 
 const CONFIG_STORAGE_KEY = 'shopify_store_config';
@@ -106,15 +106,12 @@ export class StoreConfigManager {
   static isValidConfig(config: unknown): config is ShopifyConfig {
     if (!config || typeof config !== 'object') return false;
     const candidate = config as Partial<ShopifyConfig>;
+    // Only shopUrl + accessToken are required (OAuth-connected stores don't need apiKey/apiSecret)
     return (
       typeof candidate.shopUrl === 'string' &&
       typeof candidate.accessToken === 'string' &&
-      typeof candidate.apiKey === 'string' &&
-      typeof candidate.apiSecret === 'string' &&
       candidate.shopUrl.length > 0 &&
       candidate.accessToken.length > 0 &&
-      candidate.apiKey.length > 0 &&
-      candidate.apiSecret.length > 0 &&
       this.validateShopUrl(candidate.shopUrl)
     );
   }
