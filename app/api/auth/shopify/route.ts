@@ -33,7 +33,13 @@ export async function GET(request: NextRequest) {
     const session = await auth();
 
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized — please sign in first' }, { status: 401 });
+    }
+
+    // Validate API key is configured
+    if (!SHOPIFY_API_KEY) {
+      console.error('[Shopify OAuth] SHOPIFY_API_KEY is not set');
+      return NextResponse.json({ error: 'Shopify app not configured — set SHOPIFY_API_KEY' }, { status: 500 });
     }
 
     const { searchParams } = request.nextUrl;
@@ -62,6 +68,14 @@ export async function GET(request: NextRequest) {
 
     const baseUrl = getBaseUrl();
     const redirectUri = `${baseUrl}/api/auth/shopify/callback`;
+
+    console.log('[Shopify OAuth] Generating install URL:', {
+      shop: normalizedShop,
+      baseUrl,
+      redirectUri,
+      returnTo,
+    });
+
     const installUrl = new URL(`https://${normalizedShop}/admin/oauth/authorize`);
     installUrl.searchParams.set('client_id', SHOPIFY_API_KEY);
     installUrl.searchParams.set('scope', SHOPIFY_SCOPES);
@@ -73,10 +87,13 @@ export async function GET(request: NextRequest) {
       shop: normalizedShop,
     });
 
+    // Determine cookie security — use secure only when base URL is https
+    const useSecureCookie = baseUrl.startsWith('https');
+
     // Store state in httpOnly cookie for verification in callback
     response.cookies.set('shopify_oauth_state', state, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: useSecureCookie,
       sameSite: 'lax',
       maxAge: 600, // 10 minutes
     });
@@ -85,7 +102,7 @@ export async function GET(request: NextRequest) {
     if (returnTo) {
       response.cookies.set('shopify_oauth_return_to', returnTo, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: useSecureCookie,
         sameSite: 'lax',
         maxAge: 600,
       });
@@ -93,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Error generating Shopify OAuth URL:', error);
+    console.error('[Shopify OAuth] Error generating install URL:', error);
     return NextResponse.json({ error: 'Failed to generate OAuth URL' }, { status: 500 });
   }
 }
@@ -107,11 +124,14 @@ export async function POST(request: NextRequest) {
     const session = await auth();
 
     if (!session?.user) {
+      console.warn('[Shopify OAuth POST] No session');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     const { code, shop, state } = body;
+
+    console.log('[Shopify OAuth POST] Starting token exchange for:', shop);
 
     if (!code || !shop || !state) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -120,10 +140,18 @@ export async function POST(request: NextRequest) {
     // Verify state
     const storedState = request.cookies.get('shopify_oauth_state')?.value;
     if (!storedState || storedState !== state) {
+      console.error('[Shopify OAuth POST] State mismatch — stored:', !!storedState);
       return NextResponse.json({ error: 'Invalid state parameter' }, { status: 400 });
     }
 
+    // Validate secrets are present
+    if (!SHOPIFY_API_KEY || !SHOPIFY_API_SECRET) {
+      console.error('[Shopify OAuth POST] Missing SHOPIFY_API_KEY or SHOPIFY_API_SECRET');
+      return NextResponse.json({ error: 'Shopify app credentials not configured' }, { status: 500 });
+    }
+
     // ── 1. Exchange code for access token ──────────────────────────────
+    console.log('[Shopify OAuth POST] Exchanging code for token at:', `https://${shop}/admin/oauth/access_token`);
     const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,12 +163,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json().catch(() => ({}));
-      console.error('Shopify token exchange error:', errorData);
-      return NextResponse.json({ error: 'Failed to exchange code for token' }, { status: 500 });
+      const errorText = await tokenResponse.text().catch(() => '');
+      console.error('[Shopify OAuth POST] Token exchange failed:', tokenResponse.status, errorText);
+      return NextResponse.json(
+        { error: `Token exchange failed (${tokenResponse.status}): ${errorText || 'Unknown error'}` },
+        { status: 500 },
+      );
     }
 
     const { access_token, scope } = await tokenResponse.json();
+    console.log('[Shopify OAuth POST] Token received, scope:', scope);
 
     // ── 2. Fetch shop info ─────────────────────────────────────────────
     const shopResponse = await fetch(
@@ -160,6 +192,7 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-zA-Z0-9]/g, '_')}`;
 
     // Ensure owner exists in Prisma
+    console.log('[Shopify OAuth POST] Upserting user:', session.user.email);
     const owner = await prisma.user.upsert({
       where: { email: session.user.email! },
       update: {
@@ -255,7 +288,8 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Error completing Shopify OAuth:', error);
-    return NextResponse.json({ error: 'Failed to complete OAuth flow' }, { status: 500 });
+    console.error('[Shopify OAuth POST] Unhandled error:', error);
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: `OAuth failed: ${msg}` }, { status: 500 });
   }
 }

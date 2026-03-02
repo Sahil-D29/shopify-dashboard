@@ -6,18 +6,30 @@ import { prisma } from '@/lib/prisma';
 /**
  * GET /api/store/status
  * Returns the current user's Shopify store connection status.
+ * Looks up Prisma user by email (session.user.id is NextAuth id,
+ * which may differ from the Prisma user id).
  */
 export async function GET() {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
+      return NextResponse.json({ connected: false, store: null });
+    }
+
+    // Resolve the Prisma user id from the session email
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (!user) {
       return NextResponse.json({ connected: false, store: null });
     }
 
     // Find a store owned by this user that has a real Shopify domain
     const store = await prisma.store.findFirst({
       where: {
-        ownerId: session.user.id,
+        ownerId: user.id,
         isActive: true,
         shopifyDomain: { not: { startsWith: 'default-' } },
       },
@@ -43,7 +55,7 @@ export async function GET() {
         domain: store.shopifyDomain,
         name: store.storeName,
         scope: store.scope,
-        connectedAt: store.installedAt.toISOString(),
+        connectedAt: store.installedAt?.toISOString() || new Date().toISOString(),
       },
     });
   } catch (error) {

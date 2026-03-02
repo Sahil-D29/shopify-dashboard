@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 
 /**
  * GET /api/auth/shopify/callback
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
     const session = await auth();
 
     if (!session?.user) {
+      console.warn('[Shopify Callback] No session — redirecting to sign-in');
       const loginUrl = new URL('/auth/signin', request.url);
       loginUrl.searchParams.set('callbackUrl', request.url);
       return NextResponse.redirect(loginUrl);
@@ -25,32 +27,40 @@ export async function GET(request: NextRequest) {
 
     // Where should we go after success? (set during GET /api/auth/shopify)
     const returnTo = request.cookies.get('shopify_oauth_return_to')?.value;
+    const destPath = returnTo === 'onboarding' ? '/onboarding' : '/settings';
+
+    console.log('[Shopify Callback] Params:', { code: !!code, shop, state: !!state, error, returnTo });
 
     // Handle OAuth errors from Shopify
     if (error) {
-      console.error('Shopify OAuth error:', error);
-      const errorUrl = new URL(returnTo === 'onboarding' ? '/onboarding' : '/settings', request.url);
+      console.error('[Shopify Callback] Shopify returned error:', error);
+      const errorUrl = new URL(destPath, request.url);
       errorUrl.searchParams.set('error', 'shopify_oauth_failed');
       errorUrl.searchParams.set('message', error);
       return NextResponse.redirect(errorUrl);
     }
 
     if (!code || !shop || !state) {
-      const errorUrl = new URL(returnTo === 'onboarding' ? '/onboarding' : '/settings', request.url);
+      console.error('[Shopify Callback] Missing params — code:', !!code, 'shop:', !!shop, 'state:', !!state);
+      const errorUrl = new URL(destPath, request.url);
       errorUrl.searchParams.set('error', 'missing_parameters');
       return NextResponse.redirect(errorUrl);
     }
 
-    // Verify state
+    // Verify state — check cookie first
     const storedState = request.cookies.get('shopify_oauth_state')?.value;
     if (!storedState || storedState !== state) {
-      const errorUrl = new URL(returnTo === 'onboarding' ? '/onboarding' : '/settings', request.url);
+      console.error('[Shopify Callback] State mismatch — stored:', !!storedState, 'matches:', storedState === state);
+      const errorUrl = new URL(destPath, request.url);
       errorUrl.searchParams.set('error', 'invalid_state');
+      errorUrl.searchParams.set('message', storedState ? 'State mismatch' : 'State cookie missing (check HTTPS/cookie settings)');
       return NextResponse.redirect(errorUrl);
     }
 
-    // Call our POST endpoint to complete the token exchange + DB save
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
+    // Use consistent base URL — same function used in the GET route
+    const baseUrl = getBaseUrl() || request.nextUrl.origin;
+    console.log('[Shopify Callback] Calling POST /api/auth/shopify with baseUrl:', baseUrl);
+
     const oauthResponse = await fetch(`${baseUrl}/api/auth/shopify`, {
       method: 'POST',
       headers: {
@@ -62,7 +72,8 @@ export async function GET(request: NextRequest) {
 
     if (!oauthResponse.ok) {
       const errorData = await oauthResponse.json().catch(() => ({}));
-      const errorUrl = new URL(returnTo === 'onboarding' ? '/onboarding' : '/settings', request.url);
+      console.error('[Shopify Callback] POST failed:', oauthResponse.status, errorData);
+      const errorUrl = new URL(destPath, request.url);
       errorUrl.searchParams.set('error', 'oauth_failed');
       errorUrl.searchParams.set('message', (errorData as { error?: string }).error || 'Failed to complete OAuth');
       return NextResponse.redirect(errorUrl);
@@ -75,9 +86,10 @@ export async function GET(request: NextRequest) {
       accessToken: string;
     };
 
+    console.log('[Shopify Callback] OAuth success — storeId:', data.storeId, 'domain:', data.shopDomain);
+
     // Redirect to the right place
-    const successPath = returnTo === 'onboarding' ? '/onboarding' : '/settings';
-    const successUrl = new URL(successPath, request.url);
+    const successUrl = new URL(destPath, request.url);
     successUrl.searchParams.set('success', 'shopify_connected');
     successUrl.searchParams.set('storeId', data.storeId);
     successUrl.searchParams.set('shopDomain', data.shopDomain);
@@ -100,9 +112,10 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Error in Shopify OAuth callback:', error);
+    console.error('[Shopify Callback] Unhandled error:', error);
     const errorUrl = new URL('/settings', request.url);
     errorUrl.searchParams.set('error', 'callback_error');
+    errorUrl.searchParams.set('message', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.redirect(errorUrl);
   }
 }
