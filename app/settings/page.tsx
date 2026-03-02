@@ -396,8 +396,6 @@ function SettingsContent() {
     if (!shopifyConfig.shopUrl.trim()) newErrors.shopUrl = 'Shop URL is required';
     else if (!StoreConfigManager.validateShopUrl(shopifyConfig.shopUrl)) newErrors.shopUrl = 'Please enter a valid .myshopify.com domain';
     if (!shopifyConfig.accessToken.trim()) newErrors.accessToken = 'Access token is required';
-    if (!shopifyConfig.apiKey.trim()) newErrors.apiKey = 'API Key is required';
-    if (!shopifyConfig.apiSecret.trim()) newErrors.apiSecret = 'API Secret is required';
     setShopifyErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -1094,7 +1092,7 @@ function SettingsContent() {
                           <label className="block text-sm font-semibold text-gray-700 mb-1">API Key *</label>
                           <input
                             type="text"
-                            value={shopifyConfig.apiKey}
+                            value={shopifyConfig.apiKey || ''}
                             onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiKey: e.target.value }))}
                             className={`w-full px-3 py-2 text-sm border rounded-lg ${shopifyErrors.apiKey ? 'border-red-500' : 'border-gray-300'}`}
                             placeholder="xxxxx"
@@ -1106,7 +1104,7 @@ function SettingsContent() {
                           <div className="relative">
                             <input
                               type={showShopifySecret ? 'text' : 'password'}
-                              value={shopifyConfig.apiSecret}
+                              value={shopifyConfig.apiSecret || ''}
                               onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiSecret: e.target.value }))}
                               className={`w-full px-3 py-2 pr-10 text-sm border rounded-lg ${shopifyErrors.apiSecret ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="xxxxx"

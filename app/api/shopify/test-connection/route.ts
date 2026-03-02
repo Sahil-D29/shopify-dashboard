@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate the configuration
-    if (!config.shopUrl || !config.accessToken || !config.apiKey || !config.apiSecret) {
+    if (!config.shopUrl || !config.accessToken) {
       return NextResponse.json(
         { success: false, message: 'Missing required configuration fields' },
         { status: 400 }

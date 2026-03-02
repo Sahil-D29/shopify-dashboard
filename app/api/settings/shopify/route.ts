@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Validate required fields
-    if (!config.shopUrl || !config.accessToken || !config.apiKey || !config.apiSecret) {
+    if (!config.shopUrl || !config.accessToken) {
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
         { status: 400 }
