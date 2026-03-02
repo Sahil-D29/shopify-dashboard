@@ -5,6 +5,7 @@ import { saveStore } from '@/lib/store';
 import type { ShopifyConfig } from '@/lib/store-config';
 import { prisma } from '@/lib/prisma';
 import { UserStatus, UserRole } from '@prisma/client';
+import { encryptToken } from '@/lib/shopify-token';
 
 /**
  * POST /api/settings/shopify
@@ -90,6 +91,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Encrypt access token before storing
+    let encryptedAccessToken: string;
+    try {
+      encryptedAccessToken = encryptToken(config.accessToken);
+    } catch {
+      console.warn('[Shopify Settings] Token encryption failed, storing plain text');
+      encryptedAccessToken = config.accessToken;
+    }
+
     // If user has a "default" store (created when they saved WhatsApp first), upgrade it to this Shopify store so WhatsApp stays linked (one store for both)
     const defaultStore = await prisma.store.findFirst({
       where: {
@@ -109,7 +119,7 @@ export async function POST(request: NextRequest) {
           shopifyDomain: config.shopUrl,
           shopifyStoreId,
           storeName: shopName,
-          accessToken: config.accessToken,
+          accessToken: encryptedAccessToken,
           scope: 'read_products,read_orders,read_customers',
           isActive: true,
         },
@@ -119,7 +129,7 @@ export async function POST(request: NextRequest) {
         where: { shopifyDomain: config.shopUrl },
         update: {
           storeName: shopName,
-          accessToken: config.accessToken,
+          accessToken: encryptedAccessToken,
           scope: 'read_products,read_orders,read_customers',
           isActive: true,
           ownerId: owner.id,
@@ -128,7 +138,7 @@ export async function POST(request: NextRequest) {
           shopifyDomain: config.shopUrl,
           shopifyStoreId,
           storeName: shopName,
-          accessToken: config.accessToken,
+          accessToken: encryptedAccessToken,
           scope: 'read_products,read_orders,read_customers',
           isActive: true,
           ownerId: owner.id,

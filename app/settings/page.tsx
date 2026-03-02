@@ -94,6 +94,13 @@ function SettingsContent() {
   const [shopifyErrors, setShopifyErrors] = useState<Record<string, string>>({});
   const [isSetupMode, setIsSetupMode] = useState(false);
 
+  // OAuth connect state
+  const [storeConnected, setStoreConnected] = useState(false);
+  const [connectedStore, setConnectedStore] = useState<{ id: string; domain: string; name: string; connectedAt: string } | null>(null);
+  const [oauthShopDomain, setOauthShopDomain] = useState('');
+  const [oauthConnecting, setOauthConnecting] = useState(false);
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+
   // WhatsApp state
   const [whatsappConfig, setWhatsappConfig] = useState<WhatsAppConfig>({
     wabaId: '',
@@ -296,23 +303,54 @@ function SettingsContent() {
     
     // Handle OAuth success/error
     if (successParam === 'shopify_connected') {
+      // Save config from OAuth callback params to localStorage
+      const shopDomainParam = searchParams.get('shopDomain');
+      const tokenParam = searchParams.get('token');
+      const shopNameParam = searchParams.get('shopName');
+      if (shopDomainParam && tokenParam) {
+        try {
+          StoreConfigManager.saveConfig({
+            shopUrl: shopDomainParam,
+            accessToken: tokenParam,
+            apiKey: process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || '',
+            apiSecret: '',
+          });
+          setShopifyConfig({ shopUrl: shopDomainParam, accessToken: tokenParam, apiKey: '', apiSecret: '' });
+        } catch { /* ignore */ }
+      }
       toast.success('Store connected successfully!');
       refreshStores();
       setActiveTab('shopify');
+      setActiveSection('shop');
+      // Clean URL
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.search = isSetupMode ? '?setup=true' : '';
+      window.history.replaceState({}, '', cleanUrl.toString());
     } else if (errorParam) {
       toast.error(`Connection failed: ${searchParams.get('message') || errorParam}`);
       setActiveTab('shopify');
     }
 
-    // Load Shopify config
+    // Load Shopify config from localStorage
     const existingShopify = StoreConfigManager.getConfig();
     if (existingShopify) {
       setShopifyConfig(existingShopify);
     }
 
+    // Check store connection status from server
+    fetch('/api/store/status')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.connected && data.store) {
+          setStoreConnected(true);
+          setConnectedStore(data.store);
+        }
+      })
+      .catch(() => {});
+
     // Load WhatsApp config from server
     loadWhatsAppConfig();
-    
+
     // Check settings status
     checkSettingsStatus();
   }, [searchParams, refreshStores, hasAccess]);
@@ -462,6 +500,34 @@ function SettingsContent() {
     StoreConfigManager.clearSetupCompleted();
     setShopifyConfig({ shopUrl: '', accessToken: '', apiKey: '', apiSecret: '' });
     setShopifyResult({ success: true, message: 'Configuration reset!' });
+  };
+
+  // OAuth one-click connect
+  const handleOAuthConnect = async () => {
+    let domain = oauthShopDomain.trim().toLowerCase();
+    if (!domain) {
+      setShopifyResult({ success: false, message: 'Please enter your Shopify store domain' });
+      return;
+    }
+    if (!domain.includes('.')) domain = `${domain}.myshopify.com`;
+    if (!domain.endsWith('.myshopify.com')) {
+      setShopifyResult({ success: false, message: 'Enter a valid domain (e.g., yourstore or yourstore.myshopify.com)' });
+      return;
+    }
+    setOauthConnecting(true);
+    setShopifyResult(null);
+    try {
+      const res = await fetch(`/api/auth/shopify?shop=${encodeURIComponent(domain)}&return_to=settings`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to start connection');
+      }
+      const data = await res.json();
+      window.location.href = data.installUrl;
+    } catch (err: unknown) {
+      setShopifyResult({ success: false, message: getErrorMessage(err, 'Failed to connect') });
+      setOauthConnecting(false);
+    }
   };
 
   // Facebook Embedded Signup
@@ -869,101 +935,105 @@ function SettingsContent() {
               {/* Header */}
               <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 md:px-8 py-5 border-b border-gray-200">
                 <div className="flex items-center space-x-3 mb-2">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <ShoppingBag className="h-6 w-6 text-blue-600" />
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <ShoppingBag className="h-6 w-6 text-green-700" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">Shopify Store Configuration</h2>
-                    <p className="text-sm text-gray-600 mt-1">Connect your Shopify store to the Admin API</p>
+                    <h2 className="text-xl font-bold text-gray-900">Shopify Store</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {storeConnected ? 'Your store is connected' : 'Connect your Shopify store with one click'}
+                    </p>
                   </div>
+                  {storeConnected && (
+                    <span className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Connected
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {/* Form */}
               <div className="px-6 md:px-8 py-6 md:py-8 space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Shop URL <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={shopifyConfig.shopUrl}
-                    onChange={(e) => setShopifyConfig(prev => ({ ...prev, shopUrl: e.target.value }))}
-                    className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                      shopifyErrors.shopUrl ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="your-store.myshopify.com"
-                  />
-                  {shopifyErrors.shopUrl && <p className="text-xs text-red-500 mt-1">{shopifyErrors.shopUrl}</p>}
-                </div>
+                {/* ── Connected State ── */}
+                {storeConnected && connectedStore && (
+                  <div className="space-y-4">
+                    <div className="p-5 rounded-xl border border-green-200 bg-green-50">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                          <CheckCircle2 className="h-7 w-7 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-green-900 text-lg">{connectedStore.name}</p>
+                          <p className="text-sm text-green-700">{connectedStore.domain}</p>
+                          <p className="text-xs text-green-600 mt-1">
+                            Connected {new Date(connectedStore.connectedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Access Token <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showShopifyToken ? 'text' : 'password'}
-                      value={shopifyConfig.accessToken}
-                      onChange={(e) => setShopifyConfig(prev => ({ ...prev, accessToken: e.target.value }))}
-                      className={`w-full px-4 py-3 pr-12 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                        shopifyErrors.accessToken ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="shpat_xxxxx"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowShopifyToken(!showShopifyToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showShopifyToken ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                  {shopifyErrors.accessToken && <p className="text-xs text-red-500 mt-1">{shopifyErrors.accessToken}</p>}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      API Key <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={shopifyConfig.apiKey}
-                      onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                      className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                        shopifyErrors.apiKey ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="xxxxx"
-                    />
-                    {shopifyErrors.apiKey && <p className="text-xs text-red-500 mt-1">{shopifyErrors.apiKey}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      API Secret <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showShopifySecret ? 'text' : 'password'}
-                        value={shopifyConfig.apiSecret}
-                        onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiSecret: e.target.value }))}
-                        className={`w-full px-4 py-3 pr-12 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                          shopifyErrors.apiSecret ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        placeholder="xxxxx"
-                      />
+                    <div className="flex items-center gap-3">
                       <button
-                        type="button"
-                        onClick={() => setShowShopifySecret(!showShopifySecret)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        onClick={() => {
+                          setOauthShopDomain(connectedStore.domain);
+                          handleOAuthConnect();
+                        }}
+                        className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                       >
-                        {showShopifySecret ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        <RefreshCcw className="h-4 w-4" />
+                        Reconnect
                       </button>
                     </div>
-                    {shopifyErrors.apiSecret && <p className="text-xs text-red-500 mt-1">{shopifyErrors.apiSecret}</p>}
                   </div>
-                </div>
+                )}
+
+                {/* ── Not Connected: OAuth Connect ── */}
+                {!storeConnected && (
+                  <div className="space-y-5">
+                    <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+                      <p className="text-sm text-blue-800 font-medium mb-2">One-click connection</p>
+                      <p className="text-xs text-blue-600">
+                        Enter your store name and authorize on Shopify. No API keys needed — we handle everything automatically.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Shopify Store Domain
+                      </label>
+                      <input
+                        type="text"
+                        value={oauthShopDomain}
+                        onChange={(e) => setOauthShopDomain(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleOAuthConnect()}
+                        className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                        placeholder="yourstore or yourstore.myshopify.com"
+                        disabled={oauthConnecting}
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        Just enter your store name — we&apos;ll add .myshopify.com automatically
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleOAuthConnect}
+                      disabled={oauthConnecting || !oauthShopDomain.trim()}
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg text-white text-base font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: '#96BF48' }}
+                    >
+                      {oauthConnecting ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          Redirecting to Shopify...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="h-5 w-5" />
+                          Connect Your Shopify Store
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {shopifyResult && (
                   <div className={`flex items-center gap-2 p-3 rounded-md border ${
@@ -974,34 +1044,104 @@ function SettingsContent() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="flex items-center space-x-4 pt-6">
+                {/* ── Advanced: Manual Configuration (collapsed) ── */}
+                <div className="pt-4 border-t border-gray-200">
                   <button
-                    onClick={handleShopifyTest}
-                    disabled={shopifyLoading}
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
+                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
                   >
-                    {shopifyLoading ? (
-                      <span className="flex items-center">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Testing...
-                      </span>
-                    ) : (
-                      'Test Connection'
-                    )}
+                    <Settings className="h-4 w-4" />
+                    {showAdvancedConfig ? 'Hide' : 'Show'} Advanced Manual Configuration
                   </button>
-                  <button
-                    onClick={handleShopifySave}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-base font-semibold rounded-lg shadow-lg shadow-orange-500/30 transition-all"
-                  >
-                    Save Configuration
-                  </button>
-                  <button
-                    onClick={handleShopifyReset}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
-                  >
-                    Reset
-                  </button>
+
+                  {showAdvancedConfig && (
+                    <div className="mt-4 p-5 rounded-xl border border-gray-200 bg-gray-50 space-y-4">
+                      <p className="text-xs text-gray-500">
+                        Use this only if you have a Custom App with API credentials from the Shopify Partner Dashboard.
+                      </p>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Shop URL *</label>
+                        <input
+                          type="text"
+                          value={shopifyConfig.shopUrl}
+                          onChange={(e) => setShopifyConfig(prev => ({ ...prev, shopUrl: e.target.value }))}
+                          className={`w-full px-3 py-2 text-sm border rounded-lg ${shopifyErrors.shopUrl ? 'border-red-500' : 'border-gray-300'}`}
+                          placeholder="your-store.myshopify.com"
+                        />
+                        {shopifyErrors.shopUrl && <p className="text-xs text-red-500 mt-1">{shopifyErrors.shopUrl}</p>}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Access Token *</label>
+                        <div className="relative">
+                          <input
+                            type={showShopifyToken ? 'text' : 'password'}
+                            value={shopifyConfig.accessToken}
+                            onChange={(e) => setShopifyConfig(prev => ({ ...prev, accessToken: e.target.value }))}
+                            className={`w-full px-3 py-2 pr-10 text-sm border rounded-lg ${shopifyErrors.accessToken ? 'border-red-500' : 'border-gray-300'}`}
+                            placeholder="shpat_xxxxx"
+                          />
+                          <button type="button" onClick={() => setShowShopifyToken(!showShopifyToken)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            {showShopifyToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {shopifyErrors.accessToken && <p className="text-xs text-red-500 mt-1">{shopifyErrors.accessToken}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">API Key *</label>
+                          <input
+                            type="text"
+                            value={shopifyConfig.apiKey}
+                            onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                            className={`w-full px-3 py-2 text-sm border rounded-lg ${shopifyErrors.apiKey ? 'border-red-500' : 'border-gray-300'}`}
+                            placeholder="xxxxx"
+                          />
+                          {shopifyErrors.apiKey && <p className="text-xs text-red-500 mt-1">{shopifyErrors.apiKey}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">API Secret *</label>
+                          <div className="relative">
+                            <input
+                              type={showShopifySecret ? 'text' : 'password'}
+                              value={shopifyConfig.apiSecret}
+                              onChange={(e) => setShopifyConfig(prev => ({ ...prev, apiSecret: e.target.value }))}
+                              className={`w-full px-3 py-2 pr-10 text-sm border rounded-lg ${shopifyErrors.apiSecret ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="xxxxx"
+                            />
+                            <button type="button" onClick={() => setShowShopifySecret(!showShopifySecret)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                              {showShopifySecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          {shopifyErrors.apiSecret && <p className="text-xs text-red-500 mt-1">{shopifyErrors.apiSecret}</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 pt-2">
+                        <button
+                          onClick={handleShopifyTest}
+                          disabled={shopifyLoading}
+                          className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                        >
+                          {shopifyLoading ? <><Loader2 className="inline mr-1 h-3.5 w-3.5 animate-spin" /> Testing...</> : 'Test'}
+                        </button>
+                        <button
+                          onClick={handleShopifySave}
+                          className="flex-1 px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+                        >
+                          Save Configuration
+                        </button>
+                        <button
+                          onClick={handleShopifyReset}
+                          className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
