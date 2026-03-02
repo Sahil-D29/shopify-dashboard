@@ -46,6 +46,25 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'asc' },
       });
       if (firstOwned) storeId = firstOwned.id;
+
+      // NextAuth session ID may differ from Prisma user ID — try email match
+      if (!storeId && userContext.email) {
+        try {
+          const prismaUser = await prisma.user.findUnique({
+            where: { email: userContext.email },
+            select: { id: true },
+          });
+          if (prismaUser) {
+            const ownedByEmail = await prisma.store.findFirst({
+              where: { ownerId: prismaUser.id },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+            });
+            if (ownedByEmail) storeId = ownedByEmail.id;
+          }
+        } catch {}
+      }
+
       if (!storeId) {
         const firstMember = await prisma.storeMember.findFirst({
           where: { userId: userContext.userId },

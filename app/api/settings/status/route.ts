@@ -100,8 +100,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Resolve store to check: current store (cookie/assigned) or first store for this user (per user/store persistence)
-    let storeIdToCheck: string | null = userContext.storeId ?? null;
+    // Resolve store to check — priority:
+    // 1. Cookie/header (most reliable — set during OAuth callback)
+    // 2. userContext.storeId
+    // 3. First owned store by Prisma user (matched by email)
+    // 4. First store membership
+    let storeIdToCheck: string | null = null;
+
+    // 1. Try cookie/header directly
+    try {
+      const { getTenantStoreId } = await import('@/lib/tenant/tenant-middleware');
+      storeIdToCheck = await getTenantStoreId(request);
+    } catch {}
+
+    // 2. Try userContext.storeId
+    if (!storeIdToCheck) {
+      storeIdToCheck = userContext.storeId ?? null;
+    }
+
+    // 3. Try finding owned store by user ID or email
     if (!storeIdToCheck && userContext.userId) {
       const firstOwned = await prisma.store.findFirst({
         where: { ownerId: userContext.userId },
@@ -109,6 +126,26 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'asc' },
       });
       if (firstOwned) storeIdToCheck = firstOwned.id;
+
+      // NextAuth session ID may differ from Prisma user ID — try email match
+      if (!storeIdToCheck && userContext.email) {
+        try {
+          const prismaUser = await prisma.user.findUnique({
+            where: { email: userContext.email },
+            select: { id: true },
+          });
+          if (prismaUser) {
+            const ownedByEmail = await prisma.store.findFirst({
+              where: { ownerId: prismaUser.id },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+            });
+            if (ownedByEmail) storeIdToCheck = ownedByEmail.id;
+          }
+        } catch {}
+      }
+
+      // 4. Try store membership
       if (!storeIdToCheck) {
         const firstMember = await prisma.storeMember.findFirst({
           where: { userId: userContext.userId },
