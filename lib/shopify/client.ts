@@ -53,24 +53,43 @@ export interface ShopifyCustomerListResponse {
 class ShopifyClient {
   private config: ShopifyConfig;
   private baseUrl: string;
+  private tokenProvider?: () => Promise<string>;
 
   constructor(config?: ShopifyConfig) {
-    this.config = config || {
-      shop: process.env.SHOPIFY_STORE_URL || process.env.SHOPIFY_SHOP_URL || '',
-      accessToken: process.env.SHOPIFY_ACCESS_TOKEN || '',
-    };
-    
+    if (config) {
+      this.config = config;
+    } else {
+      this.config = {
+        shop: process.env.SHOPIFY_STORE_URL || process.env.SHOPIFY_SHOP_URL || '',
+        accessToken: '', // Will be resolved lazily via Client Credentials Grant
+      };
+      // Use dynamic token provider when no explicit config is given
+      this.tokenProvider = async () => {
+        const { getClientCredentialsToken } = await import('./cc-token-provider');
+        return getClientCredentialsToken();
+      };
+    }
+
     // Remove https:// and .myshopify.com if present
     let shop = this.config.shop.replace(/^https?:\/\//, '').replace(/\.myshopify\.com$/, '');
     if (!shop.includes('.')) {
       shop = `${shop}.myshopify.com`;
     }
-    
+
     this.config.shop = shop;
     this.baseUrl = `https://${this.config.shop}/admin/api/${SHOPIFY_API_VERSION}`;
   }
 
   async requestRaw(endpoint: string, options: RequestInit = {}) {
+    // Resolve token lazily via Client Credentials Grant if no static token was provided
+    if (this.tokenProvider && !this.config.accessToken) {
+      try {
+        this.config.accessToken = await this.tokenProvider();
+      } catch (err) {
+        console.error('❌ Shopify Client: Failed to fetch dynamic token:', err);
+      }
+    }
+
     // Validate configuration before making request
     if (!this.config || !this.config.shop || !this.config.accessToken) {
       const error = 'Shopify configuration not found. Please configure your store in Settings.';
@@ -141,6 +160,12 @@ class ShopifyClient {
         
         // Provide helpful error message for authentication errors
         if (response.status === 401 || response.status === 403) {
+          // If using dynamic tokens, clear cache so next request fetches a fresh one
+          if (this.tokenProvider) {
+            const { clearCachedToken } = await import('./cc-token-provider');
+            clearCachedToken(this.config.shop);
+            this.config.accessToken = ''; // Force re-fetch on next call
+          }
           const error = 'Invalid Shopify credentials. Please reconfigure your store in Settings.';
           console.error('🔒 Authentication error:', error);
           throw new Error(error);

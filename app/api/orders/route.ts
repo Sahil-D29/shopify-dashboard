@@ -1,30 +1,32 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
+import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
-const ADMIN_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN;
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!SHOP || !ADMIN_TOKEN) {
+    if (!SHOP) {
       return NextResponse.json(
-        { error: "Missing Shopify env vars", orders: [] },
+        { error: "Missing SHOPIFY_STORE_DOMAIN env var", orders: [] },
         { status: 500 }
       );
     }
 
+    const token = await getClientCredentialsToken();
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit') || '50';
     const status = searchParams.get('status') || 'any';
-    const url = `https://${SHOP}/admin/api/2024-10/orders.json?limit=${limit}&status=${status}`;
+    const url = `https://${SHOP}/admin/api/${API_VERSION}/orders.json?limit=${limit}&status=${status}`;
 
     const res = await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "X-Shopify-Access-Token": ADMIN_TOKEN,
+        "X-Shopify-Access-Token": token,
       },
     });
 

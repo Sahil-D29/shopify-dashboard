@@ -1,35 +1,38 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
+import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
 
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
-const ADMIN_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN;
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!SHOP || !ADMIN_TOKEN) {
+    if (!SHOP) {
       return NextResponse.json(
-        { error: "Missing Shopify env vars" },
+        { error: "Missing SHOPIFY_STORE_DOMAIN env var" },
         { status: 500 }
       );
     }
 
+    const token = await getClientCredentialsToken();
+
     // Aggregate analytics from orders, products, and customers
     const [ordersRes, productsRes, customersRes] = await Promise.all([
-      fetch(`https://${SHOP}/admin/api/2024-10/orders.json?limit=250&status=any`, {
+      fetch(`https://${SHOP}/admin/api/${API_VERSION}/orders.json?limit=250&status=any`, {
         headers: {
-          "X-Shopify-Access-Token": ADMIN_TOKEN,
+          "X-Shopify-Access-Token": token,
         },
       }),
-      fetch(`https://${SHOP}/admin/api/2024-10/products.json?limit=250`, {
+      fetch(`https://${SHOP}/admin/api/${API_VERSION}/products.json?limit=250`, {
         headers: {
-          "X-Shopify-Access-Token": ADMIN_TOKEN,
+          "X-Shopify-Access-Token": token,
         },
       }),
-      fetch(`https://${SHOP}/admin/api/2024-10/customers.json?limit=250`, {
+      fetch(`https://${SHOP}/admin/api/${API_VERSION}/customers.json?limit=250`, {
         headers: {
-          "X-Shopify-Access-Token": ADMIN_TOKEN,
+          "X-Shopify-Access-Token": token,
         },
       }),
     ]);

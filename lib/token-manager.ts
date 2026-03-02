@@ -63,16 +63,30 @@ export async function saveShopToken(
 }
 
 /**
- * Get decrypted access token for a shop
+ * Get decrypted access token for a shop.
+ * For the own-store domain (SHOPIFY_STORE_DOMAIN), tries Client Credentials
+ * Grant first, then falls back to file-based storage.
  */
 export async function getShopToken(shopDomain: string): Promise<string | null> {
+  // For the app owner's own store, prefer Client Credentials Grant (dynamic 24hr tokens)
+  const ownStore = process.env.SHOPIFY_STORE_DOMAIN || '';
+  if (ownStore && normalizeShop(shopDomain) === normalizeShop(ownStore)) {
+    try {
+      const { getClientCredentialsToken } = await import('./shopify/cc-token-provider');
+      const token = await getClientCredentialsToken(shopDomain);
+      if (token) return token;
+    } catch (err) {
+      console.warn('Client Credentials token fetch failed, falling back to stored token:', err);
+    }
+  }
+
   const shops = await readShopsFile();
   const shopData = shops[shopDomain];
-  
+
   if (!shopData || !shopData.accessToken) {
     return null;
   }
-  
+
   try {
     // Check if token is encrypted, if not, it's legacy plaintext
     if (isEncrypted(shopData.accessToken)) {
@@ -87,6 +101,11 @@ export async function getShopToken(shopDomain: string): Promise<string | null> {
     console.error(`Failed to decrypt token for ${shopDomain}:`, error);
     return null;
   }
+}
+
+/** Normalize shop domain to consistent format */
+function normalizeShop(shop: string): string {
+  return shop.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
 }
 
 /**
