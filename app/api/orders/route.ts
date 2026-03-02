@@ -1,38 +1,35 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
-import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
-
-const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
-const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+import { resolveStore } from '@/lib/tenant/resolve-store';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!SHOP) {
+    const store = await resolveStore(request);
+    if (!store) {
       return NextResponse.json(
-        { error: "Missing SHOPIFY_STORE_DOMAIN env var", orders: [] },
-        { status: 500 }
+        { error: "No Shopify store connected. Please connect a store first.", orders: [] },
+        { status: 400 }
       );
     }
 
-    const token = await getClientCredentialsToken();
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit') || '50';
     const status = searchParams.get('status') || 'any';
-    const url = `https://${SHOP}/admin/api/${API_VERSION}/orders.json?limit=${limit}&status=${status}`;
+    const url = `https://${store.shop}/admin/api/${store.apiVersion}/orders.json?limit=${limit}&status=${status}`;
 
     const res = await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token,
+        "X-Shopify-Access-Token": store.token,
       },
     });
 
     if (!res.ok) {
       const text = await res.text();
-      console.error(`Shopify API error ${res.status}:`, text);
+      console.error(`Shopify API error ${res.status} for ${store.shop}:`, text);
       return NextResponse.json(
         { error: `Shopify error ${res.status}`, details: text, orders: [] },
         { status: res.status }
@@ -49,5 +46,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-

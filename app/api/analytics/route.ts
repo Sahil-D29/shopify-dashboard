@@ -1,39 +1,31 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
-import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
-
-const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
-const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+import { resolveStore } from '@/lib/tenant/resolve-store';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!SHOP) {
+    const store = await resolveStore(request);
+    if (!store) {
       return NextResponse.json(
-        { error: "Missing SHOPIFY_STORE_DOMAIN env var" },
-        { status: 500 }
+        { error: "No Shopify store connected. Please connect a store first." },
+        { status: 400 }
       );
     }
 
-    const token = await getClientCredentialsToken();
+    const { shop, token, apiVersion } = store;
 
     // Aggregate analytics from orders, products, and customers
     const [ordersRes, productsRes, customersRes] = await Promise.all([
-      fetch(`https://${SHOP}/admin/api/${API_VERSION}/orders.json?limit=250&status=any`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-        },
+      fetch(`https://${shop}/admin/api/${apiVersion}/orders.json?limit=250&status=any`, {
+        headers: { "X-Shopify-Access-Token": token },
       }),
-      fetch(`https://${SHOP}/admin/api/${API_VERSION}/products.json?limit=250`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-        },
+      fetch(`https://${shop}/admin/api/${apiVersion}/products.json?limit=250`, {
+        headers: { "X-Shopify-Access-Token": token },
       }),
-      fetch(`https://${SHOP}/admin/api/${API_VERSION}/customers.json?limit=250`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-        },
+      fetch(`https://${shop}/admin/api/${apiVersion}/customers.json?limit=250`, {
+        headers: { "X-Shopify-Access-Token": token },
       }),
     ]);
 
@@ -67,5 +59,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-
