@@ -23,21 +23,24 @@ export default function LogoutButton({
     setIsLoading(true);
 
     try {
-      // Clear all client-side auth state
+      // Sign out server-side first (clears session cookie)
+      await signOut({ redirect: false });
+
+      // Clear client-side state AFTER signOut completes
       if (typeof window !== 'undefined') {
         localStorage.clear();
         sessionStorage.clear();
       }
 
-      await signOut({
-        callbackUrl: '/auth/signin',
-        redirect: true,
-      });
-      toast.success('Logged out successfully');
+      // Manual redirect to sign-in page
+      window.location.replace('/auth/signin');
     } catch (error) {
       console.error('Logout error:', error);
-      toast.error('Failed to logout');
-      setIsLoading(false);
+      // Fallback: force redirect even on error
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
       window.location.replace('/auth/signin');
     }
   };

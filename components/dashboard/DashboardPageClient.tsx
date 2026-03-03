@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
-import { StoreConfigManager } from '@/lib/store-config';
+import { useTenant } from '@/lib/tenant/tenant-context';
 import { useRouter } from 'next/navigation';
 import {
   DollarSign,
@@ -758,6 +758,7 @@ function DashboardContent() {
   const [isMounted, setIsMounted] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<{ shopifyConfigured: boolean; whatsappConfigured: boolean; settingsCompleted: boolean; missingConfigs: string[] } | null>(null);
   const router = useRouter();
+  const { currentStore } = useTenant();
   const dataRef = useRef<DashboardData | null>(null);
 
   useEffect(() => {
@@ -777,12 +778,8 @@ function DashboardContent() {
           setLoading(true);
         }
 
-        const config = StoreConfigManager.getConfig();
-
-        if (!config || !config.shopUrl || !config.accessToken) {
-          window.location.href = '/settings?setup=true';
-          return;
-        }
+        // Store resolution is handled server-side via current_store_id cookie + Prisma DB.
+        // ConfigurationGuard already ensures the cookie exists before rendering this component.
 
         const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
         const baseUrl = getBaseUrl();
@@ -1062,8 +1059,6 @@ function DashboardContent() {
     );
   }
 
-  const config = StoreConfigManager.getConfig();
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8">
@@ -1071,7 +1066,7 @@ function DashboardContent() {
         {settingsStatus && !settingsStatus.settingsCompleted && (
           <SettingsIncompleteBanner missingConfigs={settingsStatus.missingConfigs} />
         )}
-        <ConnectionStatus shopUrl={config?.shopUrl} />
+        <ConnectionStatus shopUrl={currentStore?.shopDomain} />
 
         {data?.analytics ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">

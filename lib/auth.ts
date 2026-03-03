@@ -319,7 +319,12 @@ export const authConfig: NextAuthConfig = {
           })();
 
       if (normalized === '/auth/signin' || normalized.startsWith('/auth/signin?')) {
-        return base ? `${base}/onboarding` : '/onboarding';
+        // Only redirect to onboarding for sign-in flow (has callbackUrl param),
+        // not for sign-out flow which uses plain /auth/signin as callbackUrl.
+        if (normalized.includes('callbackUrl=')) {
+          return base ? `${base}/onboarding` : '/onboarding';
+        }
+        return base ? `${base}/auth/signin` : '/auth/signin';
       }
       if (targetPath.startsWith('/')) {
         return base ? `${base}${targetPath}` : targetPath;
