@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { SegmentsStore } from '@/lib/data/segments-store';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import { cache } from '@/lib/utils/cache';
@@ -43,7 +43,7 @@ export async function POST(
     const cached = cache.get<SegmentPreviewResponse>(cacheKey);
     if (cached) return NextResponse.json(cached);
 
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const customersData = (await client.getCustomers({ limit: 250 })) as ShopifyCustomerListResponse;
     const allCustomers = (customersData.customers ?? []) as ShopifyCustomer[];
 

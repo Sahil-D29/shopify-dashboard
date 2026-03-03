@@ -8,7 +8,6 @@ import { Package, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyProduct, ShopifyProductListResponse, ShopifyProductVariant } from '@/lib/types/shopify-product';
@@ -55,7 +54,7 @@ function ProductsContent() {
         const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
         const baseUrl = getBaseUrl();
         const refreshParam = forceRefresh ? '&refresh=true' : '';
-        const res = await fetchWithConfig(`${baseUrl}/api/shopify/products?limit=250${refreshParam}`, {
+        const res = await fetch(`${baseUrl}/api/shopify/products?limit=250${refreshParam}`, {
           cache: 'no-store',
         });
         const payload = (await res.json().catch(() => ({}))) as ShopifyProductListResponse;
@@ -89,7 +88,6 @@ function ProductsContent() {
 
   // Auto-refresh on config change
   useConfigRefresh(() => {
-    console.log('🔄 Config changed, reloading products...');
     fetchProducts(true);
   });
 

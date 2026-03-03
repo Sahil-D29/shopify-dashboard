@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { Customer } from '@/lib/types/customer';
 import type { ShopifyOrder } from '@/lib/shopify/client';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { cache } from '@/lib/utils/cache';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { getUserContext } from '@/lib/user-context';
@@ -142,7 +142,6 @@ const normalizeString = (value: unknown): string | undefined => {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔄 GET /api/customers - Starting request');
     
     // Get user context for authentication
     const userContext = await getUserContext(request);
@@ -157,55 +156,35 @@ export async function GET(request: NextRequest) {
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 250);
 
-    console.log('📋 Request params:', { forceRefresh, limit });
-
     const cacheKey = `customers_${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<CustomersCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached customers:', cached.customers.length);
         return NextResponse.json({ ...cached, cached: true });
       }
     } else {
       cache.delete(cacheKey);
-      console.log('🔄 Cache cleared, fetching fresh data');
     }
 
-    console.log('🔗 Getting Shopify client...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     
     // Check if client has valid config
     const configHeader = request.headers.get('X-Shopify-Config');
-    console.log('🔑 Config header present:', !!configHeader);
-    
-    if (!configHeader) {
-      console.warn('⚠️ No X-Shopify-Config header found, using env vars fallback');
-    }
 
-    console.log('📥 Fetching customers from Shopify...');
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit });
-    console.log(`✅ Fetched ${shopifyCustomers.length} customers from Shopify`);
 
-    console.log('📥 Fetching orders from Shopify...');
     const orders = await client.fetchAll<ShopifyOrder>('orders', { status: 'any', limit });
-    console.log(`✅ Fetched ${orders.length} orders from Shopify`);
 
     const lastOrderMap = buildLastOrderMap(orders);
     const customers = shopifyCustomers.map(customer => formatShopifyCustomer(customer, lastOrderMap));
     const lastSynced = Date.now();
 
-    console.log(`💾 Caching ${customers.length} formatted customers`);
     cache.set<CustomersCacheEntry>(cacheKey, { customers, lastSynced });
 
-    console.log('✅ Returning customers response');
     return NextResponse.json({ customers, lastSynced, cached: false });
   } catch (error) {
-    console.error('❌ Error in GET /api/customers:', {
-      error,
-      message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error('Error in GET /api/customers:', getErrorMessage(error));
     
     // Return more detailed error information
     const errorMessage = getErrorMessage(error);

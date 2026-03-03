@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { DeleteSegmentModal } from '@/components/segments/DeleteSegmentModal';
 import { useToast } from '@/lib/hooks/useToast';
 import { ArrowLeft, Users, TrendingUp, Package, DollarSign, RefreshCw, AlertTriangle, Trash2, BarChart3 } from 'lucide-react';
@@ -82,7 +81,7 @@ export default function SegmentDetailPage() {
       setIsStatsLoading(true);
       try {
         const query = refresh ? '?refresh=true' : '';
-        const res = await fetchWithConfig(`/api/segments/${segmentId}${query}`);
+        const res = await fetch(`/api/segments/${segmentId}${query}`);
         const data = (await res.json().catch(() => ({}))) as SegmentStatsResponse;
 
         if (!res.ok) throw new Error(data.error ?? 'Failed to load segment');
@@ -99,7 +98,7 @@ export default function SegmentDetailPage() {
 
     const loadAnalytics = async () => {
       try {
-        const res = await fetchWithConfig(`/api/segments/${segmentId}/analytics`);
+        const res = await fetch(`/api/segments/${segmentId}/analytics`);
         if (!res.ok) throw new Error('Failed to load analytics');
         const data: AnalyticsResponse = await res.json();
         if (!isCancelled) setAnalytics(data);
@@ -122,7 +121,7 @@ export default function SegmentDetailPage() {
 
   const handleRefreshStats = async () => {
     if (!segmentId) return;
-    const res = await fetchWithConfig(`/api/segments/${segmentId}?refresh=true`);
+    const res = await fetch(`/api/segments/${segmentId}?refresh=true`);
     if (res.ok) {
       const data = (await res.json().catch(() => ({}))) as SegmentStatsResponse;
       setSegmentDetail(data.segment ?? null);

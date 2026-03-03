@@ -8,7 +8,6 @@ import { format } from 'date-fns';
 import { ShoppingCart, RefreshCw, MessageSquare, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyOrder, ShopifyOrderListResponse } from '@/lib/types/shopify-order';
@@ -75,7 +74,7 @@ function OrdersContent() {
         const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
         const baseUrl = getBaseUrl();
         const refreshParam = forceRefresh ? '&refresh=true' : '';
-        const res = await fetchWithConfig(`${baseUrl}/api/shopify/orders?limit=250${refreshParam}`, {
+        const res = await fetch(`${baseUrl}/api/shopify/orders?limit=250${refreshParam}`, {
           cache: 'no-store',
         });
         const payload = (await res.json().catch(() => ({}))) as ShopifyOrderListResponse;

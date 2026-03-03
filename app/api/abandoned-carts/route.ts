@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyCheckoutResponse } from '@/lib/shopify/client';
 import { cache } from '@/lib/utils/cache';
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       cache.delete(cacheKey);
     }
 
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const data = await client.getAbandonedCheckouts({ limit, status: 'open' });
     
     const checkouts = data.checkouts ?? [];

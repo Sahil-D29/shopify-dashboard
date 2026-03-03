@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const { id } = await params;
     const product = await client.getProduct(id);
     return NextResponse.json(product);

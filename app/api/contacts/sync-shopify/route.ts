@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getUserContext } from '@/lib/user-context';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, '');
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const overwrite = body.overwrite === true;
 
-    const shopifyClient = getShopifyClient(request);
+    const shopifyClient = await getShopifyClientAsync(request);
 
     let synced = 0;
     let created = 0;

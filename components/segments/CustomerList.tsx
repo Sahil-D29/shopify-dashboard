@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Customer } from '@/lib/types/customer';
 import { Search, Download, MessageSquare, Phone, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 
 interface Props {
   segmentId: string;
@@ -49,7 +48,7 @@ export default function CustomerList({ segmentId, segmentName }: Props) {
         sortOrder,
       });
 
-      const response = await fetchWithConfig(`/api/segments/${segmentId}/customers?${params.toString()}`, { signal });
+      const response = await fetch(`/api/segments/${segmentId}/customers?${params.toString()}`, { signal });
       if (!response.ok) throw new Error('Failed to fetch customers');
       const data = (await response.json()) as SegmentCustomersResponse;
 

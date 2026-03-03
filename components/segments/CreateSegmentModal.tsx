@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Segment, SegmentFilter } from '@/lib/types';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import {
   SEGMENT_FIELD_OPTIONS,
   SEGMENT_OPERATORS,
@@ -104,7 +103,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
     setIsPreviewLoading(true);
     setErrors({});
     try {
-      const response = await fetchWithConfig('/api/segments/preview', {
+      const response = await fetch('/api/segments/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +174,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
       const url = segment ? `/api/segments?id=${segment.id}` : '/api/segments';
       const method = segment ? 'PUT' : 'POST';
 
-      const response = await fetchWithConfig(url, {
+      const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(segmentData),

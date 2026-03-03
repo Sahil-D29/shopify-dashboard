@@ -4,7 +4,7 @@ import { readJsonFile } from '@/lib/utils/json-storage';
 import { JourneyEnrollment } from '@/lib/types/journey';
 import { processEnrollment } from '@/lib/journeys/executor';
 import { runJourneyEngine } from '@/lib/journey-engine';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +22,7 @@ const getErrorMessage = (error: unknown): string => (error instanceof Error ? er
  */
 export async function POST(request: NextRequest) {
   try {
-    const shopifyClient = getShopifyClient(request);
+    const shopifyClient = await getShopifyClientAsync(request);
     const engineSummary = await runJourneyEngine({ shopifyClient, logger: entry => console.info('[journey-engine]', entry) });
 
     const enrollments = readJsonFile<JourneyEnrollment>('journey-enrollments.json');

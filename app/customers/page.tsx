@@ -11,7 +11,6 @@ import { CustomerManagement } from '@/components/customers/CustomerManagement';
 import type { Customer as CustomerManagementCustomer } from '@/components/customers/CustomerManagement';
 import { Users, RefreshCw } from 'lucide-react';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 
@@ -95,66 +94,29 @@ export default function CustomersClientPage() {
       const baseUrl = getBaseUrl();
       const refreshParam = forceRefresh ? '&refresh=true' : '';
       const url = `${baseUrl}/api/customers?limit=250${refreshParam}`;
-      
-      console.log('🔄 Fetching customers from:', url);
-      
-      const res = await fetchWithConfig(url, {
+
+      const res = await fetch(url, {
         cache: 'no-store',
         credentials: 'include',
       });
-      
-      console.log('📡 Response status:', res.status, res.statusText);
-      console.log('📡 Response headers:', Object.fromEntries(res.headers.entries()));
-      
+
       if (!res.ok) {
-        // Try to get error details from response
-        let errorText = '';
-        let errorData = null;
-        
-        try {
-          errorText = await res.text();
-          console.error('❌ API Error Response:', {
-            status: res.status,
-            statusText: res.statusText,
-            body: errorText,
-          });
-          
-          // Try to parse as JSON
-          try {
-            errorData = JSON.parse(errorText);
-            console.error('❌ Parsed error data:', errorData);
-          } catch {
-            // Not JSON, use text as is
-          }
-        } catch (textError) {
-          console.error('❌ Failed to read error response:', textError);
-        }
-        
-        const errorMessage = errorData?.error || errorData?.message || errorData?.details || errorText || `Failed to fetch customers: ${res.status} ${res.statusText}`;
+        const errorData = await res.json().catch(() => ({}));
+        const errorMessage = errorData?.error || errorData?.message || `Failed to fetch customers: ${res.status}`;
         throw new Error(errorMessage);
       }
-      
+
       const data = await res.json();
-      console.log('✅ Customers data received:', {
-        customerCount: data.customers?.length || 0,
-        lastSynced: data.lastSynced,
-        cached: data.cached,
-      });
-      
+
       if (data.error) {
-        console.error('❌ Error in response data:', data.error, data.details);
-        throw new Error(data.error || data.message || data.details || 'Failed to fetch customers');
+        throw new Error(data.error || data.message || 'Failed to fetch customers');
       }
-      
+
       setCustomers(data.customers || []);
       setLastSynced(data.lastSynced || Date.now());
       setErrorMessage(''); // Clear any previous errors
     } catch (error) {
-      console.error('❌ Error fetching customers:', {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
+      console.error('Error fetching customers:', error instanceof Error ? error.message : error);
       const errorMsg = error instanceof Error ? error.message : 'Failed to fetch customers';
       setErrorMessage(errorMsg);
       setCustomers([]); // Clear customers on error
@@ -176,7 +138,6 @@ export default function CustomersClientPage() {
 
   // Auto-refresh on config change
   useConfigRefresh(() => {
-    console.log('🔄 Config changed, reloading customers...');
     fetchCustomers(true);
   });
 

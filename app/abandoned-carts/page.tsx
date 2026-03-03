@@ -8,7 +8,6 @@ import { MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyCheckout } from '@/lib/types/shopify-checkout';
@@ -55,7 +54,7 @@ function AbandonedCartsContent() {
       const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
       const baseUrl = getBaseUrl();
       const refreshParam = forceRefresh ? '&refresh=true' : '';
-      const response = await fetchWithConfig(`${baseUrl}/api/shopify/checkouts?limit=250${refreshParam}`, {
+      const response = await fetch(`${baseUrl}/api/shopify/checkouts?limit=250${refreshParam}`, {
         cache: 'no-store',
       });
       if (!response.ok) {
@@ -92,7 +91,6 @@ function AbandonedCartsContent() {
 
   // Auto-refresh on config change
   useConfigRefresh(() => {
-    console.log('🔄 Config changed, reloading abandoned carts...');
     fetchCarts(true);
   });
 

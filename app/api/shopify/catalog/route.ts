@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 const parseLimit = (value: string | null, fallback: number, max = 100): number => {
   const parsed = Number(value ?? fallback);
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get('limit'), 24);
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
     const [productsPayload, customCollections, smartCollections, metafields] = await Promise.all([
       client.getProducts({ limit, fields: 'id,title,handle,status,product_type,tags,vendor,images,variants' }),

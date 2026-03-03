@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyOrder } from '@/lib/shopify/client';
 import { cache } from '@/lib/utils/cache';
 
@@ -35,7 +35,6 @@ interface AnalyticsCacheEntry {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('📊 GET /api/shopify/analytics - Calculating analytics from Shopify data');
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
 
@@ -44,29 +43,21 @@ export async function GET(request: NextRequest) {
     if (!forceRefresh) {
       const cached = cache.get<AnalyticsCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached analytics');
         return NextResponse.json({ ...cached.analytics, lastSynced: cached.lastSynced, cached: true });
       }
     } else {
       cache.delete(cacheKey);
-      console.log('🔄 Cache cleared, calculating fresh analytics');
     }
 
-    console.log('🔗 Getting Shopify client...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
     // Fetch orders to calculate analytics
-    console.log('📥 Fetching orders from Shopify...');
     const orders = await client.fetchAll<ShopifyOrder>('orders', { status: 'any', limit: 250 });
-    console.log(`✅ Fetched ${orders.length} orders from Shopify`);
 
     // Fetch customers for customer count
-    console.log('📥 Fetching customers from Shopify...');
     const customers = await client.fetchAll('customers', { limit: 250 });
-    console.log(`✅ Fetched ${customers.length} customers from Shopify`);
 
     // Fetch abandoned checkouts
-    console.log('📥 Fetching abandoned checkouts from Shopify...');
     let abandonedCheckouts = 0;
     let abandonedCartsValue = 0;
     try {
@@ -76,9 +67,7 @@ export async function GET(request: NextRequest) {
       abandonedCartsValue = checkouts.reduce((sum, checkout) => {
         return sum + toNumber(checkout.total_price ?? 0, 0);
       }, 0);
-      console.log(`✅ Found ${abandonedCheckouts} abandoned checkouts`);
     } catch (error) {
-      console.warn('⚠️ Could not fetch abandoned checkouts:', getErrorMessage(error));
     }
 
     // Calculate analytics from orders
@@ -136,17 +125,11 @@ export async function GET(request: NextRequest) {
 
     const lastSynced = Date.now();
 
-    console.log('💾 Caching analytics data');
     cache.set<AnalyticsCacheEntry>(cacheKey, { analytics, lastSynced });
 
-    console.log('✅ Returning analytics response');
     return NextResponse.json({ ...analytics, lastSynced, cached: false });
   } catch (error) {
-    console.error('❌ Error calculating analytics:', {
-      error,
-      message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error('Error calculating analytics:', getErrorMessage(error));
 
     const errorMessage = getErrorMessage(error);
     const statusCode = error instanceof Error && 'status' in error 

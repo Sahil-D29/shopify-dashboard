@@ -94,9 +94,7 @@ export async function GET(request: NextRequest) {
     successUrl.searchParams.set('storeId', data.storeId);
     successUrl.searchParams.set('shopDomain', data.shopDomain);
     successUrl.searchParams.set('shopName', data.shop);
-    // Pass token so frontend can save to localStorage (for fetchWithConfig)
-    successUrl.searchParams.set('token', data.accessToken);
-
+    // Token is stored securely in DB — no need to pass in URL
     const response = NextResponse.redirect(successUrl);
 
     // Clean up OAuth cookies

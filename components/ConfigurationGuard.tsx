@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { StoreConfigManager } from '@/lib/store-config';
 import { useSetupStatus } from '@/hooks/useSetupStatus';
 import { AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,10 +70,10 @@ export function ConfigurationGuard({
       return;
     }
 
-    // Original logic: Check only Shopify config
+    // Check if store is connected via cookie (set during OAuth)
     const frame = requestAnimationFrame(() => {
-      const config = StoreConfigManager.getConfig();
-      const configured = !!(config?.shopUrl && config?.accessToken);
+      const storeId = document.cookie.split(';').find(c => c.trim().startsWith('current_store_id='));
+      const configured = !!storeId;
       setIsConfigured(configured);
 
       // Only redirect to settings if user IS authenticated but NOT configured

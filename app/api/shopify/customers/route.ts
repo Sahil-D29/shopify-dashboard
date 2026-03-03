@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyCustomerResponse } from '@/lib/shopify/client';
 import type { ShopifyCustomer, ShopifyCustomerListResponse } from '@/lib/types/shopify-customer';
 import { cache } from '@/lib/utils/cache';
@@ -34,34 +34,26 @@ interface CustomersCacheEntry {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('👥 GET /api/shopify/customers - Fetching from Shopify');
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 10);
-
-    console.log('📋 Request params:', { forceRefresh, limit });
 
     const cacheKey = `customers_${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<CustomersCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached customers:', cached.customers.length);
         return NextResponse.json({ customers: cached.customers, lastSynced: cached.lastSynced, cached: true });
       }
     } else {
       cache.delete(cacheKey);
-      console.log('🔄 Cache cleared, fetching fresh data');
     }
 
-    console.log('🔗 Getting Shopify client...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
-    console.log('📥 Fetching customers from Shopify...');
     const customers = await client.fetchAll<ShopifyCustomer>('customers', { 
       limit: Math.min(limit, 250) // Shopify max is 250
     });
-    console.log(`✅ Fetched ${customers.length} customers from Shopify`);
 
     // Sort by created_at descending (most recent first) and limit
     const sortedCustomers = customers
@@ -74,7 +66,6 @@ export async function GET(request: NextRequest) {
 
     const lastSynced = Date.now();
 
-    console.log(`💾 Caching ${sortedCustomers.length} customers`);
     cache.set<CustomersCacheEntry>(cacheKey, { customers: sortedCustomers, lastSynced });
 
     const response: ShopifyCustomerListResponse = {
@@ -82,14 +73,9 @@ export async function GET(request: NextRequest) {
       lastSynced,
     };
 
-    console.log('✅ Returning customers response');
     return NextResponse.json({ ...response, cached: false });
   } catch (error) {
-    console.error('❌ Error in GET /api/shopify/customers:', {
-      error,
-      message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error('Error in GET /api/shopify/customers:', getErrorMessage(error));
 
     const errorMessage = getErrorMessage(error);
     const statusCode = error instanceof Error && 'status' in error 
@@ -140,7 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create customer via Shopify API
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const response = await client.requestRaw('/customers.json', {
       method: 'POST',
       headers: {

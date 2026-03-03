@@ -4,7 +4,7 @@ import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { prisma } from '@/lib/prisma';
 import { transformCampaign } from '@/lib/utils/db-transformers';
 import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
@@ -76,7 +76,7 @@ export async function POST(
       : [];
 
     // Fetch customers from Shopify
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
 
     // Filter by segments

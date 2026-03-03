@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyProductListResponse } from '@/lib/types/shopify-product';
 import type { ShopifyProduct } from '@/lib/types/shopify-product';
 import { cache } from '@/lib/utils/cache';
@@ -21,30 +21,23 @@ interface ProductsCacheEntry {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🛍️ GET /api/shopify/products - Fetching from Shopify');
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 10);
-
-    console.log('📋 Request params:', { forceRefresh, limit });
 
     const cacheKey = `products_${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<ProductsCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached products:', cached.products.length);
         return NextResponse.json({ products: cached.products, lastSynced: cached.lastSynced, cached: true });
       }
     } else {
       cache.delete(cacheKey);
-      console.log('🔄 Cache cleared, fetching fresh data');
     }
 
-    console.log('🔗 Getting Shopify client...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
-    console.log('📥 Fetching products from Shopify...');
     const productsResponse = await client.getProducts({ 
       limit: Math.min(limit, 250), // Shopify max is 250
       status: 'active'
@@ -52,7 +45,6 @@ export async function GET(request: NextRequest) {
     
     // Shopify returns { products: [...] }
     const allProducts = (productsResponse as { products?: ShopifyProduct[] }).products || [];
-    console.log(`✅ Fetched ${allProducts.length} products from Shopify`);
 
     // Sort by created_at descending (most recent first) and limit
     const sortedProducts = allProducts
@@ -65,7 +57,6 @@ export async function GET(request: NextRequest) {
 
     const lastSynced = Date.now();
 
-    console.log(`💾 Caching ${sortedProducts.length} products`);
     cache.set<ProductsCacheEntry>(cacheKey, { products: sortedProducts, lastSynced });
 
     const response: ShopifyProductListResponse = {
@@ -73,14 +64,9 @@ export async function GET(request: NextRequest) {
       lastSynced,
     };
 
-    console.log('✅ Returning products response');
     return NextResponse.json({ ...response, cached: false });
   } catch (error) {
-    console.error('❌ Error in GET /api/shopify/products:', {
-      error,
-      message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error('Error in GET /api/shopify/products:', getErrorMessage(error));
 
     const errorMessage = getErrorMessage(error);
     const statusCode = error instanceof Error && 'status' in error 

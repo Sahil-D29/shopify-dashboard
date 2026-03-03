@@ -332,7 +332,6 @@ export async function POST(request: NextRequest) {
     });
     const newSegment = toCustomerSegment(created);
 
-    console.log(`✅ Segment created: ${newSegment.id} (${newSegment.name})`);
     
     return NextResponse.json(
       {

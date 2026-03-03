@@ -21,8 +21,14 @@ export default function LogoutButton({
 
   const handleLogout = async () => {
     setIsLoading(true);
-    
+
     try {
+      // Clear all client-side auth state
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+
       await signOut({
         callbackUrl: '/auth/signin',
         redirect: true,
@@ -32,6 +38,7 @@ export default function LogoutButton({
       console.error('Logout error:', error);
       toast.error('Failed to logout');
       setIsLoading(false);
+      window.location.replace('/auth/signin');
     }
   };
 

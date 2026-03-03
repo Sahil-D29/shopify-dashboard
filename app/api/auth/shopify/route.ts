@@ -275,7 +275,6 @@ export async function POST(request: NextRequest) {
       storeId: store.id,
       shop: shopName,
       shopDomain: shop,
-      // Return plain token so frontend can save to localStorage for fetchWithConfig
       accessToken: access_token,
     });
 

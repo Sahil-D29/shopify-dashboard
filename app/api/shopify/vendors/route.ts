@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 export const runtime = 'nodejs';
 
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
 
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     
     // Fetch products to extract unique vendors
     const data = (await client.getProducts({ limit: 250 })) as any;

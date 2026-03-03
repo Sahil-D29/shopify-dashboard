@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyOrderListResponse } from '@/lib/shopify/client';
 
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -12,7 +12,7 @@ const toCurrencyNumber = (value: unknown): number => {
 
 export async function GET(request: Request) {
   try {
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const ordersData = (await client.getOrders({ limit: 250, status: 'any', order: 'created_at asc' })) as ShopifyOrderListResponse;
     const orders = (ordersData.orders ?? []) as ShopifyOrderListResponse['orders'];
 

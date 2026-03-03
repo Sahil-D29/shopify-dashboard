@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { calculateSegmentStats } from '@/lib/utils/segment-stats';
 import type { SegmentGroup } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       ];
     }
 
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
     const stats = await calculateSegmentStats({
       client,

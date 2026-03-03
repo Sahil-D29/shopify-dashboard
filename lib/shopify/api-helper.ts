@@ -1,4 +1,6 @@
+import { NextRequest } from 'next/server';
 import { ShopifyClient } from './client';
+import { resolveStore } from '@/lib/tenant/resolve-store';
 
 // Re-export ShopifyClient for convenience
 export { ShopifyClient };
@@ -17,8 +19,7 @@ interface IncomingConfig {
 }
 
 /**
- * Get Shopify configuration from request headers
- * Clients send config in X-Shopify-Config header as JSON (shopUrl or shop + accessToken)
+ * Get Shopify configuration from request headers (legacy — used as fallback only)
  */
 export function getConfigFromRequest(request: Request): ShopifyConfig | null {
   try {
@@ -48,16 +49,42 @@ export function getConfigFromRequest(request: Request): ShopifyConfig | null {
 }
 
 /**
- * Create a ShopifyClient instance with config from request or fallback to env vars
+ * @deprecated Use getShopifyClientAsync instead — this sync version cannot use DB-based store resolution.
  */
 export function getShopifyClient(request: Request): ShopifyClient {
   const config = getConfigFromRequest(request);
-  
+
   if (config) {
     return new ShopifyClient(config);
   }
 
   // Fallback to environment variables
+  return new ShopifyClient();
+}
+
+/**
+ * Create a ShopifyClient using DB-based store resolution (secure).
+ * Priority: current_store_id cookie → Prisma DB → decrypted token.
+ * Falls back to X-Shopify-Config header, then env vars.
+ */
+export async function getShopifyClientAsync(request: Request): Promise<ShopifyClient> {
+  // 1. Try DB-based resolution (current_store_id cookie → Prisma → decrypted token)
+  try {
+    const store = await resolveStore(request as NextRequest);
+    if (store) {
+      return new ShopifyClient({ shop: store.shop, accessToken: store.token });
+    }
+  } catch (err) {
+    console.error('[getShopifyClientAsync] resolveStore failed:', err);
+  }
+
+  // 2. Fallback to header-based config (backward compat)
+  const config = getConfigFromRequest(request);
+  if (config) {
+    return new ShopifyClient(config);
+  }
+
+  // 3. Fallback to env vars
   return new ShopifyClient();
 }
 

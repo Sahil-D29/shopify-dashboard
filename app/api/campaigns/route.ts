@@ -16,7 +16,7 @@ import {
   transformCampaign,
   transformCampaignToDb,
 } from '@/lib/utils/db-transformers';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import {
   filterByStoreId,
@@ -110,7 +110,7 @@ const calculateEstimatedReach = async (
   if (!segmentIds || segmentIds.length === 0) return fallback;
 
   try {
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
     const selectedSegments = await prisma.segment.findMany({
       where: {

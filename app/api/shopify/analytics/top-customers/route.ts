@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { Customer } from '@/lib/types';
 
 interface TopCustomer {
@@ -26,7 +26,7 @@ const getErrorMessage = (error: unknown): string => (error instanceof Error ? er
 
 export async function GET(request: Request) {
   try {
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const customersData = await client.getCustomers({ limit: 250 });
     const customers = (customersData.customers ?? []) as Customer[];
 

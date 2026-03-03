@@ -23,6 +23,8 @@ export async function POST() {
       '__Host-authjs',
       'auth-token',
       'session',
+      'current_store_id',
+      'shopify_store_config',
     ];
     
     // Clear all matching cookies
@@ -52,8 +54,10 @@ export async function POST() {
       '__Secure-authjs.callback-url',
       '__Secure-authjs.csrf-token',
       'auth-token',
+      'current_store_id',
+      'shopify_store_config',
     ];
-    
+
     for (const name of knownCookies) {
       try {
         cookieStore.delete(name);

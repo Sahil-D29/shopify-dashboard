@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Download, X, Loader2, CheckCircle2 } from 'lucide-react';
 import Papa from 'papaparse';
 import { format } from 'date-fns';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 
 interface CreateCustomerPayload {
   first_name: string;
@@ -143,7 +142,7 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
         customerData.tags = formData.tags.split(',').map(tag => tag.trim()).filter(Boolean);
       }
 
-      const response = await fetchWithConfig('/api/shopify/customers', {
+      const response = await fetch('/api/shopify/customers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

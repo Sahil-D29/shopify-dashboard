@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { enrollCustomer } from '@/lib/journeys/executor';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'journeyId and customerId required' }, { status: 400 });
     }
 
-    const shopifyClient = getShopifyClient(request);
+    const shopifyClient = await getShopifyClientAsync(request);
     const enrollment = await enrollCustomer(journeyId, customerId, shopifyClient);
 
     if (!enrollment) {

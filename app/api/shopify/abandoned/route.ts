@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { cache } from '@/lib/utils/cache';
 import type { ShopifyCheckoutResponse } from '@/lib/shopify/client';
 
@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
     if (!forceRefresh) {
       const cached = cache.get<AbandonedCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached abandoned checkouts');
         return NextResponse.json({
           checkouts: cached.checkouts,
           lastSynced: cached.lastSynced,
@@ -39,8 +38,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('🔄 Fetching abandoned checkouts from Shopify...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     const data: ShopifyCheckoutResponse = await client.getAbandonedCheckouts({ limit });
     
     const checkouts = data.checkouts ?? [];
@@ -52,7 +50,6 @@ export async function GET(request: NextRequest) {
       lastSynced,
     });
     
-    console.log(`✅ Fetched ${checkouts.length} abandoned checkouts from Shopify`);
     
     return NextResponse.json({
       checkouts,

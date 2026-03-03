@@ -3,7 +3,6 @@
 import Image from 'next/image';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
-import { fetchWithConfig } from '@/lib/fetch-with-config';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { StoreConfigManager } from '@/lib/store-config';
@@ -792,25 +791,25 @@ function DashboardContent() {
         // Fetch all data with proper error handling
         const [analyticsRes, ordersRes, productsRes, customersRes, locationsRes, checkoutsRes, campaignAnalyticsRes] =
           await Promise.allSettled([
-            fetchWithConfig(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, {
+            fetch(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/shopify/orders?limit=10${refreshParam}`, {
+            fetch(`${baseUrl}/api/shopify/orders?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/shopify/products?limit=10${refreshParam}`, {
+            fetch(`${baseUrl}/api/shopify/products?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/shopify/customers?limit=10${refreshParam}`, {
+            fetch(`${baseUrl}/api/shopify/customers?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/shopify/locations?limit=10${refreshParam}`, {
+            fetch(`${baseUrl}/api/shopify/locations?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, {
+            fetch(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, {
               cache: 'no-store',
             }),
-            fetchWithConfig(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
+            fetch(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
           ]);
 
         // Helper: get Response from Promise.allSettled; return null if failed/rejected so we can use fallback without throwing

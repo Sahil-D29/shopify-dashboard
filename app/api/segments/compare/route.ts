@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { CustomerSegment } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { requireStoreAccess, filterByStoreId } from '@/lib/tenant/api-helpers';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import { prisma } from '@/lib/prisma';
 
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch customers
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
     let customers: ShopifyCustomer[] = [];
     try {
       customers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });

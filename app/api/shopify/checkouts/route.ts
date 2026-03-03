@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyClient } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyCheckout, ShopifyCheckoutListResponse } from '@/lib/types/shopify-checkout';
 import { cache } from '@/lib/utils/cache';
 
@@ -33,30 +33,23 @@ export async function DELETE() {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🛒 GET /api/shopify/checkouts - Fetching from Shopify');
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 10);
-
-    console.log('📋 Request params:', { forceRefresh, limit });
 
     const cacheKey = `checkouts_${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<CheckoutsCacheEntry>(cacheKey);
       if (cached) {
-        console.log('📦 Returning cached checkouts:', cached.checkouts.length);
         return NextResponse.json({ checkouts: cached.checkouts, lastSynced: cached.lastSynced, cached: true });
       }
     } else {
       cache.delete(cacheKey);
-      console.log('🔄 Cache cleared, fetching fresh data');
     }
 
-    console.log('🔗 Getting Shopify client...');
-    const client = getShopifyClient(request);
+    const client = await getShopifyClientAsync(request);
 
-    console.log('📥 Fetching abandoned checkouts from Shopify...');
     // Fetch abandoned checkouts (open status)
     const checkoutsResponse = await client.getAbandonedCheckouts({ 
       status: 'open',
@@ -65,7 +58,6 @@ export async function GET(request: NextRequest) {
     
     // Shopify returns { checkouts: [...] }
     const allCheckouts = checkoutsResponse.checkouts || [];
-    console.log(`✅ Fetched ${allCheckouts.length} abandoned checkouts from Shopify`);
 
     // Sort by created_at descending (most recent first) and limit
     const sortedCheckouts = allCheckouts
@@ -78,7 +70,6 @@ export async function GET(request: NextRequest) {
 
     const lastSynced = Date.now();
 
-    console.log(`💾 Caching ${sortedCheckouts.length} checkouts`);
     cache.set<CheckoutsCacheEntry>(cacheKey, { checkouts: sortedCheckouts as ShopifyCheckout[], lastSynced });
 
     const response: ShopifyCheckoutListResponse = {
@@ -86,14 +77,9 @@ export async function GET(request: NextRequest) {
       lastSynced,
     };
 
-    console.log('✅ Returning checkouts response');
     return NextResponse.json({ ...response, cached: false });
   } catch (error) {
-    console.error('❌ Error in GET /api/shopify/checkouts:', {
-      error,
-      message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error('Error in GET /api/shopify/checkouts:', getErrorMessage(error));
 
     const errorMessage = getErrorMessage(error);
     const statusCode = error instanceof Error && 'status' in error 

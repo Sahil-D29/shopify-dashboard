@@ -104,8 +104,8 @@ export async function GET(
     const hasConditions = segment.conditionGroups?.some(group => (group.conditions?.length ?? 0) > 0) ?? false;
 
     // Fetch customers from Shopify using authorized store context
-    const { getShopifyClient } = await import('@/lib/shopify/api-helper');
-    const client = getShopifyClient(request);
+    const { getShopifyClientAsync } = await import('@/lib/shopify/api-helper');
+    const client = await getShopifyClientAsync(request);
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
 
     const matchedShopifyCustomers = !hasConditions || segment.name.toLowerCase() === 'all'

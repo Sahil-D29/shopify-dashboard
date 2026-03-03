@@ -83,9 +83,9 @@ export async function GET(
     
     try {
       // Fetch customers from Shopify
-      const { getShopifyClient } = await import('@/lib/shopify/api-helper');
+      const { getShopifyClientAsync } = await import('@/lib/shopify/api-helper');
       const { mapShopifyToUiCustomer } = await import('@/lib/segments/mapper');
-      const client = getShopifyClient(request);
+      const client = await getShopifyClientAsync(request);
       const shopifyCustomers = await client.fetchAll<any>('customers', { limit: 250 });
       
       const conditionGroups = segment.conditionGroups || [];
