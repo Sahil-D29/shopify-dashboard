@@ -26,6 +26,11 @@ import { createDefaultUnifiedTriggerConfig } from './trigger/utils';
 import type { EnhancedUnifiedTriggerConfig, UnifiedTriggerConfig } from '@/lib/types/trigger-config';
 import { isUnifiedTriggerEnabled, isJourneyTriggerV2Enabled } from '@/lib/featureFlags';
 import type { WhatsAppActionConfig, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
+import { ProductSelect } from '@/components/selectors/ProductSelect';
+import { CampaignSelect } from '@/components/selectors/CampaignSelect';
+import { TemplateSelect } from '@/components/selectors/TemplateSelect';
+import { SegmentSelect } from '@/components/selectors/SegmentSelect';
+import { JourneySelect } from '@/components/selectors/JourneySelect';
 import { MobilePreview } from '../MobilePreview';
 import type { StepId } from '../modals/WhatsAppActionModal';
 
@@ -708,6 +713,26 @@ export function JourneyNodeInspector({
                   <option value="behavior">Behavior</option>
                 </select>
               </div>
+              {/* Property selector for event-based conditions */}
+              {meta.conditionType === 'event' || meta.conditionType === 'behavior' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="conditionProperty">Property</Label>
+                  <select
+                    id="conditionProperty"
+                    className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139] focus:border-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]/20"
+                    value={String(meta.property ?? '')}
+                    onChange={event => handleMetaChange('property', event.target.value)}
+                  >
+                    <option value="">Select property</option>
+                    <option value="product">Product</option>
+                    <option value="campaign">Campaign</option>
+                    <option value="template">Template</option>
+                    <option value="segment">Segment</option>
+                    <option value="journey">Journey</option>
+                    <option value="custom">Custom value</option>
+                  </select>
+                </div>
+              ) : null}
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="operator">Operator</Label>
@@ -726,11 +751,38 @@ export function JourneyNodeInspector({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="conditionValue">Value</Label>
-                  <Input
-                    id="conditionValue"
-                    value={String(meta.value ?? '')}
-                    onChange={event => handleMetaChange('value', event.target.value)}
-                  />
+                  {meta.property === 'product' ? (
+                    <ProductSelect
+                      value={String(meta.value ?? '')}
+                      onValueChange={(val) => handleMetaChange('value', val)}
+                    />
+                  ) : meta.property === 'campaign' ? (
+                    <CampaignSelect
+                      value={String(meta.value ?? '')}
+                      onValueChange={(val) => handleMetaChange('value', val)}
+                    />
+                  ) : meta.property === 'template' ? (
+                    <TemplateSelect
+                      value={String(meta.value ?? '')}
+                      onValueChange={(val) => handleMetaChange('value', val)}
+                    />
+                  ) : meta.property === 'segment' ? (
+                    <SegmentSelect
+                      value={String(meta.value ?? '')}
+                      onValueChange={(val) => handleMetaChange('value', val)}
+                    />
+                  ) : meta.property === 'journey' ? (
+                    <JourneySelect
+                      value={String(meta.value ?? '')}
+                      onValueChange={(val) => handleMetaChange('value', val)}
+                    />
+                  ) : (
+                    <Input
+                      id="conditionValue"
+                      value={String(meta.value ?? '')}
+                      onChange={event => handleMetaChange('value', event.target.value)}
+                    />
+                  )}
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">

@@ -7,7 +7,13 @@ import {
   SEGMENT_OPERATORS,
   getFieldOptionsByGroup,
   type SegmentFieldType,
+  type EntityType,
 } from '@/lib/constants/segment-fields';
+import { ProductSelect } from '@/components/selectors/ProductSelect';
+import { CampaignSelect } from '@/components/selectors/CampaignSelect';
+import { TemplateSelect } from '@/components/selectors/TemplateSelect';
+import { SegmentSelect } from '@/components/selectors/SegmentSelect';
+import { JourneySelect } from '@/components/selectors/JourneySelect';
 
 type NumberRange = [number, number];
 
@@ -29,6 +35,11 @@ const ensureNumberRange = (value: ConditionValue['value']): NumberRange => {
 function getFieldType(field: string): SegmentFieldType {
   const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
   return meta?.type ?? 'text';
+}
+
+function getFieldEntityType(field: string): EntityType | undefined {
+  const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
+  return meta?.entityType;
 }
 
 export default function ConditionRow({
@@ -135,14 +146,33 @@ export default function ConditionRow({
           }
           className="w-52"
         />
-      ) : (
-        <Input
-          type="text"
-          value={typeof condition.value === 'string' ? condition.value : ''}
-          onChange={event => onChange({ ...condition, value: event.target.value })}
-          className="w-64"
-        />
-      )}
+      ) : (() => {
+        const entityType = getFieldEntityType(condition.field);
+        const strValue = typeof condition.value === 'string' ? condition.value : '';
+        if (entityType === 'product') {
+          return <ProductSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+        }
+        if (entityType === 'campaign') {
+          return <CampaignSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+        }
+        if (entityType === 'template') {
+          return <TemplateSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+        }
+        if (entityType === 'journey') {
+          return <JourneySelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+        }
+        if (entityType === 'segment') {
+          return <SegmentSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+        }
+        return (
+          <Input
+            type="text"
+            value={strValue}
+            onChange={event => onChange({ ...condition, value: event.target.value })}
+            className="w-64"
+          />
+        );
+      })()}
 
       <button onClick={onRemove} className="ml-auto p-2 rounded hover:bg-gray-100" aria-label="Remove condition">
         <X className="w-4 h-4" />

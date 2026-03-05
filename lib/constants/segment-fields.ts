@@ -1,10 +1,13 @@
 export type SegmentFieldType = 'text' | 'number' | 'date' | 'tags' | 'boolean';
 
+export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey';
+
 export interface SegmentFieldOption {
   value: string;
   label: string;
   type: SegmentFieldType;
   group: string;
+  entityType?: EntityType;
 }
 
 export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
@@ -32,7 +35,7 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'orders_in_last_x_days', label: 'Orders in Last X Days', type: 'number', group: 'Order History' },
   { value: 'total_items_purchased', label: 'Total Items Purchased', type: 'number', group: 'Order History' },
   { value: 'never_ordered', label: 'Never Ordered', type: 'boolean', group: 'Order History' },
-  { value: 'ordered_specific_product', label: 'Ordered Specific Product', type: 'text', group: 'Order History' },
+  { value: 'ordered_specific_product', label: 'Ordered Specific Product', type: 'text', group: 'Order History', entityType: 'product' },
 
   // Engagement
   { value: 'whatsapp_messages_received', label: 'WhatsApp Messages Received', type: 'number', group: 'Engagement' },
@@ -41,12 +44,16 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'last_message_sent', label: 'Last Message Sent', type: 'date', group: 'Engagement' },
   { value: 'campaign_opens', label: 'Campaign Opens', type: 'number', group: 'Engagement' },
   { value: 'campaign_clicks', label: 'Campaign Clicks', type: 'number', group: 'Engagement' },
+  { value: 'engaged_campaign_id', label: 'Engaged with Campaign', type: 'text', group: 'Engagement', entityType: 'campaign' },
+  { value: 'received_template', label: 'Received Template', type: 'text', group: 'Engagement', entityType: 'template' },
   { value: 'accepts_marketing', label: 'Accepts Marketing', type: 'boolean', group: 'Engagement' },
 
   // Behavioral
   { value: 'cart_abandonment_count', label: 'Cart Abandonment Count', type: 'number', group: 'Behavioral' },
   { value: 'last_abandoned_cart_date', label: 'Last Abandoned Cart Date', type: 'date', group: 'Behavioral' },
   { value: 'last_seen', label: 'Last Seen', type: 'date', group: 'Behavioral' },
+  { value: 'in_journey', label: 'Enrolled in Journey', type: 'text', group: 'Behavioral', entityType: 'journey' },
+  { value: 'in_segment', label: 'Belongs to Segment', type: 'text', group: 'Behavioral', entityType: 'segment' },
 
   // RFM Analysis
   { value: 'rfm_recency_score', label: 'RFM Recency Score', type: 'number', group: 'RFM Analysis' },
@@ -68,7 +75,9 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events' },
   { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events' },
   { value: 'event_product_viewed', label: 'Product Viewed', type: 'boolean', group: 'Shopify Events' },
+  { value: 'viewed_product', label: 'Viewed Specific Product', type: 'text', group: 'Shopify Events', entityType: 'product' },
   { value: 'event_product_added_to_cart', label: 'Product Added to Cart', type: 'boolean', group: 'Shopify Events' },
+  { value: 'added_product_to_cart', label: 'Added Specific Product to Cart', type: 'text', group: 'Shopify Events', entityType: 'product' },
   { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events' },
   { value: 'event_subscription_created', label: 'Subscription Created', type: 'boolean', group: 'Shopify Events' },
   { value: 'event_subscription_renewed', label: 'Subscription Renewed', type: 'boolean', group: 'Shopify Events' },
