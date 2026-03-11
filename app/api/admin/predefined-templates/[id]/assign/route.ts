@@ -27,11 +27,11 @@ export async function POST(
     // Get target stores
     let stores;
     if (storeIds === 'all') {
-      stores = await prisma.store.findMany({ select: { id: true } });
+      stores = await prisma.store.findMany({ select: { id: true, ownerId: true } });
     } else if (Array.isArray(storeIds) && storeIds.length > 0) {
       stores = await prisma.store.findMany({
         where: { id: { in: storeIds } },
-        select: { id: true },
+        select: { id: true, ownerId: true },
       });
     } else {
       return NextResponse.json({ error: 'storeIds must be an array of store IDs or "all"' }, { status: 400 });
@@ -75,6 +75,7 @@ export async function POST(
             status: 'DRAFT',
             triggerType: triggerType as any,
             triggerConfig: {},
+            createdBy: store.ownerId,
           },
         });
 
