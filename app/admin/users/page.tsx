@@ -28,8 +28,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit, Trash2, Eye, MoreVertical, Download, User as UserIcon } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, MoreVertical, Download, User as UserIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import { getRoleDisplayName } from '@/lib/auth/permissions';
 import {
   DropdownMenu,
@@ -52,6 +53,7 @@ interface User {
 }
 
 export default function UserManagementPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -487,7 +489,12 @@ export default function UserManagementPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       {getUserAvatar(user)}
-                      <span className="font-medium">{user.name || '—'}</span>
+                      <button
+                        className="font-medium text-left hover:text-primary hover:underline"
+                        onClick={() => router.push(`/admin/users/${user.id}`)}
+                      >
+                        {user.name || '—'}
+                      </button>
                     </div>
                   </TableCell>
                   <TableCell>{user.email || '—'}</TableCell>
@@ -506,6 +513,12 @@ export default function UserManagementPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/admin/users/${user.id}`)}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View Details
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
                             setSelectedUser(user);
@@ -783,6 +796,7 @@ function EditUserModal({
     phone: user.phone || '',
     role: user.role,
     status: user.status,
+    storeId: user.storeId || '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
@@ -804,8 +818,9 @@ function EditUserModal({
         updates.password = formData.password;
       }
 
-      if (user.storeId != null && String(user.storeId).trim() !== '') {
-        updates.storeId = String(user.storeId).trim();
+      // Include storeId for store assignment
+      if (formData.storeId && formData.storeId.trim() !== '') {
+        updates.storeId = formData.storeId.trim();
       }
 
       const response = await fetch(`/api/admin/users/${user.id}`, {
@@ -881,37 +896,61 @@ function EditUserModal({
             </div>
           </div>
           <div>
-            <Label>Role *</Label>
+            <Label>Assigned Store</Label>
             <Select
-              value={formData.role}
-              onValueChange={(value) => setFormData({ ...formData, role: value as any })}
+              value={formData.storeId}
+              onValueChange={(value) => setFormData({ ...formData, storeId: value })}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select a store" />
               </SelectTrigger>
               <SelectContent>
-                {(['admin', 'manager', 'builder', 'viewer'] as const).map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {getRoleDisplayName(role)}
+                <SelectItem value="none">No Store</SelectItem>
+                {stores.map((store) => (
+                  <SelectItem key={store.id} value={store.id}>
+                    {store.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Assign or change the user&apos;s primary store
+            </p>
           </div>
-          <div>
-            <Label>Status *</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => setFormData({ ...formData, status: value as any })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Role *</Label>
+              <Select
+                value={formData.role}
+                onValueChange={(value) => setFormData({ ...formData, role: value as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['admin', 'manager', 'builder', 'viewer'] as const).map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {getRoleDisplayName(role)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Status *</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => setFormData({ ...formData, status: value as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

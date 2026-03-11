@@ -149,14 +149,14 @@ export async function getUserContext(request?: NextRequest): Promise<UserContext
       
       // Use enhanced role mapping
       role = mapRoleToSystemRole(rawRole);
-      
+
       if (role === 'STORE_OWNER') {
-        storeId = (user as any).storeId || user.shopifyStoreId || null;
+        storeId = (user as any).storeId || null;
       } else if (role === 'USER') {
-        assignedStoreId = (user as any).assignedStoreId || user.shopifyStoreId || null;
+        assignedStoreId = (user as any).assignedStoreId || (user as any).storeId || null;
       }
-      
-      console.log('[UserContext] Mapped role:', role);
+
+      console.log('[UserContext] Mapped role:', role, 'storeId:', storeId);
     } else if (storeUser) {
       // Store user has role field - roles: 'admin', 'manager', 'builder', 'viewer'
       const storeUserRole = normalizeRole(storeUser.role);
@@ -185,6 +185,42 @@ export async function getUserContext(request?: NextRequest): Promise<UserContext
         sessionUserId: session.user.id,
         sessionUserEmail: session.user.email,
       });
+    }
+
+    // Fallback: If STORE_OWNER but storeId is still null, look up from DB
+    if (role === 'STORE_OWNER' && !storeId) {
+      try {
+        const { prisma: db } = await import('@/lib/prisma');
+        const ownedStore = await db.store.findFirst({
+          where: { ownerId: session.user.id },
+          select: { id: true },
+          orderBy: { installedAt: 'desc' },
+        });
+        if (ownedStore) {
+          storeId = ownedStore.id;
+          console.log('[UserContext] Resolved storeId from Store.ownerId fallback:', storeId);
+        }
+      } catch (e) {
+        console.error('[UserContext] Store fallback lookup failed:', e);
+      }
+    }
+
+    // Fallback: If USER but no assignedStoreId, look up from StoreMember
+    if (role === 'USER' && !assignedStoreId) {
+      try {
+        const { prisma: db } = await import('@/lib/prisma');
+        const membership = await db.storeMember.findFirst({
+          where: { userId: session.user.id, status: 'ACTIVE' },
+          select: { storeId: true },
+          orderBy: { joinedAt: 'desc' },
+        });
+        if (membership) {
+          assignedStoreId = membership.storeId;
+          console.log('[UserContext] Resolved assignedStoreId from StoreMember fallback:', assignedStoreId);
+        }
+      } catch (e) {
+        console.error('[UserContext] StoreMember fallback lookup failed:', e);
+      }
     }
 
     // For ADMIN: can access all stores, use currentStoreId or first available

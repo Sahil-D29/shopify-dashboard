@@ -86,29 +86,54 @@ export async function GET(
     } else if (storeFilter.storeId) {
       // User has a specific store assigned
       if (isDefaultRequest) {
-        // If requesting 'default' but user has a store, use their store
         effectiveStoreId = storeFilter.storeId;
       } else {
-        // User is requesting a specific store - verify it matches their assigned store
         effectiveStoreId = requestedStoreId;
         if (effectiveStoreId !== storeFilter.storeId) {
-          console.log('❌ Store access denied');
-          console.log('   Requested store:', requestedStoreId);
-          console.log('   User authorized store:', storeFilter.storeId);
-          
-          return NextResponse.json(
-            { 
-              error: 'Forbidden',
-              message: 'You do not have access to this store',
+          // Before denying, check if user is the store owner or an active member
+          const ownerOrMember = await prisma.store.findFirst({
+            where: {
+              id: requestedStoreId,
+              OR: [
+                { ownerId: userContext.userId },
+                { members: { some: { userId: userContext.userId, status: 'ACTIVE' } } },
+              ],
             },
-            { status: 403 }
-          );
+            select: { id: true },
+          });
+          if (!ownerOrMember) {
+            console.log('❌ Store access denied');
+            return NextResponse.json(
+              { error: 'Forbidden', message: 'You do not have access to this store' },
+              { status: 403 }
+            );
+          }
+          console.log('✓ Access granted via store ownership/membership fallback');
         }
       }
     } else {
-      // User doesn't have a specific store assigned
-      // Allow 'default' or any store they request (they might be setting up)
+      // storeFilter.storeId is undefined — check DB directly for ownership/membership
       effectiveStoreId = requestedStoreId;
+      if (!isDefaultRequest) {
+        const ownerOrMember = await prisma.store.findFirst({
+          where: {
+            id: requestedStoreId,
+            OR: [
+              { ownerId: userContext.userId },
+              { members: { some: { userId: userContext.userId, status: 'ACTIVE' } } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!ownerOrMember) {
+          console.log('❌ Store access denied (no storeId in context, not owner/member)');
+          return NextResponse.json(
+            { error: 'Forbidden', message: 'You do not have access to this store' },
+            { status: 403 }
+          );
+        }
+        console.log('✓ Access granted via direct ownership/membership check');
+      }
     }
 
     console.log('✓ Permission granted');

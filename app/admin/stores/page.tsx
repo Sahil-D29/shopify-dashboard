@@ -30,6 +30,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Store, MoreVertical, Eye, Edit, Trash2, Users, Activity, Mail, Calendar, Globe, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +52,7 @@ interface Store {
 }
 
 export default function StoreManagementPage() {
+  const router = useRouter();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -258,7 +260,12 @@ export default function StoreManagementPage() {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <Store className="h-4 w-4 text-gray-400" />
-                      {store.name}
+                      <button
+                        className="hover:text-primary hover:underline text-left"
+                        onClick={() => router.push(`/admin/stores/${store.id}`)}
+                      >
+                        {store.name}
+                      </button>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-gray-600">
@@ -281,10 +288,16 @@ export default function StoreManagementPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          onClick={() => router.push(`/admin/stores/${store.id}`)}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open Store Page
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() => handleViewDetails(store.id)}
                         >
                           <Eye className="mr-2 h-4 w-4" />
-                          View Details
+                          Quick View
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(store.id)}

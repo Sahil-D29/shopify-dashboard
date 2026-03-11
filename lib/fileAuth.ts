@@ -6,6 +6,8 @@ export interface User {
   name: string;
   email: string;
   password: string; // Empty string for OAuth users
+  /** Internal Store UUID (from ownedStores[0].id) — use this for access checks */
+  storeId?: string | null;
   shopifyStoreId: string | null;
   createdAt: string;
   lastLogin?: string;
@@ -26,6 +28,7 @@ function prismaUserToLegacyUser(prismaUser: any): User {
     name: prismaUser.name,
     email: prismaUser.email,
     password: prismaUser.passwordHash || '',
+    storeId: prismaUser.ownedStores?.[0]?.id || null,
     shopifyStoreId: prismaUser.ownedStores?.[0]?.shopifyStoreId || null,
     createdAt: prismaUser.createdAt.toISOString(),
     lastLogin: prismaUser.lastLogin?.toISOString(),
@@ -44,6 +47,7 @@ export async function readUsers(): Promise<User[]> {
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
@@ -83,6 +87,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
@@ -102,6 +107,7 @@ export async function findUserById(id: string): Promise<User | null> {
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
@@ -130,6 +136,7 @@ export async function createUser(name: string, email: string, password: string):
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
@@ -150,6 +157,7 @@ export async function verifyPassword(email: string, password: string): Promise<U
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
@@ -195,6 +203,7 @@ export async function getUserStats() {
       include: {
         ownedStores: {
           select: {
+            id: true,
             shopifyStoreId: true,
           },
         },
