@@ -565,6 +565,7 @@ model Subscription {
   cancelAtPeriodEnd    Boolean            @default(false)
   stripeCustomerId     String?
   stripeSubscriptionId String?
+  lastReminderSentAt   DateTime?          // Track when last expiry reminder was sent
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -675,6 +676,9 @@ model PlanFeature {
   customTemplates      Boolean  @default(false)
   advancedSegmentation Boolean  @default(false)
   priceINR             Decimal? @db.Decimal(10, 2) // Price in INR
+  isVisible            Boolean  @default(true)  // Hide/show from public plan listing
+  isActive             Boolean  @default(true)  // Deactivate a plan entirely
+  displayOrder         Int      @default(0)     // Control plan ordering
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -1142,5 +1146,23 @@ model WhatsAppAnalyticsSnapshot {
   @@index([storeId])
   @@index([date])
   @@map("whatsapp_analytics_snapshots")
+}
+
+model PredefinedTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String   // abandoned_cart, product_view, cart_reminder, checkout, order_confirmation, welcome, re_engagement, custom
+  definition  Json     // Journey node/edge definition
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false) // Auto-assign to new stores
+  assignedTo  Json?    // Array of storeIds, null = all stores
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@map("predefined_templates")
 }
 

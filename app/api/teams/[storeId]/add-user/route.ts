@@ -26,7 +26,7 @@ export async function POST(
 
     // Normalize role for checking
     const normalizedRole = userContext.role ? userContext.role.toUpperCase().replace(/_/g, '') : '';
-    const canAdd = ['ADMIN', 'SUPERADMIN', 'MANAGER'].includes(normalizedRole);
+    const canAdd = ['ADMIN', 'SUPERADMIN', 'MANAGER', 'STOREOWNER', 'OWNER'].includes(normalizedRole);
     
     console.log('[API] User role:', userContext.role, 'Normalized:', normalizedRole, 'Can add:', canAdd);
     

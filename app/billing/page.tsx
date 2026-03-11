@@ -1,17 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import PlanCard from '@/components/billing/PlanCard';
 import UsageDashboard from '@/components/billing/UsageDashboard';
 import PaymentHistory from '@/components/billing/PaymentHistory';
 import CouponInput from '@/components/billing/CouponInput';
 import RazorpayCheckout from '@/components/billing/RazorpayCheckout';
 import { useTenant } from '@/lib/tenant/tenant-context';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle, XCircle } from 'lucide-react';
 
 interface Plan {
   planId: string;
@@ -60,14 +68,23 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [discount, setDiscount] = useState<{ discountType: string; value: number; code: string } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Calculate days until expiry
+  const daysUntilExpiry = currentSubscription?.currentPeriodEnd
+    ? Math.ceil(
+        (new Date(currentSubscription.currentPeriodEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+    : null;
+  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+  const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0;
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch plans (public, no storeId needed)
         const plansRes = await fetch('/api/billing/plans');
         if (plansRes.ok) {
           const plansData = await plansRes.json();
@@ -79,7 +96,6 @@ export default function BillingPage() {
           })));
         }
 
-        // Fetch subscription using storeId from tenant context
         if (storeId) {
           const subRes = await fetch(`/api/billing/subscription?storeId=${storeId}`);
           if (subRes.ok) {
@@ -104,6 +120,9 @@ export default function BillingPage() {
 
   const handleSubscribe = async (planId: string) => {
     setSelectedPlanId(planId);
+    setDiscount(null);
+    setError(null);
+    setCheckoutDialogOpen(true);
   };
 
   const handleCheckout = async () => {
@@ -139,18 +158,19 @@ export default function BillingPage() {
       if (!response.ok) {
         const errorMsg = data?.error || `Checkout failed (HTTP ${response.status})`;
         const step = data?.step ? ` [step: ${data.step}]` : '';
-        console.error('Checkout error:', { status: response.status, data });
         setError(`${errorMsg}${step}`);
         return;
       }
 
       if (data?.gateway === 'free') {
+        setCheckoutDialogOpen(false);
         alert(data.message || 'Free plan activated!');
         window.location.reload();
         return;
       }
 
       if (data?.gateway === 'razorpay' && data.razorpayOrderId) {
+        setCheckoutDialogOpen(false);
         setCheckoutData(data);
         return;
       }
@@ -182,6 +202,18 @@ export default function BillingPage() {
     alert(`Payment failed: ${failError}`);
   };
 
+  const selectedPlan = selectedPlanId ? plans.find((p) => p.planId === selectedPlanId) : null;
+  const originalPrice = selectedPlan
+    ? Number(currency === 'INR' ? (selectedPlan.priceINR || 0) : (selectedPlan.price || 0))
+    : 0;
+  const discountAmt = discount
+    ? discount.discountType === 'PERCENTAGE'
+      ? (originalPrice * Number(discount.value) / 100)
+      : Number(discount.value)
+    : 0;
+  const finalPrice = Math.max(0, originalPrice - discountAmt);
+  const currSymbol = currency === 'INR' ? '₹' : '$';
+
   if (loading || tenantLoading) {
     return (
       <div className="flex items-center justify-center p-16">
@@ -197,6 +229,54 @@ export default function BillingPage() {
         <h1 className="text-3xl font-bold">Billing & Subscription</h1>
         <Badge variant="outline" className="text-sm px-3 py-1">₹ INR</Badge>
       </div>
+
+      {/* Expiry Warning Banners */}
+      {isExpired && currentSubscription && (
+        <div className="rounded-lg bg-red-50 border border-red-300 px-5 py-4 flex items-start gap-3">
+          <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-red-800">Your plan has expired</p>
+            <p className="text-sm text-red-700 mt-1">
+              Your <strong>{currentSubscription.planName}</strong> plan expired on{' '}
+              {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()}.
+              Renew now to continue using all features.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white shrink-0"
+            onClick={() => {
+              if (currentSubscription.planId) handleSubscribe(currentSubscription.planId);
+            }}
+          >
+            Renew Now
+          </Button>
+        </div>
+      )}
+
+      {isExpiringSoon && !isExpired && currentSubscription && (
+        <div className="rounded-lg bg-amber-50 border border-amber-300 px-5 py-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800">Your plan expires soon</p>
+            <p className="text-sm text-amber-700 mt-1">
+              Your <strong>{currentSubscription.planName}</strong> plan expires in{' '}
+              <strong>{daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}</strong> (on{' '}
+              {new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()}).
+              Renew to avoid interruption.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+            onClick={() => {
+              if (currentSubscription.planId) handleSubscribe(currentSubscription.planId);
+            }}
+          >
+            Renew Now
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -219,7 +299,11 @@ export default function BillingPage() {
                 <p className="text-sm text-muted-foreground">Status</p>
                 <Badge
                   className={
-                    currentSubscription.status === 'ACTIVE' ? 'bg-green-500' : 'bg-yellow-500'
+                    currentSubscription.status === 'ACTIVE'
+                      ? 'bg-green-500'
+                      : currentSubscription.status === 'PAST_DUE'
+                      ? 'bg-red-500'
+                      : 'bg-yellow-500'
                   }
                 >
                   {currentSubscription.status}
@@ -261,65 +345,6 @@ export default function BillingPage() {
               ))}
             </div>
           )}
-
-          {selectedPlanId && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Complete Your Subscription</CardTitle>
-                <CardDescription>
-                  You selected: {plans.find((p) => p.planId === selectedPlanId)?.name}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <CouponInput onApply={setDiscount} planId={selectedPlanId} />
-                {discount && (() => {
-                  const selectedPlan = plans.find((p) => p.planId === selectedPlanId);
-                  const originalPrice = Number(currency === 'INR' ? (selectedPlan?.priceINR || 0) : (selectedPlan?.price || 0));
-                  const discountVal = Number(discount.value);
-                  const discountAmt = discount.discountType === 'PERCENTAGE'
-                    ? (originalPrice * discountVal / 100)
-                    : discountVal;
-                  const finalPrice = Math.max(0, originalPrice - discountAmt);
-                  const currSymbol = currency === 'INR' ? '₹' : '$';
-                  return (
-                    <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Original Price:</span>
-                        <span className="line-through text-gray-400">{currSymbol}{originalPrice.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-green-700">Discount ({discount.code}):</span>
-                        <span className="text-green-700">-{currSymbol}{discountAmt.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold border-t border-green-200 pt-1 mt-1">
-                        <span>You Pay:</span>
-                        <span className="text-green-700">{currSymbol}{finalPrice.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {error && (
-                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </div>
-                )}
-                <Button
-                  onClick={handleCheckout}
-                  className="w-full"
-                  disabled={checkoutLoading}
-                >
-                  {checkoutLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    'Proceed to Checkout'
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         <TabsContent value="usage">
@@ -343,6 +368,88 @@ export default function BillingPage() {
         </TabsContent>
       </Tabs>
 
+      {/* Checkout Dialog */}
+      <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Subscribe to {selectedPlan?.name}</DialogTitle>
+            <DialogDescription>Review your plan and complete checkout</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Plan Summary */}
+            <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Plan</span>
+                <span className="font-medium">{selectedPlan?.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Billing Cycle</span>
+                <span className="font-medium capitalize">{selectedPlan?.billingCycle || 'Monthly'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Price</span>
+                <span className="font-medium">{currSymbol}{originalPrice.toFixed(2)}</span>
+              </div>
+              {selectedPlan && (
+                <>
+                  <div className="border-t pt-2 mt-2 text-xs text-muted-foreground space-y-1">
+                    <p>{selectedPlan.messagesPerMonth?.toLocaleString() || '0'} messages/month</p>
+                    <p>{selectedPlan.campaignsPerMonth || '0'} campaigns/month</p>
+                    {selectedPlan.whatsappAutomation && <p>WhatsApp Automation</p>}
+                    {selectedPlan.advancedSegmentation && <p>Advanced Segmentation</p>}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Coupon */}
+            <CouponInput onApply={setDiscount} planId={selectedPlanId || ''} />
+
+            {/* Discount Summary */}
+            {discount && (
+              <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Original Price:</span>
+                  <span className="line-through text-gray-400">{currSymbol}{originalPrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Discount ({discount.code}):</span>
+                  <span className="text-green-700">-{currSymbol}{discountAmt.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-green-200 pt-1 mt-1">
+                  <span>You Pay:</span>
+                  <span className="text-green-700">{currSymbol}{finalPrice.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCheckout} disabled={checkoutLoading}>
+              {checkoutLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Pay ${currSymbol}${(discount ? finalPrice : originalPrice).toFixed(2)}`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Razorpay Checkout (renders hidden, auto-opens modal) */}
       {checkoutData?.gateway === 'razorpay' && checkoutData.razorpayOrderId && checkoutData.razorpayKeyId && (
         <RazorpayCheckout
           orderId={checkoutData.razorpayOrderId}

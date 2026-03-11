@@ -18,6 +18,7 @@ export async function PUT(
       name, price, priceINR, billingCycle, messagesPerMonth, campaignsPerMonth,
       stores, teamMembersPerStore, analytics, support,
       whatsappAutomation, customTemplates, advancedSegmentation,
+      isVisible, isActive, displayOrder,
     } = body;
 
     const plan = await prisma.planFeature.update({
@@ -36,6 +37,9 @@ export async function PUT(
         ...(whatsappAutomation !== undefined && { whatsappAutomation }),
         ...(customTemplates !== undefined && { customTemplates }),
         ...(advancedSegmentation !== undefined && { advancedSegmentation }),
+        ...(isVisible !== undefined && { isVisible }),
+        ...(isActive !== undefined && { isActive }),
+        ...(displayOrder !== undefined && { displayOrder }),
       },
     });
 
@@ -46,5 +50,29 @@ export async function PUT(
     }
     console.error('Admin plan PUT error:', error);
     return NextResponse.json({ error: 'Failed to update plan' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAdmin(request);
+    const { id } = await params;
+
+    // Soft-delete: set isActive = false, isVisible = false
+    const plan = await prisma.planFeature.update({
+      where: { id },
+      data: { isActive: false, isVisible: false },
+    });
+
+    return NextResponse.json({ success: true, plan });
+  } catch (error: any) {
+    if (error.message === 'Admin authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('Admin plan DELETE error:', error);
+    return NextResponse.json({ error: 'Failed to delete plan' }, { status: 500 });
   }
 }

@@ -274,7 +274,12 @@ export default function StoreManagementPage() {
                   <TableCell>{store.owner}</TableCell>
                   <TableCell>{getPlanBadge(store.plan)}</TableCell>
                   <TableCell>{getStatusBadge(store.status)}</TableCell>
-                  <TableCell>{store.usersCount || 0}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-gray-400" />
+                      <span className="font-medium">{store.usersCount || 0}</span>
+                    </span>
+                  </TableCell>
                   <TableCell>{store.messagesCount?.toLocaleString() || 0}</TableCell>
                   <TableCell>
                     {new Date(store.createdAt).toLocaleDateString()}

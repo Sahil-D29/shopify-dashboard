@@ -10,8 +10,12 @@ export async function GET(request: NextRequest) {
     const session = await auth();
 
     const plans = await prisma.planFeature.findMany({
+      where: {
+        isVisible: true,
+        isActive: true,
+      },
       orderBy: {
-        price: 'asc',
+        displayOrder: 'asc',
       },
     });
 

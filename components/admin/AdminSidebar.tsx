@@ -19,6 +19,7 @@ import {
   HeartPulse,
   AlertTriangle,
   Bell,
+  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
       { name: 'Templates', href: '/admin/templates', icon: MessageSquare },
+      { name: 'Journey Templates', href: '/admin/journey-templates', icon: Workflow },
     ],
   },
   {
