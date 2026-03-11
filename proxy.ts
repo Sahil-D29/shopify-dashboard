@@ -70,24 +70,22 @@ export async function proxy(request: NextRequest) {
   const isAuthenticated = !!token;
 
   if (isAuthPage) {
-    if (isAuthenticated) return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (isAuthenticated) return NextResponse.redirect(new URL("/", request.url));
     return NextResponse.next();
   }
 
   if (!isAuthenticated) {
     const signInUrl = new URL("/auth/signin", request.url);
     const fullPath = pathname + (request.nextUrl.search || "");
-    const defaultCallback = pathname === "/" || pathname.startsWith("/auth") ? "/dashboard" : fullPath;
+    const defaultCallback = pathname === "/" || pathname.startsWith("/auth") ? "/" : fullPath;
     signInUrl.searchParams.set("callbackUrl", defaultCallback);
     const res = NextResponse.redirect(signInUrl);
     res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     return res;
   }
 
-  // Authenticated: redirect root to dashboard
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // Authenticated: root (/) renders the dashboard directly — no redirect needed.
+  // /dashboard redirects to / in app/dashboard/page.tsx.
 
   const tenantResponse = await tenantMiddleware(request);
   if (tenantResponse) {

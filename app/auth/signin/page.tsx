@@ -51,7 +51,9 @@ function SignInForm() {
   }, [resetSuccess]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    // Only redirect if we have a real authenticated session with user data.
+    // This prevents redirect loops caused by stale session state after signout.
+    if (status === 'authenticated' && session?.user?.email) {
       const go = async () => {
         let targetUrl = '/onboarding';
         try {
@@ -65,7 +67,7 @@ function SignInForm() {
             // User onboarded — check settings setup
             const statusResponse = await fetch('/api/settings/status');
             const statusData = await statusResponse.json();
-            const setupCompleted = statusData.success && statusData.status?.settingsCompleted;
+            const setupCompleted = statusData.success && statusData.status?.shopifyConfigured;
             if (setupCompleted) {
               const validCallback =
                 callbackUrl &&
@@ -87,7 +89,7 @@ function SignInForm() {
       };
       go();
     }
-  }, [status, callbackUrl]);
+  }, [status, session, callbackUrl]);
 
   useEffect(() => {
     if (error) {

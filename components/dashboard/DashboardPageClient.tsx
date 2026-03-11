@@ -1019,9 +1019,10 @@ function DashboardContent() {
     }
   }, [isMounted]);
 
-  // Redirect to setup when settings are incomplete (full page so session is applied)
+  // Only redirect to setup when Shopify is NOT configured (critical for dashboard).
+  // If only WhatsApp is missing, show a banner instead of blocking the entire dashboard.
   useEffect(() => {
-    if (isMounted && settingsStatus && !settingsStatus.settingsCompleted) {
+    if (isMounted && settingsStatus && !settingsStatus.shopifyConfigured) {
       window.location.href = '/settings?setup=true';
     }
   }, [isMounted, settingsStatus]);

@@ -12,8 +12,8 @@ interface LogoutButtonProps {
   className?: string;
 }
 
-export default function LogoutButton({ 
-  variant = 'ghost', 
+export default function LogoutButton({
+  variant = 'ghost',
   showIcon = true,
   className = ''
 }: LogoutButtonProps) {
@@ -23,17 +23,20 @@ export default function LogoutButton({
     setIsLoading(true);
 
     try {
-      // Sign out server-side first (clears session cookie)
-      await signOut({ redirect: false });
+      // 1. Clear all auth cookies via our logout API
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
 
-      // Clear client-side state AFTER signOut completes
+      // 2. Sign out via NextAuth (clears session state)
+      await signOut({ redirect: false }).catch(() => {});
+
+      // 3. Clear client-side state
       if (typeof window !== 'undefined') {
         localStorage.clear();
         sessionStorage.clear();
       }
 
-      // Manual redirect to sign-in page
-      window.location.replace('/auth/signin');
+      // Hard redirect to sign-in page
+      window.location.href = '/auth/signin';
     } catch (error) {
       console.error('Logout error:', error);
       // Fallback: force redirect even on error
@@ -41,7 +44,7 @@ export default function LogoutButton({
         localStorage.clear();
         sessionStorage.clear();
       }
-      window.location.replace('/auth/signin');
+      window.location.href = '/auth/signin';
     }
   };
 
@@ -61,4 +64,3 @@ export default function LogoutButton({
     </Button>
   );
 }
-

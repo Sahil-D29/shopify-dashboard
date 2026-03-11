@@ -49,10 +49,10 @@ export function ConfigurationGuard({
     // Wait for session to be determined
     if (status === 'loading') return;
 
-    // If user is NOT authenticated, don't do anything - let middleware handle redirect
-    // This prevents the settings redirect from interfering with sign-out
+    // If user is NOT authenticated, redirect to sign-in
+    // (No middleware.ts exists, so we handle this here)
     if (status === 'unauthenticated') {
-      // User is not logged in - middleware will redirect to sign-in
+      window.location.href = '/auth/signin';
       return;
     }
 
@@ -70,18 +70,33 @@ export function ConfigurationGuard({
       return;
     }
 
-    // Check if store is connected via cookie (set during OAuth)
-    const frame = requestAnimationFrame(() => {
-      const storeId = document.cookie.split(';').find(c => c.trim().startsWith('current_store_id='));
-      const configured = !!storeId;
-      setIsConfigured(configured);
+    // Check if store is connected via cookie OR via API
+    const frame = requestAnimationFrame(async () => {
+      const storeIdCookie = document.cookie.split(';').find(c => c.trim().startsWith('current_store_id='));
 
-      // Only redirect to settings if user IS authenticated but NOT configured
-      if (!configured && pathname !== '/settings' && status === 'authenticated') {
-        const setupParam = searchParams.get('setup');
-        if (!setupParam) {
-          window.location.href = '/settings?setup=true';
+      if (storeIdCookie) {
+        setIsConfigured(true);
+        return;
+      }
+
+      // Cookie might not be set yet (race with TenantProvider) — check API
+      try {
+        const res = await fetch('/api/stores');
+        if (res.ok) {
+          const data = await res.json();
+          const hasActiveStore = data.stores?.some((s: { status: string }) => s.status === 'active');
+          setIsConfigured(hasActiveStore);
+          if (!hasActiveStore && pathname !== '/settings' && status === 'authenticated') {
+            window.location.href = '/settings?setup=true';
+          }
+          return;
         }
+      } catch {}
+
+      // Fallback: not configured
+      setIsConfigured(false);
+      if (pathname !== '/settings' && status === 'authenticated') {
+        window.location.href = '/settings?setup=true';
       }
     });
 
@@ -100,7 +115,8 @@ export function ConfigurationGuard({
     );
   }
 
-  // If user is not authenticated, show nothing (middleware will redirect)
+  // If user is not authenticated, show redirecting state
+  // The useEffect above handles the actual redirect
   if (status === 'unauthenticated') {
     return (
       <div className="flex items-center justify-center min-h-screen">

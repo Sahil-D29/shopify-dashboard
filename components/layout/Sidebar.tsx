@@ -68,18 +68,28 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
     toast.loading('Signing out...', { id: 'signout' });
 
     try {
-      // Sign out server-side first (clears session cookie)
-      await signOut({ redirect: false });
+      // 1. Clear all auth cookies via our logout API
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
 
-      // Clear client-side state AFTER signOut completes
+      // 2. Sign out via NextAuth (clears session state)
+      await signOut({ redirect: false }).catch(() => {});
+
+      // 3. Clear client-side state
       if (typeof window !== 'undefined') {
         localStorage.clear();
         sessionStorage.clear();
+        // Manually clear auth cookies from client side as fallback
+        document.cookie.split(';').forEach(c => {
+          const name = c.split('=')[0].trim();
+          if (name.includes('auth') || name.includes('session') || name === 'current_store_id') {
+            document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+          }
+        });
       }
 
       toast.dismiss('signout');
-      // Manual redirect to sign-in page
-      window.location.replace('/auth/signin');
+      // Hard redirect to sign-in page
+      window.location.href = '/auth/signin';
     } catch (error) {
       console.error('[SignOut] Error:', error);
       toast.error('Error signing out', { id: 'signout' });
@@ -88,7 +98,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
         localStorage.clear();
         sessionStorage.clear();
       }
-      window.location.replace('/auth/signin');
+      window.location.href = '/auth/signin';
     }
   };
 
