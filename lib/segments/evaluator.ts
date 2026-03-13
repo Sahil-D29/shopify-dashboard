@@ -2,8 +2,40 @@ import type { SegmentGroup, SegmentCondition } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { ShopifyOrder } from '@/lib/types/shopify-order';
 
+export interface CampaignLogEnrichment {
+  totalReceived: number;
+  totalOpened: number;
+  totalClicked: number;
+  lastMessageSentAt: number | null;
+  lastCampaignId: string | null;
+  lastTemplateId: string | null;
+}
+
+export interface AbandonedCheckoutEnrichment {
+  count: number;
+  lastAbandonedAt: number | null;
+}
+
+export interface RFMEnrichment {
+  recency: number;
+  frequency: number;
+  monetary: number;
+}
+
+export interface StorefrontEventEnrichment {
+  productViewed: boolean;
+  viewedProductIds: string[];
+  productAddedToCart: boolean;
+  addedToCartProductIds: string[];
+  collectionViewed: boolean;
+}
+
 export interface CustomerEnrichment {
   orders?: ShopifyOrder[];
+  campaignLogs?: CampaignLogEnrichment;
+  abandonedCheckouts?: AbandonedCheckoutEnrichment;
+  rfm?: RFMEnrichment;
+  storefrontEvents?: StorefrontEventEnrichment;
 }
 
 function getPrimaryAddress(customer: ShopifyCustomer) {
@@ -137,42 +169,134 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
     case 'ordered_from_collection':
       return false;
     
-    // Engagement (would need message/campaign data)
+    // Engagement (from CampaignLog enrichment)
     case 'whatsapp_messages_received':
+      return enrichment?.campaignLogs?.totalReceived ?? 0;
     case 'whatsapp_messages_opened':
-    case 'whatsapp_messages_clicked':
     case 'campaign_opens':
+      return enrichment?.campaignLogs?.totalOpened ?? 0;
+    case 'whatsapp_messages_clicked':
     case 'campaign_clicks':
-      return 0;
+      return enrichment?.campaignLogs?.totalClicked ?? 0;
     case 'last_message_sent':
-      return undefined;
+      return enrichment?.campaignLogs?.lastMessageSentAt ?? undefined;
+    case 'engaged_campaign_id':
+      return enrichment?.campaignLogs?.lastCampaignId ?? '';
+    case 'received_template':
+      return enrichment?.campaignLogs?.lastTemplateId ?? '';
     case 'journey_enrollment_status':
     case 'journey_completion_status':
       return '';
-    
-    // Behavioral (would need tracking data)
+
+    // Behavioral (from Shopify API + DB)
     case 'cart_abandonment_count':
+      return enrichment?.abandonedCheckouts?.count ?? 0;
+    case 'last_abandoned_cart_date':
+      return enrichment?.abandonedCheckouts?.lastAbandonedAt ?? undefined;
+    case 'last_seen': {
+      const lastMsg = enrichment?.campaignLogs?.lastMessageSentAt ?? 0;
+      let lastOrd = 0;
+      if (enrichment?.orders?.length) {
+        const sorted = [...enrichment.orders].sort((a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        lastOrd = sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : 0;
+      }
+      const max = Math.max(lastMsg, lastOrd);
+      return max > 0 ? max : undefined;
+    }
     case 'website_visits':
     case 'average_session_duration':
       return 0;
-    case 'last_abandoned_cart_date':
-    case 'last_seen':
-      return undefined;
-    
-    // RFM (would need RFM calculation)
+
+    // RFM Analysis (from pre-calculated scores)
     case 'rfm_recency_score':
+      return enrichment?.rfm?.recency ?? 0;
     case 'rfm_frequency_score':
+      return enrichment?.rfm?.frequency ?? 0;
     case 'rfm_monetary_score':
-      return 0;
+      return enrichment?.rfm?.monetary ?? 0;
     case 'rfm_segment':
       return '';
-    
-    // Predictive (would need ML models)
-    case 'churn_risk':
-      return '';
-    case 'lifetime_value_prediction':
+
+    // Predictive (heuristic calculations)
+    case 'churn_risk': {
+      const orderCount = Number(customer.orders_count || 0);
+      if (orderCount === 0) return 100;
+      let lastOrderTs = 0;
+      if (enrichment?.orders?.length) {
+        const sorted = [...enrichment.orders].sort((a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        lastOrderTs = sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : 0;
+      } else {
+        lastOrderTs = customer.updated_at ? new Date(customer.updated_at).getTime() : 0;
+      }
+      const daysSince = lastOrderTs > 0 ? Math.floor((Date.now() - lastOrderTs) / 86400000) : 999;
+      const customerAge = customer.created_at
+        ? Math.max(Math.floor((Date.now() - new Date(customer.created_at).getTime()) / 86400000), 1)
+        : 365;
+      const avgInterval = customerAge / Math.max(orderCount, 1);
+      if (daysSince > avgInterval * 3) return 90;
+      if (daysSince > avgInterval * 2) return 70;
+      if (daysSince > avgInterval * 1.5) return 50;
+      return 20;
+    }
+    case 'lifetime_value_prediction': {
+      const totalSpent = Number(customer.total_spent || 0);
+      const numOrders = Number(customer.orders_count || 0);
+      if (numOrders === 0) return 0;
+      const aov = totalSpent / numOrders;
+      const ageInDays = customer.created_at
+        ? Math.max(Math.floor((Date.now() - new Date(customer.created_at).getTime()) / 86400000), 1)
+        : 365;
+      const ordersPerYear = (numOrders / ageInDays) * 365;
+      return Math.round(aov * ordersPerYear * 3);
+    }
     case 'next_purchase_probability':
       return 0;
+
+    // Shopify Events (from order/checkout/customer data)
+    case 'event_order_created':
+      return (enrichment?.orders?.length ?? Number(customer.orders_count || 0)) > 0;
+    case 'event_order_paid':
+      return (enrichment?.orders ?? []).some(o => o.financial_status === 'paid');
+    case 'event_order_fulfilled':
+      return (enrichment?.orders ?? []).some(o => o.fulfillment_status === 'fulfilled');
+    case 'event_order_cancelled':
+      return (enrichment?.orders ?? []).some(o => (o as any).cancelled_at != null);
+    case 'event_order_refunded':
+      return (enrichment?.orders ?? []).some(o =>
+        o.financial_status === 'refunded' || o.financial_status === 'partially_refunded'
+      );
+    case 'event_checkout_started':
+      return (enrichment?.abandonedCheckouts?.count ?? 0) > 0 || (enrichment?.orders?.length ?? Number(customer.orders_count || 0)) > 0;
+    case 'event_checkout_abandoned':
+      return (enrichment?.abandonedCheckouts?.count ?? 0) > 0;
+    case 'event_customer_created':
+      return true;
+    case 'event_customer_updated': {
+      const updTs = customer.updated_at ? new Date(customer.updated_at).getTime() : 0;
+      return updTs > 0 ? updTs : undefined;
+    }
+
+    // Storefront tracking events
+    case 'event_product_viewed':
+      return enrichment?.storefrontEvents?.productViewed ?? false;
+    case 'viewed_product':
+      return (enrichment?.storefrontEvents?.viewedProductIds ?? []).join(',');
+    case 'event_product_added_to_cart':
+      return enrichment?.storefrontEvents?.productAddedToCart ?? false;
+    case 'added_product_to_cart':
+      return (enrichment?.storefrontEvents?.addedToCartProductIds ?? []).join(',');
+    case 'event_collection_viewed':
+      return enrichment?.storefrontEvents?.collectionViewed ?? false;
+
+    // Subscription events (requires app integration)
+    case 'event_subscription_created':
+    case 'event_subscription_renewed':
+    case 'event_subscription_cancelled':
+      return false;
     
     // Legacy
     case 'purchased_product':
@@ -234,6 +358,10 @@ function opCompare(value: ConditionValue, operator: string, target: ConditionVal
       return value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0);
     case 'is_not_empty':
       return !(value === undefined || value === null || (typeof value === 'string' && value.trim().length === 0));
+    case 'is_true':
+      return value === true || value === 'true' || value === 1;
+    case 'is_false':
+      return value === false || value === 'false' || value === 0 || value === undefined || value === null;
     case 'in_last_days': {
       const days = toNumber(target);
       if (days === undefined) return false;
@@ -272,9 +400,57 @@ export function needsOrderEnrichment(groups: SegmentGroup[]): boolean {
   const orderFields = new Set([
     'ordered_specific_product', 'orders_in_last_x_days', 'total_items_purchased',
     'first_order_date', 'last_order_date', 'ordered_from_collection',
+    'days_since_last_order', 'last_seen', 'churn_risk',
+    'event_order_created', 'event_order_paid', 'event_order_fulfilled',
+    'event_order_cancelled', 'event_order_refunded', 'event_checkout_started',
   ]);
   return (groups || []).some(g =>
     (g.conditions || []).some(c => orderFields.has(c.field))
+  );
+}
+
+/** Check if any condition requires CampaignLog engagement data */
+export function needsEngagementEnrichment(groups: SegmentGroup[]): boolean {
+  const fields = new Set([
+    'whatsapp_messages_received', 'whatsapp_messages_opened', 'whatsapp_messages_clicked',
+    'last_message_sent', 'campaign_opens', 'campaign_clicks',
+    'engaged_campaign_id', 'received_template', 'last_seen',
+  ]);
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => fields.has(c.field))
+  );
+}
+
+/** Check if any condition requires abandoned checkout data */
+export function needsAbandonedCheckoutEnrichment(groups: SegmentGroup[]): boolean {
+  const fields = new Set([
+    'cart_abandonment_count', 'last_abandoned_cart_date',
+    'event_checkout_started', 'event_checkout_abandoned',
+  ]);
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => fields.has(c.field))
+  );
+}
+
+/** Check if any condition requires RFM scoring */
+export function needsRFMEnrichment(groups: SegmentGroup[]): boolean {
+  const fields = new Set([
+    'rfm_recency_score', 'rfm_frequency_score', 'rfm_monetary_score',
+  ]);
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => fields.has(c.field))
+  );
+}
+
+/** Check if any condition requires storefront event tracking data */
+export function needsStorefrontEnrichment(groups: SegmentGroup[]): boolean {
+  const fields = new Set([
+    'event_product_viewed', 'viewed_product',
+    'event_product_added_to_cart', 'added_product_to_cart',
+    'event_collection_viewed',
+  ]);
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => fields.has(c.field))
   );
 }
 

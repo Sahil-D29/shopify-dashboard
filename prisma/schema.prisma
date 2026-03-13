@@ -1166,3 +1166,19 @@ model PredefinedTemplate {
   @@map("predefined_templates")
 }
 
+model StorefrontEvent {
+  id            String   @id @default(uuid())
+  storeId       String
+  customerId    String?
+  sessionId     String
+  eventType     String   // product_viewed, product_added_to_cart, collection_viewed
+  resourceId    String?
+  resourceTitle String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([storeId, customerId])
+  @@index([storeId, eventType])
+  @@map("storefront_events")
+}
+

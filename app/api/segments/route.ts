@@ -147,6 +147,7 @@ export async function GET(request: NextRequest) {
             segmentId: segment.id,
             conditionGroups: segment.conditionGroups,
             forceRefresh: refresh,
+            storeId: storeFilter.storeId || undefined,
           });
 
           const updatedSegment = {
@@ -345,6 +346,7 @@ export async function POST(request: NextRequest) {
         segmentId: created.id,
         conditionGroups: data.conditionGroups || [],
         forceRefresh: true,
+        storeId,
       });
       await updateSegmentStats(created.id, {
         customerCount: stats.customerCount,

@@ -80,6 +80,7 @@ export async function GET(
       segmentId: segment.id,
       conditionGroups: segment.conditionGroups,
       forceRefresh: refresh,
+      storeId: segmentRow.storeId,
     });
 
     // Get matching customers for detail view

@@ -49,28 +49,33 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
               <CommandGroup key={group} heading={group}>
                 {fields.map((field: SegmentFieldOption) => {
                   const isSelected = field.value === value;
-                  const isComingSoon = field.status === 'coming_soon';
+                  const isDisabled = field.status === 'coming_soon' || field.status === 'requires_app';
                   return (
                     <CommandItem
                       key={field.value}
                       value={`${field.label} ${group}`}
                       onSelect={() => {
-                        if (!isComingSoon) {
+                        if (!isDisabled) {
                           onValueChange(field.value);
                           setOpen(false);
                         }
                       }}
-                      disabled={isComingSoon}
+                      disabled={isDisabled}
                       className={cn(
                         'flex items-center gap-2',
-                        isComingSoon && 'opacity-50'
+                        isDisabled && 'opacity-50'
                       )}
                     >
                       <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
                       <span className="truncate text-sm">{field.label}</span>
-                      {isComingSoon && (
+                      {field.status === 'coming_soon' && (
                         <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 h-4">
                           Soon
+                        </Badge>
+                      )}
+                      {field.status === 'requires_app' && (
+                        <Badge variant="secondary" className="ml-auto text-[10px] px-1 py-0 h-4">
+                          Requires App
                         </Badge>
                       )}
                     </CommandItem>

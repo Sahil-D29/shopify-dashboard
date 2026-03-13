@@ -28,6 +28,8 @@ export interface ShopifyOrder {
   total_weight?: number | null;
   financial_status?: string | null;
   fulfillment_status?: string | null;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
   gateway?: string | null;
   payment_gateway_names?: string[];
   source_name?: string | null;
