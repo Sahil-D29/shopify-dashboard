@@ -1,6 +1,6 @@
 export type SegmentFieldType = 'text' | 'number' | 'date' | 'tags' | 'boolean';
 
-export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey' | 'collection';
+export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey' | 'collection' | 'country' | 'state';
 
 export type FieldStatus = 'available' | 'coming_soon' | 'requires_app';
 
@@ -19,9 +19,9 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'customer_email', label: 'Email', type: 'text', group: 'Customer Attributes' },
   { value: 'customer_phone', label: 'Phone', type: 'text', group: 'Customer Attributes' },
   { value: 'customer_tags', label: 'Tags', type: 'tags', group: 'Customer Attributes' },
-  { value: 'location_country', label: 'Country', type: 'text', group: 'Customer Attributes' },
+  { value: 'location_country', label: 'Country', type: 'text', group: 'Customer Attributes', entityType: 'country' },
   { value: 'location_city', label: 'City', type: 'text', group: 'Customer Attributes' },
-  { value: 'location_state', label: 'State', type: 'text', group: 'Customer Attributes' },
+  { value: 'location_state', label: 'State', type: 'text', group: 'Customer Attributes', entityType: 'state' },
   { value: 'location_postal_code', label: 'Postal Code', type: 'text', group: 'Customer Attributes' },
   { value: 'customer_since', label: 'Customer Since', type: 'date', group: 'Customer Attributes' },
   { value: 'marketing_opt_in', label: 'Marketing Opt-in', type: 'boolean', group: 'Customer Attributes' },

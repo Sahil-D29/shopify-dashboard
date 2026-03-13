@@ -22,6 +22,8 @@ import { CampaignSelect } from '@/components/selectors/CampaignSelect';
 import { TemplateSelect } from '@/components/selectors/TemplateSelect';
 import { SegmentSelect } from '@/components/selectors/SegmentSelect';
 import { JourneySelect } from '@/components/selectors/JourneySelect';
+import { CountrySelect } from '@/components/selectors/CountrySelect';
+import { StateSelect } from '@/components/selectors/StateSelect';
 
 type NumberRange = [number, number];
 
@@ -167,6 +169,12 @@ export default function ConditionRow({
         }
         if (entityType === 'segment') {
           return <SegmentSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
+        }
+        if (entityType === 'country') {
+          return <CountrySelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
+        }
+        if (entityType === 'state') {
+          return <StateSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         return (
           <Input
