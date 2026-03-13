@@ -1,14 +1,22 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   SEGMENT_FIELD_OPTIONS,
   SEGMENT_OPERATORS,
-  getFieldOptionsByGroup,
   type SegmentFieldType,
   type EntityType,
 } from '@/lib/constants/segment-fields';
+import { FieldSelect } from './FieldSelect';
 import { ProductSelect } from '@/components/selectors/ProductSelect';
 import { CampaignSelect } from '@/components/selectors/CampaignSelect';
 import { TemplateSelect } from '@/components/selectors/TemplateSelect';
@@ -53,7 +61,6 @@ export default function ConditionRow({
 }) {
   const fieldType = getFieldType(condition.field);
   const operators = SEGMENT_OPERATORS[fieldType] ?? SEGMENT_OPERATORS.text;
-  const grouped = getFieldOptionsByGroup();
 
   const isNoValueOp =
     condition.operator === 'is_empty' ||
@@ -62,37 +69,34 @@ export default function ConditionRow({
     condition.operator === 'is_false';
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
-      {/* Field selector with optgroup */}
-      <select
+    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+      {/* Field selector — searchable popover */}
+      <FieldSelect
         value={condition.field}
-        onChange={(e) => {
-          const nextField = e.target.value;
+        onValueChange={(nextField) => {
           const nextType = getFieldType(nextField);
           const defaultOp = SEGMENT_OPERATORS[nextType]?.[0]?.value ?? '';
           onChange({ ...condition, field: nextField, operator: defaultOp, value: '' });
         }}
-        className="px-3 py-2 border rounded-lg text-sm"
-      >
-        {Object.entries(grouped).map(([group, fields]) => (
-          <optgroup key={group} label={group}>
-            {fields.map(f => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        className="w-[200px]"
+      />
 
-      {/* Operator selector */}
-      <select
+      {/* Operator selector — styled Select */}
+      <Select
         value={condition.operator}
-        onChange={(e) => onChange({ ...condition, operator: e.target.value })}
-        className="px-3 py-2 border rounded-lg text-sm"
+        onValueChange={(op) => onChange({ ...condition, operator: op })}
       >
-        {operators.map(op => (
-          <option key={op.value} value={op.value}>{op.label}</option>
-        ))}
-      </select>
+        <SelectTrigger className="w-[140px]">
+          <SelectValue placeholder="Operator" />
+        </SelectTrigger>
+        <SelectContent>
+          {operators.map(op => (
+            <SelectItem key={op.value} value={op.value}>
+              {op.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Value input — conditional based on field type */}
       {isNoValueOp ? null : fieldType === 'boolean' ? null : fieldType === 'number' && condition.operator === 'between' ? (
@@ -109,7 +113,7 @@ export default function ConditionRow({
                     const min = Number(event.target.value || 0);
                     onChange({ ...condition, value: [min, maxValue] });
                   }}
-                  className="w-28"
+                  className="w-24"
                 />
                 <span className="text-sm text-gray-500">and</span>
                 <Input
@@ -120,7 +124,7 @@ export default function ConditionRow({
                     const max = Number(event.target.value || 0);
                     onChange({ ...condition, value: [minValue, max] });
                   }}
-                  className="w-28"
+                  className="w-24"
                 />
               </>
             );
@@ -131,7 +135,7 @@ export default function ConditionRow({
           type="number"
           value={typeof condition.value === 'number' ? condition.value : Number(condition.value ?? 0)}
           onChange={event => onChange({ ...condition, value: Number(event.target.value) })}
-          className="w-40"
+          className="w-32"
         />
       ) : fieldType === 'date' ? (
         <Input
@@ -144,39 +148,46 @@ export default function ConditionRow({
               value: condition.operator === 'in_last_days' ? Number(event.target.value) : event.target.value,
             })
           }
-          className="w-52"
+          className="w-40"
         />
       ) : (() => {
         const entityType = getFieldEntityType(condition.field);
         const strValue = typeof condition.value === 'string' ? condition.value : '';
         if (entityType === 'product') {
-          return <ProductSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+          return <ProductSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         if (entityType === 'campaign') {
-          return <CampaignSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+          return <CampaignSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         if (entityType === 'template') {
-          return <TemplateSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+          return <TemplateSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         if (entityType === 'journey') {
-          return <JourneySelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+          return <JourneySelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         if (entityType === 'segment') {
-          return <SegmentSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-64" />;
+          return <SegmentSelect value={strValue} onValueChange={(val) => onChange({ ...condition, value: val })} className="w-56" />;
         }
         return (
           <Input
             type="text"
             value={strValue}
             onChange={event => onChange({ ...condition, value: event.target.value })}
-            className="w-64"
+            placeholder="Enter value..."
+            className="w-56"
           />
         );
       })()}
 
-      <button onClick={onRemove} className="ml-auto p-2 rounded hover:bg-gray-100" aria-label="Remove condition">
-        <X className="w-4 h-4" />
-      </button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onRemove}
+        className="ml-auto shrink-0 text-gray-400 hover:text-red-500"
+        aria-label="Remove condition"
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
     </div>
   );
 }

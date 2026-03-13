@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { CustomerSegment } from '@/lib/types/segment';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getUserContext, buildStoreFilter } from '@/lib/user-context';
-import { calculateSegmentStatsFromFiles } from '@/lib/utils/segment-stats-file-based';
+import { calculateSegmentStats } from '@/lib/utils/segment-stats';
+import { getShopifyClientAsync, type ShopifyClient } from '@/lib/shopify/api-helper';
 import { prisma } from '@/lib/prisma';
 
 // Ensure this route runs on Node.js runtime (not edge)
@@ -128,31 +129,38 @@ export async function GET(request: NextRequest) {
 
     const filteredSegments = search ? segments.filter(segment => matchesSearch(segment, search)) : segments;
 
-    // Calculate stats from file-based customer data (no Shopify dependency)
+    // Create Shopify client once for all segment stats calculations
+    let shopifyClient: ShopifyClient | null = null;
+    try {
+      shopifyClient = await getShopifyClientAsync(request);
+    } catch (e) {
+      console.warn('[Segments][GET] Failed to create Shopify client:', e);
+    }
+
+    // Calculate stats via Shopify API (with 2-min cache)
     const enrichedSegments = await Promise.all(
       filteredSegments.slice(0, limit).map(async segment => {
         try {
-          // Calculate stats from file-based customer data
-          const stats = await calculateSegmentStatsFromFiles({
+          if (!shopifyClient) throw new Error('No Shopify client');
+          const stats = await calculateSegmentStats({
+            client: shopifyClient,
             segmentId: segment.id,
             conditionGroups: segment.conditionGroups,
-            storeId: storeFilter.storeId || undefined,
             forceRefresh: refresh,
           });
 
-          // Update segment with calculated stats
           const updatedSegment = {
             ...segment,
             customerCount: stats.customerCount,
             totalValue: stats.totalValue,
-            totalRevenue: stats.totalValue, // Keep for backward compatibility
+            totalRevenue: stats.totalValue,
             averageOrderValue: stats.avgOrderValue,
             lastUpdated: stats.lastUpdated,
-            lastCalculated: stats.lastUpdated, // Keep for backward compatibility
-            usingCachedStats: false, // File-based, not cached
+            lastCalculated: stats.lastUpdated,
+            usingCachedStats: false,
           };
 
-          // Persist stats in database (best-effort; non-critical if it fails)
+          // Persist stats in database (best-effort)
           try {
             await updateSegmentStats(segment.id, {
               customerCount: stats.customerCount,
@@ -161,14 +169,12 @@ export async function GET(request: NextRequest) {
               lastCalculated: stats.lastUpdated,
             });
           } catch (saveError) {
-            // Non-critical - stats calculation succeeded even if save fails
             console.warn(`[Segments][GET] Failed to save stats for segment ${segment.id}:`, getErrorMessage(saveError));
           }
 
           return updatedSegment;
         } catch (statsError) {
           console.warn(`[Segments][GET] Failed to calculate stats for segment ${segment.id}:`, getErrorMessage(statsError));
-          // Return segment with existing cached values if calculation fails
           return {
             ...segment,
             customerCount: segment.customerCount ?? 0,
@@ -187,7 +193,6 @@ export async function GET(request: NextRequest) {
       total: filteredSegments.length,
       search,
       fetchedAt: Date.now(),
-      // No warnings - file-based calculation is always available
     });
   } catch (error) {
     console.error('[Segments][GET] Error fetching segments:', error);
@@ -332,7 +337,26 @@ export async function POST(request: NextRequest) {
     });
     const newSegment = toCustomerSegment(created);
 
-    
+    // Calculate customer count via Shopify API and persist (best-effort, non-blocking)
+    try {
+      const client = await getShopifyClientAsync(request);
+      const stats = await calculateSegmentStats({
+        client,
+        segmentId: created.id,
+        conditionGroups: data.conditionGroups || [],
+        forceRefresh: true,
+      });
+      await updateSegmentStats(created.id, {
+        customerCount: stats.customerCount,
+        totalRevenue: stats.totalValue,
+        averageOrderValue: stats.avgOrderValue,
+        lastCalculated: stats.lastUpdated,
+      });
+      newSegment.customerCount = stats.customerCount;
+    } catch (statsError) {
+      console.warn('[Segments][POST] Failed to calculate initial stats:', getErrorMessage(statsError));
+    }
+
     return NextResponse.json(
       {
         segment: newSegment,

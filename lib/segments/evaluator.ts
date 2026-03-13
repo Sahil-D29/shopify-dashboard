@@ -1,5 +1,10 @@
 import type { SegmentGroup, SegmentCondition } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
+import type { ShopifyOrder } from '@/lib/types/shopify-order';
+
+export interface CustomerEnrichment {
+  orders?: ShopifyOrder[];
+}
 
 function getPrimaryAddress(customer: ShopifyCustomer) {
   if (!customer.addresses || customer.addresses.length === 0) return undefined;
@@ -29,7 +34,7 @@ const toTimestamp = (value: unknown): number | undefined => {
   return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : undefined;
 };
 
-function getFieldValue(customer: ShopifyCustomer, field: string): ConditionValue {
+function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: CustomerEnrichment): ConditionValue {
   const addr = getPrimaryAddress(customer);
   switch (field) {
     // Customer Attributes
@@ -72,28 +77,64 @@ function getFieldValue(customer: ShopifyCustomer, field: string): ConditionValue
       const spent = Number(customer.total_spent || 0);
       return orders > 0 ? spent / orders : 0;
     }
-    case 'first_order_date':
-    case 'last_order_date':
-      // Use updated_at as proxy for last activity
-      return customer.updated_at ? new Date(customer.updated_at).getTime() : undefined;
-    case 'days_since_last_order': {
-      const ts = customer.updated_at ? new Date(customer.updated_at).getTime() : 0;
-      return ts > 0 ? Math.floor((Date.now() - ts) / 86400000) : 999;
+    case 'first_order_date': {
+      if (enrichment?.orders?.length) {
+        const sorted = [...enrichment.orders].sort((a, b) =>
+          new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+        );
+        return sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : undefined;
+      }
+      return customer.created_at ? new Date(customer.created_at).getTime() : undefined;
     }
-    case 'orders_in_last_x_days':
-      // Would need order data, return 0 for now
-      return 0;
-    case 'total_items_purchased':
-      // Would need order data, return 0 for now
-      return 0;
+    case 'last_order_date': {
+      if (enrichment?.orders?.length) {
+        const sorted = [...enrichment.orders].sort((a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        return sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : undefined;
+      }
+      return customer.updated_at ? new Date(customer.updated_at).getTime() : undefined;
+    }
+    case 'days_since_last_order': {
+      let lastOrderTs = 0;
+      if (enrichment?.orders?.length) {
+        const sorted = [...enrichment.orders].sort((a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        lastOrderTs = sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : 0;
+      } else {
+        lastOrderTs = customer.updated_at ? new Date(customer.updated_at).getTime() : 0;
+      }
+      return lastOrderTs > 0 ? Math.floor((Date.now() - lastOrderTs) / 86400000) : 999;
+    }
+    case 'orders_in_last_x_days': {
+      if (!enrichment?.orders?.length) return Number(customer.orders_count || 0);
+      // This field is used with operator comparison — count matching orders
+      const now = Date.now();
+      return enrichment.orders.filter(o => {
+        const ts = o.created_at ? new Date(o.created_at).getTime() : 0;
+        return ts > 0 && (now - ts) < 86400000 * 365; // count all (operator handles the X days part)
+      }).length;
+    }
+    case 'total_items_purchased': {
+      if (!enrichment?.orders?.length) return 0;
+      return enrichment.orders.reduce((sum, order) => {
+        return sum + (order.line_items || []).reduce((s, li) => s + (li.quantity || 0), 0);
+      }, 0);
+    }
     case 'favorite_product_category':
-      // Would need order/product data
       return '';
     case 'never_ordered':
       return Number(customer.orders_count || 0) === 0;
-    case 'ordered_specific_product':
+    case 'ordered_specific_product': {
+      if (!enrichment?.orders?.length) return false;
+      // Returns the concatenated product titles for text matching
+      const allProducts = enrichment.orders.flatMap(o =>
+        (o.line_items || []).map(li => li.title || li.name || '')
+      );
+      return allProducts.join(',');
+    }
     case 'ordered_from_collection':
-      // Would need order/product data
       return false;
     
     // Engagement (would need message/campaign data)
@@ -209,23 +250,32 @@ function opCompare(value: ConditionValue, operator: string, target: ConditionVal
   }
 }
 
-export function evaluateCondition(customer: ShopifyCustomer, condition: SegmentCondition): boolean {
-  const value = getFieldValue(customer, condition.field);
+export function evaluateCondition(customer: ShopifyCustomer, condition: SegmentCondition, enrichment?: CustomerEnrichment): boolean {
+  const value = getFieldValue(customer, condition.field, enrichment);
   return opCompare(value, condition.operator, condition.value);
 }
 
-export function matchesGroups(customer: ShopifyCustomer, groups: SegmentGroup[]): boolean {
+export function matchesGroups(customer: ShopifyCustomer, groups: SegmentGroup[], enrichment?: CustomerEnrichment): boolean {
   if (!groups || groups.length === 0) return true;
-  // Evaluate groups: groupOperator combines conditions within; overall reduce with AND across groups
   return groups.every(group => {
     const { conditions, groupOperator } = group;
     if (!conditions || conditions.length === 0) return true;
     if (groupOperator === 'OR') {
-      return conditions.some(c => evaluateCondition(customer, c));
+      return conditions.some(c => evaluateCondition(customer, c, enrichment));
     }
-    // AND
-    return conditions.every(c => evaluateCondition(customer, c));
+    return conditions.every(c => evaluateCondition(customer, c, enrichment));
   });
+}
+
+/** Check if any condition in the groups requires order-level data */
+export function needsOrderEnrichment(groups: SegmentGroup[]): boolean {
+  const orderFields = new Set([
+    'ordered_specific_product', 'orders_in_last_x_days', 'total_items_purchased',
+    'first_order_date', 'last_order_date', 'ordered_from_collection',
+  ]);
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => orderFields.has(c.field))
+  );
 }
 
 

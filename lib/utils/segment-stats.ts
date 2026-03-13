@@ -1,7 +1,8 @@
 import type { SegmentGroup } from '@/lib/types/segment';
 import type { ShopifyClient } from '@/lib/shopify/api-helper';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
-import { matchesGroups } from '@/lib/segments/evaluator';
+import type { ShopifyOrder } from '@/lib/types/shopify-order';
+import { matchesGroups, needsOrderEnrichment, type CustomerEnrichment } from '@/lib/segments/evaluator';
 
 export interface SegmentStatsOptions {
   client: ShopifyClient;
@@ -69,11 +70,34 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
 
   const hasConditions = conditionGroups.length > 0 && conditionGroups.some(group => (group.conditions || []).length > 0);
 
+  // Check if we need order-level enrichment for any condition
+  const requiresOrders = hasConditions && needsOrderEnrichment(conditionGroups);
+  let ordersByCustomer: Map<string | number, ShopifyOrder[]> | null = null;
+
+  if (requiresOrders) {
+    try {
+      const allOrders = await options.client.fetchAll<ShopifyOrder>('orders', { limit: 250, status: 'any' });
+      ordersByCustomer = new Map();
+      for (const order of allOrders) {
+        const custId = order.customer?.email || '';
+        if (!custId) continue;
+        const existing = ordersByCustomer.get(custId) || [];
+        existing.push(order);
+        ordersByCustomer.set(custId, existing);
+      }
+    } catch (err) {
+      console.warn('[SegmentStats] Failed to fetch orders for enrichment:', err);
+    }
+  }
+
   const filteredCustomers = (!hasConditions
     ? sourceCustomers
     : sourceCustomers.filter(customer => {
         try {
-          return matchesGroups(customer, conditionGroups);
+          const enrichment: CustomerEnrichment | undefined = ordersByCustomer
+            ? { orders: ordersByCustomer.get(customer.email || '') || [] }
+            : undefined;
+          return matchesGroups(customer, conditionGroups, enrichment);
         } catch (error) {
           console.error('[SegmentStats] Failed to evaluate customer', customer.id, error);
           return false;

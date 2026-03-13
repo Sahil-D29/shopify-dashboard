@@ -1,6 +1,8 @@
 export type SegmentFieldType = 'text' | 'number' | 'date' | 'tags' | 'boolean';
 
-export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey';
+export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey' | 'collection';
+
+export type FieldStatus = 'available' | 'coming_soon';
 
 export interface SegmentFieldOption {
   value: string;
@@ -8,6 +10,7 @@ export interface SegmentFieldOption {
   type: SegmentFieldType;
   group: string;
   entityType?: EntityType;
+  status?: FieldStatus;
 }
 
 export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
@@ -38,50 +41,50 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'ordered_specific_product', label: 'Ordered Specific Product', type: 'text', group: 'Order History', entityType: 'product' },
 
   // Engagement
-  { value: 'whatsapp_messages_received', label: 'WhatsApp Messages Received', type: 'number', group: 'Engagement' },
-  { value: 'whatsapp_messages_opened', label: 'WhatsApp Messages Opened', type: 'number', group: 'Engagement' },
-  { value: 'whatsapp_messages_clicked', label: 'WhatsApp Messages Clicked', type: 'number', group: 'Engagement' },
-  { value: 'last_message_sent', label: 'Last Message Sent', type: 'date', group: 'Engagement' },
-  { value: 'campaign_opens', label: 'Campaign Opens', type: 'number', group: 'Engagement' },
-  { value: 'campaign_clicks', label: 'Campaign Clicks', type: 'number', group: 'Engagement' },
-  { value: 'engaged_campaign_id', label: 'Engaged with Campaign', type: 'text', group: 'Engagement', entityType: 'campaign' },
-  { value: 'received_template', label: 'Received Template', type: 'text', group: 'Engagement', entityType: 'template' },
+  { value: 'whatsapp_messages_received', label: 'WhatsApp Messages Received', type: 'number', group: 'Engagement', status: 'coming_soon' },
+  { value: 'whatsapp_messages_opened', label: 'WhatsApp Messages Opened', type: 'number', group: 'Engagement', status: 'coming_soon' },
+  { value: 'whatsapp_messages_clicked', label: 'WhatsApp Messages Clicked', type: 'number', group: 'Engagement', status: 'coming_soon' },
+  { value: 'last_message_sent', label: 'Last Message Sent', type: 'date', group: 'Engagement', status: 'coming_soon' },
+  { value: 'campaign_opens', label: 'Campaign Opens', type: 'number', group: 'Engagement', status: 'coming_soon' },
+  { value: 'campaign_clicks', label: 'Campaign Clicks', type: 'number', group: 'Engagement', status: 'coming_soon' },
+  { value: 'engaged_campaign_id', label: 'Engaged with Campaign', type: 'text', group: 'Engagement', entityType: 'campaign', status: 'coming_soon' },
+  { value: 'received_template', label: 'Received Template', type: 'text', group: 'Engagement', entityType: 'template', status: 'coming_soon' },
   { value: 'accepts_marketing', label: 'Accepts Marketing', type: 'boolean', group: 'Engagement' },
 
   // Behavioral
-  { value: 'cart_abandonment_count', label: 'Cart Abandonment Count', type: 'number', group: 'Behavioral' },
-  { value: 'last_abandoned_cart_date', label: 'Last Abandoned Cart Date', type: 'date', group: 'Behavioral' },
-  { value: 'last_seen', label: 'Last Seen', type: 'date', group: 'Behavioral' },
+  { value: 'cart_abandonment_count', label: 'Cart Abandonment Count', type: 'number', group: 'Behavioral', status: 'coming_soon' },
+  { value: 'last_abandoned_cart_date', label: 'Last Abandoned Cart Date', type: 'date', group: 'Behavioral', status: 'coming_soon' },
+  { value: 'last_seen', label: 'Last Seen', type: 'date', group: 'Behavioral', status: 'coming_soon' },
   { value: 'in_journey', label: 'Enrolled in Journey', type: 'text', group: 'Behavioral', entityType: 'journey' },
   { value: 'in_segment', label: 'Belongs to Segment', type: 'text', group: 'Behavioral', entityType: 'segment' },
 
   // RFM Analysis
-  { value: 'rfm_recency_score', label: 'RFM Recency Score', type: 'number', group: 'RFM Analysis' },
-  { value: 'rfm_frequency_score', label: 'RFM Frequency Score', type: 'number', group: 'RFM Analysis' },
-  { value: 'rfm_monetary_score', label: 'RFM Monetary Score', type: 'number', group: 'RFM Analysis' },
+  { value: 'rfm_recency_score', label: 'RFM Recency Score', type: 'number', group: 'RFM Analysis', status: 'coming_soon' },
+  { value: 'rfm_frequency_score', label: 'RFM Frequency Score', type: 'number', group: 'RFM Analysis', status: 'coming_soon' },
+  { value: 'rfm_monetary_score', label: 'RFM Monetary Score', type: 'number', group: 'RFM Analysis', status: 'coming_soon' },
 
   // Predictive
-  { value: 'churn_risk', label: 'Churn Risk', type: 'number', group: 'Predictive' },
-  { value: 'lifetime_value_prediction', label: 'Lifetime Value Prediction', type: 'number', group: 'Predictive' },
+  { value: 'churn_risk', label: 'Churn Risk', type: 'number', group: 'Predictive', status: 'coming_soon' },
+  { value: 'lifetime_value_prediction', label: 'Lifetime Value Prediction', type: 'number', group: 'Predictive', status: 'coming_soon' },
 
   // Shopify Events / Triggers
-  { value: 'event_order_created', label: 'Order Created', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_order_paid', label: 'Order Paid', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_order_fulfilled', label: 'Order Fulfilled', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_order_cancelled', label: 'Order Cancelled', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_order_refunded', label: 'Order Refunded', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_checkout_started', label: 'Checkout Started', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_checkout_abandoned', label: 'Checkout Abandoned', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_product_viewed', label: 'Product Viewed', type: 'boolean', group: 'Shopify Events' },
-  { value: 'viewed_product', label: 'Viewed Specific Product', type: 'text', group: 'Shopify Events', entityType: 'product' },
-  { value: 'event_product_added_to_cart', label: 'Product Added to Cart', type: 'boolean', group: 'Shopify Events' },
-  { value: 'added_product_to_cart', label: 'Added Specific Product to Cart', type: 'text', group: 'Shopify Events', entityType: 'product' },
-  { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_subscription_created', label: 'Subscription Created', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_subscription_renewed', label: 'Subscription Renewed', type: 'boolean', group: 'Shopify Events' },
-  { value: 'event_subscription_cancelled', label: 'Subscription Cancelled', type: 'boolean', group: 'Shopify Events' },
+  { value: 'event_order_created', label: 'Order Created', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_order_paid', label: 'Order Paid', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_order_fulfilled', label: 'Order Fulfilled', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_order_cancelled', label: 'Order Cancelled', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_order_refunded', label: 'Order Refunded', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_checkout_started', label: 'Checkout Started', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_checkout_abandoned', label: 'Checkout Abandoned', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_product_viewed', label: 'Product Viewed', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'viewed_product', label: 'Viewed Specific Product', type: 'text', group: 'Shopify Events', entityType: 'product', status: 'coming_soon' },
+  { value: 'event_product_added_to_cart', label: 'Product Added to Cart', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'added_product_to_cart', label: 'Added Specific Product to Cart', type: 'text', group: 'Shopify Events', entityType: 'product', status: 'coming_soon' },
+  { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_subscription_created', label: 'Subscription Created', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_subscription_renewed', label: 'Subscription Renewed', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
+  { value: 'event_subscription_cancelled', label: 'Subscription Cancelled', type: 'boolean', group: 'Shopify Events', status: 'coming_soon' },
 ];
 
 export const SEGMENT_OPERATORS: Record<SegmentFieldType, { value: string; label: string }[]> = {

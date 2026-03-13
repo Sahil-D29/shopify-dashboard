@@ -30,6 +30,7 @@ import { ProductSelect } from '@/components/selectors/ProductSelect';
 import { CampaignSelect } from '@/components/selectors/CampaignSelect';
 import { TemplateSelect } from '@/components/selectors/TemplateSelect';
 import { SegmentSelect } from '@/components/selectors/SegmentSelect';
+import { SegmentPickerWithBuilder } from '@/components/segments/SegmentPickerWithBuilder';
 import { JourneySelect } from '@/components/selectors/JourneySelect';
 import { MobilePreview } from '../MobilePreview';
 import type { StepId } from '../modals/WhatsAppActionModal';
@@ -41,14 +42,6 @@ import { TriggerConfig } from '../trigger/TriggerConfig';
 import type { TriggerConfigState } from '../trigger/types';
 import { configToState, stateToConfig } from '../trigger/stateMappers';
 
-interface SegmentApiSegment {
-  id: string;
-  name?: string | null;
-}
-
-interface SegmentsApiResponse {
-  segments?: SegmentApiSegment[];
-}
 
 export interface JourneyNodeInspectorProps {
   node: Node<JourneyNodeData> | null;
@@ -97,9 +90,6 @@ export function JourneyNodeInspector({
   }
 
   const variant = node.data.variant;
-  const [segments, setSegments] = useState<Array<{ id: string; name: string }>>([]);
-  const [segmentsLoading, setSegmentsLoading] = useState(false);
-  const [segmentsError, setSegmentsError] = useState<string | null>(null);
 
   const headerStyles = useMemo(() => {
     if (!variant) return 'from-[#F5F3EE] to-[#FAF9F6]';
@@ -132,38 +122,6 @@ export function JourneyNodeInspector({
     return (node.data.status as 'draft' | 'active' | undefined) ?? 'draft';
   }, [node, variant]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchSegments = async () => {
-      try {
-        setSegmentsLoading(true);
-        const res = await fetch('/api/segments', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to load segments');
-        const payload: SegmentsApiResponse = await res.json();
-        if (!cancelled) {
-          const items = Array.isArray(payload.segments)
-            ? payload.segments
-                .filter((segment): segment is SegmentApiSegment => typeof segment?.id === 'string' && segment.id.length > 0)
-                .map(segment => ({ id: segment.id, name: segment.name && segment.name.trim().length > 0 ? segment.name : segment.id }))
-            : [];
-          setSegments(items);
-          setSegmentsError(null);
-        }
-      } catch (error: unknown) {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Unable to load segments';
-          setSegmentsError(message);
-        }
-      } finally {
-        if (!cancelled) setSegmentsLoading(false);
-      }
-    };
-
-    fetchSegments();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleMetaChange = (field: string, value: unknown) => {
     if (!node.id) return;
@@ -532,24 +490,11 @@ export function JourneyNodeInspector({
               </div>
 
               {(meta.triggerType === 'segment_joined' || (!meta.triggerType && node.data.subtype === 'segment_joined')) ? (
-                <div className="space-y-2">
-                  <Label htmlFor="triggerSegment">Segment</Label>
-                  <select
-                    id="triggerSegment"
-                    className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139] focus:border-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]/20"
-                    value={String(meta.segmentId ?? '')}
-                    onChange={event => handleMetaChange('segmentId', event.target.value)}
-                  >
-                    <option value="">Select segment</option>
-                    {segments.map(segment => (
-                      <option key={segment.id} value={segment.id}>
-                        {segment.name}
-                      </option>
-                    ))}
-                  </select>
-                  {segmentsLoading ? <p className="text-xs text-[#B8977F]">Loading segments…</p> : null}
-                  {segmentsError ? <p className="text-xs text-[#C8998F]">{segmentsError}</p> : null}
-                </div>
+                <SegmentPickerWithBuilder
+                  value={String(meta.segmentId ?? '')}
+                  onValueChange={(val) => handleMetaChange('segmentId', val)}
+                  label="Segment"
+                />
               ) : null}
 
               {(meta.triggerType === 'event_trigger' || (!meta.triggerType && node.data.subtype === 'event_trigger')) ? (

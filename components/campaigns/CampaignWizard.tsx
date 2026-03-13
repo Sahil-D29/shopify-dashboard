@@ -34,12 +34,17 @@ import type {
   CampaignType,
   TriggerEvent,
 } from '@/lib/types/campaign';
-import type { Segment } from '@/lib/types';
 import type { CustomerSegment } from '@/lib/types/segment';
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 import { UnifiedWhatsAppConfig } from '@/components/journeys/nodes/whatsapp/UnifiedWhatsAppConfig';
 import { AdvancedWhatsAppSettings } from '@/components/campaigns/AdvancedWhatsAppSettings';
-import { CreateSegmentModal } from '@/components/segments/CreateSegmentModal';
+import SegmentBuilder from '@/components/segments/SegmentBuilder';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { CAMPAIGN_PRESETS, PRESET_CATEGORIES, type CampaignPreset } from '@/lib/data/campaign-presets';
 import FollowUpBuilder, { type FollowUpStep } from '@/components/campaigns/FollowUpBuilder';
 
@@ -595,18 +600,18 @@ function StepDetails({ campaignData, setCampaignData }: { campaignData: Campaign
    Step 2 — Audience
    ═══════════════════════════════════════════ */
 function StepAudience({ campaignData, setCampaignData, segments, loadingSegments, estimatedReach, onCreateSegment }: { campaignData: CampaignFormData; setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>>; segments: CustomerSegment[]; loadingSegments: boolean; estimatedReach: number; onCreateSegment: () => void }) {
-  const [createSegmentModalOpen, setCreateSegmentModalOpen] = useState(false);
-  const handleSegmentCreated = (newSegment: Segment) => {
+  const [createSegmentDialogOpen, setCreateSegmentDialogOpen] = useState(false);
+  const handleSegmentCreated = (newSegment: CustomerSegment) => {
     setCampaignData(p => ({ ...p, segmentIds: [...p.segmentIds, newSegment.id] }));
     onCreateSegment();
-    setCreateSegmentModalOpen(false);
+    setCreateSegmentDialogOpen(false);
   };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-bold text-gray-900">Select Your Audience</h3>
-        <Button type="button" variant="outline" onClick={() => setCreateSegmentModalOpen(true)} className="flex items-center gap-2">
+        <Button type="button" variant="outline" onClick={() => setCreateSegmentDialogOpen(true)} className="flex items-center gap-2">
           <Plus className="h-4 w-4" /> Create New Segment
         </Button>
       </div>
@@ -626,7 +631,7 @@ function StepAudience({ campaignData, setCampaignData, segments, loadingSegments
       ) : segments.length === 0 ? (
         <div className="rounded-xl bg-gray-50 py-12 text-center">
           <p className="mb-4 text-gray-600">No segments found. Create segments before launching a campaign.</p>
-          <Button variant="outline" onClick={() => setCreateSegmentModalOpen(true)}><Users className="mr-2 h-4 w-4" /> Create New Segment</Button>
+          <Button variant="outline" onClick={() => setCreateSegmentDialogOpen(true)}><Users className="mr-2 h-4 w-4" /> Create New Segment</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -649,7 +654,14 @@ function StepAudience({ campaignData, setCampaignData, segments, loadingSegments
           })}
         </div>
       )}
-      {createSegmentModalOpen && <CreateSegmentModal segment={null} onClose={() => setCreateSegmentModalOpen(false)} onSave={handleSegmentCreated} />}
+      <Dialog open={createSegmentDialogOpen} onOpenChange={setCreateSegmentDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Segment</DialogTitle>
+          </DialogHeader>
+          <SegmentBuilder onSaved={handleSegmentCreated} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

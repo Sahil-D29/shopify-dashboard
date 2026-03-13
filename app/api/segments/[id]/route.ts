@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { CustomerSegment } from '@/lib/types/segment';
-import { calculateSegmentStatsFromFiles } from '@/lib/utils/segment-stats-file-based';
+import { calculateSegmentStats } from '@/lib/utils/segment-stats';
+import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { JourneyDefinition } from '@/lib/types/journey';
 import type { Campaign } from '@/lib/types/campaign';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
@@ -14,7 +15,7 @@ interface RouteParams {
   id: string;
 }
 
-// Removed Shopify-based types - now using file-based calculation
+// Using Shopify API-based stats calculation
 
 const parseBoolean = (value: string | null): boolean => value === 'true';
 
@@ -70,47 +71,25 @@ export async function GET(
 
     const refresh = parseBoolean(request.nextUrl.searchParams.get('refresh'));
 
-    // Calculate stats from file-based customer data (same as list endpoint)
-    const stats = await calculateSegmentStatsFromFiles({
+    // Create Shopify client for stats and customer fetching
+    const client = await getShopifyClientAsync(request);
+
+    // Calculate stats via Shopify API (with 2-min cache)
+    const stats = await calculateSegmentStats({
+      client,
       segmentId: segment.id,
       conditionGroups: segment.conditionGroups,
-      storeId: storeFilter.storeId || undefined,
       forceRefresh: refresh,
     });
 
-    // Get customers for the detail view (filtered by segment conditions)
+    // Get matching customers for detail view
     let filteredCustomers: any[] = [];
-    
     try {
-      // Fetch customers from Shopify
-      const { getShopifyClientAsync } = await import('@/lib/shopify/api-helper');
       const { mapShopifyToUiCustomer } = await import('@/lib/segments/mapper');
-      const client = await getShopifyClientAsync(request);
-      const shopifyCustomers = await client.fetchAll<any>('customers', { limit: 250 });
-      
-      const conditionGroups = segment.conditionGroups || [];
-      const hasConditions = conditionGroups.length > 0 && 
-        conditionGroups.some(group => (group.conditions || []).length > 0);
-      
-      if (hasConditions) {
-        const { matchesGroups } = await import('@/lib/segments/evaluator');
-        const matchedCustomers = shopifyCustomers.filter((customer: any) => {
-          try {
-            return matchesGroups(customer, conditionGroups);
-          } catch (error) {
-            return false;
-          }
-        });
-        // Map to UI customer format
-        filteredCustomers = matchedCustomers.map((customer: any) => mapShopifyToUiCustomer(customer));
-      } else {
-        // No conditions - return all customers
-        filteredCustomers = shopifyCustomers.map((customer: any) => mapShopifyToUiCustomer(customer));
-      }
+      const matchingCustomers = stats.customers || [];
+      filteredCustomers = matchingCustomers.map((customer: any) => mapShopifyToUiCustomer(customer));
     } catch (error) {
-      console.warn('[Segments][GET /:id] Failed to fetch customers:', error);
-      // Return empty array if customer fetch fails (non-critical)
-      filteredCustomers = [];
+      console.warn('[Segments][GET /:id] Failed to map customers:', error);
     }
 
     const campaignsUsing = await prisma.campaign.count({ where: { segmentId } });
@@ -135,7 +114,7 @@ export async function GET(
         lastUpdated: stats.lastUpdated,
         lastCalculated: stats.lastUpdated, // Keep for backward compatibility
         customers: filteredCustomers.slice(0, 100), // Limit to 100 for detail view
-        usingCachedStats: false, // File-based, not cached
+        usingCachedStats: false,
         usage: {
           campaigns: campaignsUsing,
           activeCampaigns,
