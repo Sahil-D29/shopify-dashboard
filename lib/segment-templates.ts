@@ -1,6 +1,7 @@
 import { SegmentTemplate } from './types/segment';
 
 export const SEGMENT_TEMPLATES: SegmentTemplate[] = [
+  // ─── Core Templates ───
   {
     id: 'vip_customers',
     name: 'VIP Customers',
@@ -78,13 +79,255 @@ export const SEGMENT_TEMPLATES: SegmentTemplate[] = [
       id: 'group1',
       conditions: [{
         id: 'cond1',
-        field: 'cart_abandoned',
+        field: 'cart_abandonment_count',
+        operator: 'greater_than',
+        value: 0,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+
+  // ─── WhatsApp Marketing Templates ───
+  {
+    id: 'whatsapp_engaged',
+    name: 'WhatsApp Engaged',
+    description: 'Customers who opened WhatsApp campaigns in last 7 days',
+    icon: '💬',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'whatsapp_messages_opened',
+        operator: 'greater_than',
+        value: 0,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'last_message_sent',
+        operator: 'in_last_days',
+        value: 7,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'campaign_non_responders',
+    name: 'Campaign Non-Responders',
+    description: 'Received campaigns but never opened any',
+    icon: '📭',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'campaign_total_received',
+        operator: 'greater_than',
+        value: 0,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'campaign_read_rate',
         operator: 'equals',
+        value: 0,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'never_received_campaign',
+    name: 'Never Contacted',
+    description: 'Customers who never received any campaign',
+    icon: '📪',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'campaign_never_received',
+        operator: 'is_true',
         value: 'true',
         logicalOperator: 'AND',
       }],
       groupOperator: 'AND',
     }],
   },
+  {
+    id: 'high_value_repeat',
+    name: 'High-Value Repeat Buyers',
+    description: '3+ orders with AOV above $100',
+    icon: '💎',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'total_orders',
+        operator: 'greater_than_or_equal',
+        value: 3,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'average_order_value',
+        operator: 'greater_than',
+        value: 100,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 're_engagement_targets',
+    name: 'Re-engagement Targets',
+    description: 'Previously active but no message in 30 days',
+    icon: '🎯',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'campaign_total_received',
+        operator: 'greater_than',
+        value: 0,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'campaign_last_received_date',
+        operator: 'before_date',
+        value: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'new_whatsapp_contacts',
+    name: 'New WhatsApp Contacts',
+    description: 'Opted in within last 7 days',
+    icon: '📱',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'wa_opted_in',
+        operator: 'is_true',
+        value: 'true',
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'wa_opt_in_date',
+        operator: 'in_last_days',
+        value: 7,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'chat_active',
+    name: 'Chat-Active Customers',
+    description: 'Customers with open WhatsApp conversations',
+    icon: '💭',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'chat_has_open_conversation',
+        operator: 'is_true',
+        value: 'true',
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'discount_hunters',
+    name: 'Discount Hunters',
+    description: 'Used discount codes on 2+ orders',
+    icon: '🏷️',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'order_discount_code',
+        operator: 'is_not_empty',
+        value: '',
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'total_orders',
+        operator: 'greater_than_or_equal',
+        value: 2,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'churning_high_value',
+    name: 'Churning High-Value',
+    description: 'High CLV tier but no order in 60+ days',
+    icon: '🚨',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'clv_tier',
+        operator: 'equals',
+        value: 'high',
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'days_since_last_order',
+        operator: 'greater_than',
+        value: 60,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'journey_never_enrolled',
+    name: 'Never in Journey',
+    description: 'Customers never enrolled in any journey',
+    icon: '🗺️',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'journey_never_enrolled',
+        operator: 'is_true',
+        value: 'true',
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
+  {
+    id: 'high_rfm',
+    name: 'Best RFM Customers',
+    description: 'Top RFM scores across all dimensions',
+    icon: '📊',
+    conditionGroups: [{
+      id: 'group1',
+      conditions: [{
+        id: 'cond1',
+        field: 'rfm_recency_score',
+        operator: 'greater_than_or_equal',
+        value: 4,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond2',
+        field: 'rfm_frequency_score',
+        operator: 'greater_than_or_equal',
+        value: 4,
+        logicalOperator: 'AND',
+      }, {
+        id: 'cond3',
+        field: 'rfm_monetary_score',
+        operator: 'greater_than_or_equal',
+        value: 4,
+        logicalOperator: 'AND',
+      }],
+      groupOperator: 'AND',
+    }],
+  },
 ];
-

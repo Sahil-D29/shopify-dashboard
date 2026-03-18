@@ -9,10 +9,18 @@ import {
   needsAbandonedCheckoutEnrichment,
   needsRFMEnrichment,
   needsStorefrontEnrichment,
+  needsJourneyEnrichment,
+  needsFlowEnrichment,
+  needsConversationEnrichment,
+  needsContactEnrichment,
   type CustomerEnrichment,
   type CampaignLogEnrichment,
   type AbandonedCheckoutEnrichment,
   type StorefrontEventEnrichment,
+  type JourneyEnrichment,
+  type FlowEnrichment,
+  type ConversationEnrichment,
+  type ContactEnrichment,
 } from '@/lib/segments/evaluator';
 import { calculateRFMScores } from '@/lib/segments/rfm';
 
@@ -72,10 +80,9 @@ async function fetchCampaignLogEnrichment(
   if (customerIds.length === 0) return result;
 
   try {
-    // Dynamic import to avoid circular deps
     const { prisma } = await import('@/lib/prisma');
 
-    // Raw SQL aggregation: count statuses, get latest dates per customerId
+    // Aggregate stats per customer
     const rows = await prisma.$queryRaw<Array<{
       customerId: string;
       totalReceived: bigint;
@@ -104,6 +111,56 @@ async function fetchCampaignLogEnrichment(
       GROUP BY cl."customerId"
     `;
 
+    // Fetch detailed logs for sub-filter support
+    const detailedLogs = await prisma.$queryRaw<Array<{
+      customerId: string;
+      campaignId: string;
+      campaignName: string | null;
+      templateName: string | null;
+      campaignType: string | null;
+      status: string;
+      createdAt: Date;
+      readAt: Date | null;
+      clickedAt: Date | null;
+      convertedAt: Date | null;
+      convertedAmount: number | null;
+    }>>`
+      SELECT
+        cl."customerId",
+        cl."campaignId",
+        c."name" as "campaignName",
+        c."templateId" as "templateName",
+        c."type" as "campaignType",
+        cl."status",
+        cl."createdAt",
+        cl."readAt",
+        cl."clickedAt",
+        cl."convertedAt",
+        cl."convertedAmount"
+      FROM "CampaignLog" cl
+      JOIN "Campaign" c ON c.id = cl."campaignId"
+      WHERE c."storeId" = ${storeId}
+      ORDER BY cl."createdAt" DESC
+    `.catch(() => [] as Array<any>);
+
+    // Build logs map by customer
+    const logsMap = new Map<string, CampaignLogEnrichment['logs']>();
+    for (const log of detailedLogs) {
+      if (!logsMap.has(log.customerId)) logsMap.set(log.customerId, []);
+      logsMap.get(log.customerId)!.push({
+        campaignId: log.campaignId,
+        campaignName: log.campaignName || undefined,
+        templateName: log.templateName || undefined,
+        campaignType: log.campaignType || undefined,
+        status: log.status,
+        createdAt: log.createdAt.getTime(),
+        readAt: log.readAt?.getTime() ?? null,
+        clickedAt: log.clickedAt?.getTime() ?? null,
+        convertedAt: log.convertedAt?.getTime() ?? null,
+        convertedAmount: log.convertedAmount ? Number(log.convertedAmount) : null,
+      });
+    }
+
     for (const row of rows) {
       result.set(row.customerId, {
         totalReceived: Number(row.totalReceived),
@@ -112,6 +169,7 @@ async function fetchCampaignLogEnrichment(
         lastMessageSentAt: row.lastMessageSentAt ? row.lastMessageSentAt.getTime() : null,
         lastCampaignId: row.lastCampaignId,
         lastTemplateId: row.lastTemplateId,
+        logs: logsMap.get(row.customerId) || [],
       });
     }
   } catch (err) {
@@ -161,7 +219,6 @@ async function fetchStorefrontEventEnrichment(
   try {
     const { prisma } = await import('@/lib/prisma');
 
-    // Check if StorefrontEvent table exists (it may not be migrated yet)
     const rows = await prisma.$queryRaw<Array<{
       customerId: string;
       eventType: string;
@@ -211,6 +268,282 @@ async function fetchStorefrontEventEnrichment(
   return result;
 }
 
+async function fetchJourneyEnrichment(
+  storeId: string
+): Promise<Map<string, JourneyEnrichment>> {
+  const result = new Map<string, JourneyEnrichment>();
+
+  try {
+    const { prisma } = await import('@/lib/prisma');
+
+    const rows = await prisma.$queryRaw<Array<{
+      customerId: string;
+      journeyId: string;
+      journeyName: string | null;
+      status: string;
+      currentNode: string | null;
+      enrolledAt: Date;
+      completedAt: Date | null;
+    }>>`
+      SELECT
+        je."customerId",
+        je."journeyId",
+        j."name" as "journeyName",
+        je."status",
+        je."currentNode",
+        je."createdAt" as "enrolledAt",
+        je."completedAt"
+      FROM "JourneyEnrollment" je
+      JOIN "Journey" j ON j.id = je."journeyId"
+      WHERE j."storeId" = ${storeId}
+      ORDER BY je."createdAt" DESC
+    `.catch(() => [] as Array<any>);
+
+    for (const row of rows) {
+      if (!row.customerId) continue;
+      if (!result.has(row.customerId)) {
+        result.set(row.customerId, { enrollments: [] });
+      }
+      result.get(row.customerId)!.enrollments.push({
+        journeyId: row.journeyId,
+        journeyName: row.journeyName || undefined,
+        status: row.status,
+        currentNode: row.currentNode,
+        enrolledAt: row.enrolledAt.getTime(),
+        completedAt: row.completedAt?.getTime() ?? null,
+      });
+    }
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to fetch journey enrichment:', err);
+  }
+
+  return result;
+}
+
+async function fetchFlowEnrichment(
+  storeId: string
+): Promise<Map<string, FlowEnrichment>> {
+  const result = new Map<string, FlowEnrichment>();
+
+  try {
+    const { prisma } = await import('@/lib/prisma');
+
+    const rows = await prisma.$queryRaw<Array<{
+      contactId: string;
+      flowId: string;
+      flowName: string | null;
+      completedAt: Date | null;
+      responseData: any;
+      createdAt: Date;
+    }>>`
+      SELECT
+        fr."contactId",
+        fr."flowId",
+        f."name" as "flowName",
+        fr."completedAt",
+        fr."responseData",
+        fr."createdAt"
+      FROM "WhatsAppFlowResponse" fr
+      JOIN "WhatsAppFlow" f ON f.id = fr."flowId"
+      WHERE f."storeId" = ${storeId}
+      ORDER BY fr."createdAt" DESC
+    `.catch(() => [] as Array<any>);
+
+    for (const row of rows) {
+      if (!row.contactId) continue;
+      if (!result.has(row.contactId)) {
+        result.set(row.contactId, { responses: [] });
+      }
+      result.get(row.contactId)!.responses.push({
+        flowId: row.flowId,
+        flowName: row.flowName || undefined,
+        completedAt: row.completedAt?.getTime() ?? null,
+        responseData: row.responseData || {},
+        createdAt: row.createdAt.getTime(),
+      });
+    }
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to fetch flow enrichment:', err);
+  }
+
+  return result;
+}
+
+async function fetchConversationEnrichment(
+  storeId: string
+): Promise<Map<string, ConversationEnrichment>> {
+  const result = new Map<string, ConversationEnrichment>();
+
+  try {
+    const { prisma } = await import('@/lib/prisma');
+
+    // Fetch conversations
+    const convos = await prisma.$queryRaw<Array<{
+      contactId: string;
+      id: string;
+      status: string;
+      assignedTo: string | null;
+      lastMessageAt: Date | null;
+      closedAt: Date | null;
+      unreadCount: number;
+    }>>`
+      SELECT
+        c."contactId",
+        c.id,
+        c."status",
+        c."assignedTo",
+        c."lastMessageAt",
+        c."closedAt",
+        c."unreadCount"
+      FROM "Conversation" c
+      WHERE c."storeId" = ${storeId}
+      ORDER BY c."lastMessageAt" DESC
+    `.catch(() => [] as Array<any>);
+
+    // Fetch message stats per contact
+    const msgStats = await prisma.$queryRaw<Array<{
+      contactId: string;
+      totalInbound: bigint;
+      totalOutbound: bigint;
+      lastInboundAt: Date | null;
+      lastOutboundAt: Date | null;
+      lastStatus: string | null;
+    }>>`
+      SELECT
+        m."contactId",
+        COUNT(*) FILTER (WHERE m."direction" = 'INBOUND') as "totalInbound",
+        COUNT(*) FILTER (WHERE m."direction" = 'OUTBOUND') as "totalOutbound",
+        MAX(m."createdAt") FILTER (WHERE m."direction" = 'INBOUND') as "lastInboundAt",
+        MAX(m."createdAt") FILTER (WHERE m."direction" = 'OUTBOUND') as "lastOutboundAt",
+        (SELECT m2."status" FROM "Message" m2
+         WHERE m2."contactId" = m."contactId"
+         ORDER BY m2."createdAt" DESC LIMIT 1) as "lastStatus"
+      FROM "Message" m
+      JOIN "Conversation" cv ON cv.id = m."conversationId"
+      WHERE cv."storeId" = ${storeId}
+      GROUP BY m."contactId"
+    `.catch(() => [] as Array<any>);
+
+    const msgStatsMap = new Map<string, typeof msgStats[0]>();
+    for (const stat of msgStats) {
+      if (stat.contactId) msgStatsMap.set(stat.contactId, stat);
+    }
+
+    for (const convo of convos) {
+      if (!convo.contactId) continue;
+      if (!result.has(convo.contactId)) {
+        const stats = msgStatsMap.get(convo.contactId);
+        result.set(convo.contactId, {
+          conversations: [],
+          totalInbound: Number(stats?.totalInbound ?? 0),
+          totalOutbound: Number(stats?.totalOutbound ?? 0),
+          avgResponseTimeMinutes: null,
+          lastInboundAt: stats?.lastInboundAt?.getTime() ?? null,
+          lastOutboundAt: stats?.lastOutboundAt?.getTime() ?? null,
+          lastMessageStatus: stats?.lastStatus ?? null,
+        });
+      }
+      result.get(convo.contactId)!.conversations.push({
+        id: convo.id,
+        status: convo.status,
+        assignedTo: convo.assignedTo,
+        lastMessageAt: convo.lastMessageAt?.getTime() ?? null,
+        closedAt: convo.closedAt?.getTime() ?? null,
+        unreadCount: convo.unreadCount ?? 0,
+      });
+    }
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to fetch conversation enrichment:', err);
+  }
+
+  return result;
+}
+
+async function fetchContactEnrichment(
+  storeId: string
+): Promise<Map<string, ContactEnrichment>> {
+  const result = new Map<string, ContactEnrichment>();
+
+  try {
+    const { prisma } = await import('@/lib/prisma');
+
+    const contacts = await prisma.$queryRaw<Array<{
+      id: string;
+      phone: string | null;
+      email: string | null;
+      source: string;
+      optInStatus: string;
+      optInAt: Date | null;
+      customFields: any;
+      tags: string[];
+      createdAt: Date;
+      shopifyCustomerId: string | null;
+    }>>`
+      SELECT
+        id, phone, email, source, "optInStatus",
+        "optInAt", "customFields", tags, "createdAt",
+        "shopifyCustomerId"
+      FROM "Contact"
+      WHERE "storeId" = ${storeId}
+    `.catch(() => [] as Array<any>);
+
+    for (const contact of contacts) {
+      // Key by shopifyCustomerId, phone, and email for flexible matching
+      const enrichment: ContactEnrichment = {
+        source: contact.source || '',
+        optInStatus: contact.optInStatus || 'NOT_SET',
+        optInAt: contact.optInAt?.getTime() ?? null,
+        customFields: contact.customFields || {},
+        tags: contact.tags || [],
+        createdAt: contact.createdAt.getTime(),
+        shopifyCustomerId: contact.shopifyCustomerId,
+        email: contact.email,
+        phone: contact.phone,
+      };
+
+      // Store by multiple keys for matching
+      if (contact.shopifyCustomerId) {
+        result.set(`shopify:${contact.shopifyCustomerId}`, enrichment);
+      }
+      if (contact.email) {
+        result.set(`email:${contact.email.toLowerCase()}`, enrichment);
+      }
+      if (contact.phone) {
+        result.set(`phone:${contact.phone}`, enrichment);
+      }
+      result.set(`contact:${contact.id}`, enrichment);
+    }
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to fetch contact enrichment:', err);
+  }
+
+  return result;
+}
+
+/** Resolve a contact enrichment by trying multiple keys */
+function resolveContactEnrichment(
+  contactMap: Map<string, ContactEnrichment>,
+  customer: ShopifyCustomer
+): ContactEnrichment | undefined {
+  // Try by Shopify customer ID
+  const byShopify = contactMap.get(`shopify:${customer.id}`);
+  if (byShopify) return byShopify;
+
+  // Try by email
+  if (customer.email) {
+    const byEmail = contactMap.get(`email:${customer.email.toLowerCase()}`);
+    if (byEmail) return byEmail;
+  }
+
+  // Try by phone
+  if (customer.phone) {
+    const byPhone = contactMap.get(`phone:${customer.phone}`);
+    if (byPhone) return byPhone;
+  }
+
+  return undefined;
+}
+
 export async function calculateSegmentStats(options: SegmentStatsOptions): Promise<SegmentStats> {
   const cacheKey = getCacheKey(options);
   const cached = statsCache.get(cacheKey);
@@ -238,6 +571,10 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
   const requiresAbandoned = hasConditions && needsAbandonedCheckoutEnrichment(conditionGroups);
   const requiresRFM = hasConditions && needsRFMEnrichment(conditionGroups);
   const requiresStorefront = hasConditions && options.storeId && needsStorefrontEnrichment(conditionGroups);
+  const requiresJourneys = hasConditions && options.storeId && needsJourneyEnrichment(conditionGroups);
+  const requiresFlows = hasConditions && options.storeId && needsFlowEnrichment(conditionGroups);
+  const requiresConversations = hasConditions && options.storeId && needsConversationEnrichment(conditionGroups);
+  const requiresContacts = hasConditions && options.storeId && needsContactEnrichment(conditionGroups);
 
   // Fetch all needed enrichments in parallel
   let ordersByCustomer: Map<string, ShopifyOrder[]> | null = null;
@@ -245,6 +582,10 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
   let abandonedMap: Map<string, AbandonedCheckoutEnrichment> | null = null;
   let rfmMap: Map<string | number, { recency: number; frequency: number; monetary: number }> | null = null;
   let storefrontMap: Map<string, StorefrontEventEnrichment> | null = null;
+  let journeyMap: Map<string, JourneyEnrichment> | null = null;
+  let flowMap: Map<string, FlowEnrichment> | null = null;
+  let conversationMap: Map<string, ConversationEnrichment> | null = null;
+  let contactMap: Map<string, ContactEnrichment> | null = null;
 
   const fetches: Promise<void>[] = [];
 
@@ -290,9 +631,41 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
     );
   }
 
+  if (requiresJourneys && options.storeId) {
+    fetches.push(
+      fetchJourneyEnrichment(options.storeId).then(map => {
+        journeyMap = map;
+      })
+    );
+  }
+
+  if (requiresFlows && options.storeId) {
+    fetches.push(
+      fetchFlowEnrichment(options.storeId).then(map => {
+        flowMap = map;
+      })
+    );
+  }
+
+  if (requiresConversations && options.storeId) {
+    fetches.push(
+      fetchConversationEnrichment(options.storeId).then(map => {
+        conversationMap = map;
+      })
+    );
+  }
+
+  if (requiresContacts && options.storeId) {
+    fetches.push(
+      fetchContactEnrichment(options.storeId).then(map => {
+        contactMap = map;
+      })
+    );
+  }
+
   await Promise.all(fetches);
 
-  // RFM is calculated from customer data (no external fetch needed), but depends on order data if available
+  // RFM is calculated from customer data
   if (requiresRFM) {
     rfmMap = calculateRFMScores(sourceCustomers);
   }
@@ -320,6 +693,18 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
           }
           if (storefrontMap) {
             enrichment.storefrontEvents = storefrontMap.get(custId);
+          }
+          if (journeyMap) {
+            enrichment.journeys = journeyMap.get(custId);
+          }
+          if (flowMap) {
+            enrichment.flows = flowMap.get(custId);
+          }
+          if (conversationMap) {
+            enrichment.conversations = conversationMap.get(custId);
+          }
+          if (contactMap) {
+            enrichment.contact = resolveContactEnrichment(contactMap, customer);
           }
 
           return matchesGroups(customer, conditionGroups, enrichment);
