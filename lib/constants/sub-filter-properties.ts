@@ -8,43 +8,207 @@ export interface SubFilterProperty {
   label: string;
   type: SubFilterPropertyType;
   parentCategory: SubFilterCategory;
+  /** API endpoint to fetch dropdown options from */
+  apiEndpoint?: string;
+  /** Which field in the API response to use as the option value */
+  valueField?: string;
+  /** Which field in the API response to display as the label */
+  labelField?: string;
+  /** Whether the dropdown supports search */
+  searchable?: boolean;
+  /** Static options (for fields with predefined values) */
+  staticOptions?: { value: string; label: string }[];
 }
 
 /** Sub-filter properties available for each parent category */
 export const SUB_FILTER_PROPERTIES: SubFilterProperty[] = [
   // Order sub-filters
-  { name: 'product_name', label: 'Product Name', type: 'text', parentCategory: 'order' },
-  { name: 'product_price', label: 'Product Price', type: 'number', parentCategory: 'order' },
-  { name: 'product_vendor', label: 'Vendor', type: 'text', parentCategory: 'order' },
-  { name: 'product_type', label: 'Product Type', type: 'text', parentCategory: 'order' },
-  { name: 'order_total', label: 'Order Total', type: 'number', parentCategory: 'order' },
-  { name: 'discount_code', label: 'Discount Code', type: 'text', parentCategory: 'order' },
-  { name: 'quantity', label: 'Quantity', type: 'number', parentCategory: 'order' },
-  { name: 'sku', label: 'SKU', type: 'text', parentCategory: 'order' },
-  { name: 'fulfillment_status', label: 'Fulfillment Status', type: 'text', parentCategory: 'order' },
+  {
+    name: 'product_name',
+    label: 'Product Name',
+    type: 'text',
+    parentCategory: 'order',
+    apiEndpoint: '/api/shopify/products',
+    valueField: 'title',
+    labelField: 'title',
+    searchable: true,
+  },
+  {
+    name: 'product_price',
+    label: 'Product Price',
+    type: 'number',
+    parentCategory: 'order',
+  },
+  {
+    name: 'product_vendor',
+    label: 'Vendor',
+    type: 'text',
+    parentCategory: 'order',
+    apiEndpoint: '/api/shopify/vendors',
+    valueField: 'name',
+    labelField: 'name',
+    searchable: true,
+  },
+  {
+    name: 'product_type',
+    label: 'Product Type',
+    type: 'text',
+    parentCategory: 'order',
+    apiEndpoint: '/api/shopify/product-types',
+    valueField: 'type',
+    labelField: 'type',
+    searchable: true,
+  },
+  {
+    name: 'order_total',
+    label: 'Order Total',
+    type: 'number',
+    parentCategory: 'order',
+  },
+  {
+    name: 'discount_code',
+    label: 'Discount Code',
+    type: 'text',
+    parentCategory: 'order',
+    apiEndpoint: '/api/shopify/discount-codes',
+    valueField: 'code',
+    labelField: 'code',
+    searchable: true,
+  },
+  {
+    name: 'quantity',
+    label: 'Quantity',
+    type: 'number',
+    parentCategory: 'order',
+  },
+  {
+    name: 'sku',
+    label: 'SKU',
+    type: 'text',
+    parentCategory: 'order',
+  },
+  {
+    name: 'fulfillment_status',
+    label: 'Fulfillment Status',
+    type: 'text',
+    parentCategory: 'order',
+    staticOptions: [
+      { value: 'fulfilled', label: 'Fulfilled' },
+      { value: 'unfulfilled', label: 'Unfulfilled' },
+      { value: 'partial', label: 'Partially Fulfilled' },
+      { value: 'restocked', label: 'Restocked' },
+    ],
+  },
 
   // Campaign sub-filters
-  { name: 'template_name', label: 'Template Name', type: 'text', parentCategory: 'campaign' },
-  { name: 'campaign_type', label: 'Campaign Type', type: 'text', parentCategory: 'campaign' },
-  { name: 'send_date', label: 'Send Date', type: 'date', parentCategory: 'campaign' },
-  { name: 'delivery_status', label: 'Delivery Status', type: 'text', parentCategory: 'campaign' },
+  {
+    name: 'template_name',
+    label: 'Template Name',
+    type: 'text',
+    parentCategory: 'campaign',
+    apiEndpoint: '/api/whatsapp/templates',
+    valueField: 'name',
+    labelField: 'name',
+    searchable: true,
+  },
+  {
+    name: 'campaign_type',
+    label: 'Campaign Type',
+    type: 'text',
+    parentCategory: 'campaign',
+    staticOptions: [
+      { value: 'ONE_TIME', label: 'One Time' },
+      { value: 'RECURRING', label: 'Recurring' },
+      { value: 'DRIP', label: 'Drip' },
+      { value: 'TRIGGER_BASED', label: 'Trigger Based' },
+    ],
+  },
+  {
+    name: 'send_date',
+    label: 'Send Date',
+    type: 'date',
+    parentCategory: 'campaign',
+  },
+  {
+    name: 'delivery_status',
+    label: 'Delivery Status',
+    type: 'text',
+    parentCategory: 'campaign',
+    staticOptions: [
+      { value: 'SENT', label: 'Sent' },
+      { value: 'DELIVERED', label: 'Delivered' },
+      { value: 'READ', label: 'Read' },
+      { value: 'FAILED', label: 'Failed' },
+      { value: 'PENDING', label: 'Pending' },
+    ],
+  },
 
   // Journey sub-filters
-  { name: 'enrollment_date', label: 'Enrollment Date', type: 'date', parentCategory: 'journey' },
-  { name: 'completion_date', label: 'Completion Date', type: 'date', parentCategory: 'journey' },
-  { name: 'current_node', label: 'Current Node', type: 'text', parentCategory: 'journey' },
-  { name: 'journey_status', label: 'Status', type: 'text', parentCategory: 'journey' },
+  {
+    name: 'enrollment_date',
+    label: 'Enrollment Date',
+    type: 'date',
+    parentCategory: 'journey',
+  },
+  {
+    name: 'completion_date',
+    label: 'Completion Date',
+    type: 'date',
+    parentCategory: 'journey',
+  },
+  {
+    name: 'current_node',
+    label: 'Current Node',
+    type: 'text',
+    parentCategory: 'journey',
+  },
+  {
+    name: 'journey_status',
+    label: 'Status',
+    type: 'text',
+    parentCategory: 'journey',
+    staticOptions: [
+      { value: 'ACTIVE', label: 'Active' },
+      { value: 'COMPLETED', label: 'Completed' },
+      { value: 'DROPPED_OFF', label: 'Dropped Off' },
+      { value: 'PAUSED', label: 'Paused' },
+    ],
+  },
 
   // Flow sub-filters
-  { name: 'screen_id', label: 'Screen ID', type: 'text', parentCategory: 'flow' },
-  { name: 'response_value', label: 'Response Value', type: 'text', parentCategory: 'flow' },
-  { name: 'completion_date', label: 'Completion Date', type: 'date', parentCategory: 'flow' },
+  {
+    name: 'screen_id',
+    label: 'Screen ID',
+    type: 'text',
+    parentCategory: 'flow',
+  },
+  {
+    name: 'response_value',
+    label: 'Response Value',
+    type: 'text',
+    parentCategory: 'flow',
+  },
+  {
+    name: 'completion_date',
+    label: 'Completion Date',
+    type: 'date',
+    parentCategory: 'flow',
+  },
 
   // Universal sub-filters (available on ALL conditions)
   { name: 'value', label: 'Value', type: 'text', parentCategory: 'universal' },
   { name: 'count', label: 'Count', type: 'number', parentCategory: 'universal' },
   { name: 'date_range', label: 'Date Range', type: 'date', parentCategory: 'universal' },
-  { name: 'tag', label: 'Tag', type: 'text', parentCategory: 'universal' },
+  {
+    name: 'tag',
+    label: 'Tag',
+    type: 'text',
+    parentCategory: 'universal',
+    apiEndpoint: '/api/shopify/customer-tags',
+    valueField: 'tag',
+    labelField: 'tag',
+    searchable: true,
+  },
   { name: 'source', label: 'Source', type: 'text', parentCategory: 'universal' },
 ];
 
