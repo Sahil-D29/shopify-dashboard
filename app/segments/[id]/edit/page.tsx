@@ -56,8 +56,11 @@ export default function EditSegmentPage() {
   if (!segment) return <div className="text-sm text-muted-foreground">Not found</div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Edit Segment</h1>
+    <div className="space-y-6 pb-20 lg:pb-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Edit Segment</h1>
+        <p className="text-muted-foreground mt-1">Update segment conditions and filters</p>
+      </div>
       <SegmentBuilder
         initialName={segment.name}
         initialDescription={segment.description}

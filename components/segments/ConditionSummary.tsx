@@ -10,6 +10,7 @@ type Group = {
   id: string;
   groupOperator: 'AND' | 'OR';
   conditions: ConditionValue[];
+  eventRules?: EventRule[];
 };
 
 function getFieldLabel(field: string): string {
@@ -79,18 +80,33 @@ function describeCondition(c: ConditionValue): string {
 
 interface ConditionSummaryProps {
   groups: Group[];
-  eventRules: EventRule[];
 }
 
-export function ConditionSummary({ groups, eventRules }: ConditionSummaryProps) {
+export function ConditionSummary({ groups }: ConditionSummaryProps) {
   const summary = useMemo(() => {
     const parts: string[] = [];
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
-      if (group.conditions.length === 0) continue;
+      const hasConditions = group.conditions.length > 0;
+      const hasEvents = (group.eventRules || []).some(r => r.eventName);
 
-      const condDescs = group.conditions.map(describeCondition);
+      if (!hasConditions && !hasEvents) continue;
+
+      const condDescs: string[] = [];
+
+      // Attribute conditions
+      for (const c of group.conditions) {
+        condDescs.push(describeCondition(c));
+      }
+
+      // Event rules within this group
+      for (const rule of group.eventRules || []) {
+        if (!rule.eventName) continue;
+        const action = rule.action === 'did' ? 'performed' : 'did not perform';
+        condDescs.push(`${action} "${rule.eventDisplayName || rule.eventName}"`);
+      }
+
       const joinWord = group.groupOperator === 'OR' ? ' OR ' : ' AND ';
       const groupDesc = condDescs.join(joinWord);
 
@@ -98,23 +114,17 @@ export function ConditionSummary({ groups, eventRules }: ConditionSummaryProps) 
       parts.push(condDescs.length > 1 ? `(${groupDesc})` : groupDesc);
     }
 
-    for (const rule of eventRules) {
-      if (!rule.eventName) continue;
-      const action = rule.action === 'did' ? 'performed' : 'did not perform';
-      parts.push(`AND ${action} "${rule.eventDisplayName || rule.eventName}"`);
-    }
-
     return parts.join(' ');
-  }, [groups, eventRules]);
+  }, [groups]);
 
   if (!summary) return null;
 
   return (
-    <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-lg">
-      <FileText className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+    <div className="flex items-start gap-2 px-4 py-3 bg-primary/5 border border-primary/20 rounded-lg">
+      <FileText className="w-4 h-4 text-primary mt-0.5 shrink-0" />
       <div>
-        <p className="text-xs font-medium text-blue-700 mb-0.5">Segment Summary</p>
-        <p className="text-sm text-blue-800">
+        <p className="text-xs font-medium text-foreground mb-0.5">Segment Summary</p>
+        <p className="text-sm text-foreground/80">
           Customers where <span className="font-medium">{summary}</span>
         </p>
       </div>

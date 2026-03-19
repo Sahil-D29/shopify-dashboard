@@ -1,12 +1,13 @@
 import type { ConditionOperator } from '@/lib/types/segment';
 
 export type SubFilterPropertyType = 'text' | 'number' | 'date';
+export type SubFilterCategory = 'order' | 'campaign' | 'journey' | 'flow' | 'universal';
 
 export interface SubFilterProperty {
   name: string;
   label: string;
   type: SubFilterPropertyType;
-  parentCategory: 'order' | 'campaign' | 'journey' | 'flow';
+  parentCategory: SubFilterCategory;
 }
 
 /** Sub-filter properties available for each parent category */
@@ -38,10 +39,20 @@ export const SUB_FILTER_PROPERTIES: SubFilterProperty[] = [
   { name: 'screen_id', label: 'Screen ID', type: 'text', parentCategory: 'flow' },
   { name: 'response_value', label: 'Response Value', type: 'text', parentCategory: 'flow' },
   { name: 'completion_date', label: 'Completion Date', type: 'date', parentCategory: 'flow' },
+
+  // Universal sub-filters (available on ALL conditions)
+  { name: 'value', label: 'Value', type: 'text', parentCategory: 'universal' },
+  { name: 'count', label: 'Count', type: 'number', parentCategory: 'universal' },
+  { name: 'date_range', label: 'Date Range', type: 'date', parentCategory: 'universal' },
+  { name: 'tag', label: 'Tag', type: 'text', parentCategory: 'universal' },
+  { name: 'source', label: 'Source', type: 'text', parentCategory: 'universal' },
 ];
 
 /** Map parent field names to their sub-filter category */
-export const FIELD_TO_SUBFILTER_CATEGORY: Record<string, 'order' | 'campaign' | 'journey' | 'flow'> = {
+export const UNIVERSAL_SUB_FILTER_PROPERTIES: SubFilterProperty[] =
+  SUB_FILTER_PROPERTIES.filter(p => p.parentCategory === 'universal');
+
+export const FIELD_TO_SUBFILTER_CATEGORY: Record<string, SubFilterCategory> = {
   // Order fields
   ordered_specific_product: 'order',
   ordered_from_collection: 'order',

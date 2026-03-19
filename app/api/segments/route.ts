@@ -15,6 +15,13 @@ interface SegmentCreationPayload {
   description?: string;
   type?: CustomerSegment['type'];
   conditionGroups?: CustomerSegment['conditionGroups'];
+  eventRules?: Array<{
+    id: string;
+    eventName: string;
+    eventDisplayName?: string;
+    action: 'did' | 'did_not';
+    conditions: Array<{ id: string; property: string; operator: string; value: any }>;
+  }>;
   customerCount?: number;
   totalRevenue?: number;
   averageOrderValue?: number;

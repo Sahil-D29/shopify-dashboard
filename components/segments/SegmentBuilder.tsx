@@ -6,33 +6,44 @@ import ConditionRow, { ConditionValue } from './ConditionRow';
 import { EventRuleRow, type EventRule } from './EventRuleRow';
 import { ConditionSummary } from './ConditionSummary';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Eye, Save, Zap, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import {
+  Plus, Save, Zap, ChevronDown, ChevronRight, Trash2,
+  Users, TrendingUp, MapPin, Loader2, User,
+} from 'lucide-react';
 import type { CustomerSegment } from '@/lib/types/segment';
 
-type Group = {
+export type Group = {
   id: string;
   groupOperator: 'AND' | 'OR';
   conditions: ConditionValue[];
+  eventRules: EventRule[];
+};
+
+// Input type accepts groups without eventRules (backward compat)
+type GroupInput = {
+  id: string;
+  groupOperator: 'AND' | 'OR';
+  conditions: ConditionValue[];
+  eventRules?: EventRule[];
+};
+
+type PreviewData = {
+  customerCount?: number;
+  count?: number;
+  totalValue?: number;
+  averageOrderValue?: number;
+  sampleCustomers?: Array<{ name?: string; email?: string; phone?: string }>;
 };
 
 const createEmptyGroup = (): Group => ({
   id: crypto.randomUUID(),
   groupOperator: 'AND',
   conditions: [],
+  eventRules: [],
 });
-
-const normalizeGroups = (groups: Group[] | undefined): Group[] =>
-  groups && groups.length > 0
-    ? groups.map(group => ({
-        ...group,
-        conditions: group.conditions.map(condition => ({
-          ...condition,
-          value: condition.value ?? '',
-        })),
-      }))
-    : [createEmptyGroup()];
 
 const createEmptyEventRule = (): EventRule => ({
   id: nanoid(),
@@ -41,6 +52,34 @@ const createEmptyEventRule = (): EventRule => ({
   action: 'did',
   conditions: [],
 });
+
+const normalizeGroups = (groups: GroupInput[] | undefined): Group[] =>
+  groups && groups.length > 0
+    ? groups.map(group => ({
+        ...group,
+        conditions: group.conditions.map(condition => ({
+          ...condition,
+          value: condition.value ?? '',
+        })),
+        eventRules: group.eventRules || [],
+      }))
+    : [createEmptyGroup()];
+
+// Support legacy format where eventRules were top-level
+const migrateEventRules = (
+  groups: Group[],
+  legacyEventRules?: EventRule[],
+): Group[] => {
+  if (!legacyEventRules || legacyEventRules.length === 0) return groups;
+  // Move legacy top-level event rules into the first group
+  const migrated = [...groups];
+  if (migrated.length === 0) migrated.push(createEmptyGroup());
+  migrated[0] = {
+    ...migrated[0],
+    eventRules: [...(migrated[0].eventRules || []), ...legacyEventRules],
+  };
+  return migrated;
+};
 
 export default function SegmentBuilder({
   initialName = '',
@@ -52,16 +91,17 @@ export default function SegmentBuilder({
 }: {
   initialName?: string;
   initialDescription?: string;
-  initialGroups?: Group[];
+  initialGroups?: GroupInput[];
   initialEventRules?: EventRule[];
   onSaved?: (segment: CustomerSegment) => void;
   segmentId?: string;
 }) {
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
-  const [groups, setGroups] = useState<Group[]>(normalizeGroups(initialGroups));
-  const [eventRules, setEventRules] = useState<EventRule[]>(initialEventRules ?? []);
-  const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [groups, setGroups] = useState<Group[]>(() =>
+    migrateEventRules(normalizeGroups(initialGroups), initialEventRules),
+  );
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -69,18 +109,24 @@ export default function SegmentBuilder({
   useEffect(() => {
     setName(initialName);
     setDescription(initialDescription);
-    setGroups(normalizeGroups(initialGroups));
-    setEventRules(initialEventRules ?? []);
+    setGroups(migrateEventRules(normalizeGroups(initialGroups), initialEventRules));
   }, [initialName, initialDescription, initialGroups, initialEventRules]);
 
-  const hasConditions = useMemo(
-    () => groups.some(g => g.conditions.length > 0) || eventRules.some(r => r.eventName),
-    [groups, eventRules],
+  // Collect all event rules from all groups (for API calls)
+  const allEventRules = useMemo(
+    () => groups.flatMap(g => g.eventRules).filter(r => r.eventName),
+    [groups],
   );
 
+  const hasConditions = useMemo(
+    () => groups.some(g => g.conditions.length > 0) || allEventRules.length > 0,
+    [groups, allEventRules],
+  );
+
+  // Live preview with debounce
   useEffect(() => {
     if (!hasConditions) {
-      setPreviewCount(null);
+      setPreviewData(null);
       return;
     }
 
@@ -91,18 +137,20 @@ export default function SegmentBuilder({
         const res = await fetch('/api/segments/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conditionGroups: groups, eventRules: eventRules.filter(r => r.eventName), forceRefresh: true }),
+          body: JSON.stringify({
+            conditionGroups: groups,
+            eventRules: allEventRules,
+            forceRefresh: true,
+          }),
           signal: controller.signal,
         });
         if (!res.ok) throw new Error('Failed to preview segment');
-        const data = (await res.json()) as { customerCount?: number; count?: number };
-        setPreviewCount(data.customerCount ?? data.count ?? 0);
+        const data = (await res.json()) as PreviewData;
+        setPreviewData(data);
       } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
+        if (controller.signal.aborted) return;
         console.error('[SegmentBuilder] Preview error:', error);
-        setPreviewCount(null);
+        setPreviewData(null);
       } finally {
         if (!controller.signal.aborted) {
           setIsPreviewing(false);
@@ -114,22 +162,16 @@ export default function SegmentBuilder({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [groups, eventRules, hasConditions]);
+  }, [groups, allEventRules, hasConditions]);
 
-  const addGroup = () => setGroups(groups => [...groups, createEmptyGroup()]);
+  // Group actions
+  const addGroup = () => setGroups(gs => [...gs, createEmptyGroup()]);
   const removeGroup = (groupId: string) => {
     if (groups.length <= 1) return;
     setGroups(gs => gs.filter(g => g.id !== groupId));
   };
-  const addCondition = (groupId: string) =>
-    setGroups(gs => gs.map(g => (g.id === groupId ? { ...g, conditions: [...g.conditions, { id: crypto.randomUUID(), field: 'customer_name', operator: 'contains', value: '' }] } : g)));
-  const updateCondition = (groupId: string, condId: string, next: ConditionValue) =>
-    setGroups(gs => gs.map(g => (g.id === groupId ? { ...g, conditions: g.conditions.map(c => (c.id === condId ? next : c)) } : g)));
-  const removeCondition = (groupId: string, condId: string) =>
-    setGroups(gs => gs.map(g => (g.id === groupId ? { ...g, conditions: g.conditions.filter(c => c.id !== condId) } : g)));
   const setGroupOp = (groupId: string, op: 'AND' | 'OR') =>
     setGroups(gs => gs.map(g => (g.id === groupId ? { ...g, groupOperator: op } : g)));
-
   const toggleGroupCollapse = (groupId: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -139,16 +181,79 @@ export default function SegmentBuilder({
     });
   };
 
-  const addEventRule = () => setEventRules(prev => [...prev, createEmptyEventRule()]);
-  const updateEventRule = (ruleId: string, updated: EventRule) =>
-    setEventRules(prev => prev.map(r => (r.id === ruleId ? updated : r)));
-  const removeEventRule = (ruleId: string) =>
-    setEventRules(prev => prev.filter(r => r.id !== ruleId));
+  // Condition actions
+  const addCondition = (groupId: string) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? {
+              ...g,
+              conditions: [
+                ...g.conditions,
+                {
+                  id: crypto.randomUUID(),
+                  field: 'customer_name',
+                  operator: 'contains',
+                  value: '',
+                },
+              ],
+            }
+          : g,
+      ),
+    );
+  const updateCondition = (groupId: string, condId: string, next: ConditionValue) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? { ...g, conditions: g.conditions.map(c => (c.id === condId ? next : c)) }
+          : g,
+      ),
+    );
+  const removeCondition = (groupId: string, condId: string) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? { ...g, conditions: g.conditions.filter(c => c.id !== condId) }
+          : g,
+      ),
+    );
 
+  // Event rule actions (per group)
+  const addEventRule = (groupId: string) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? { ...g, eventRules: [...g.eventRules, createEmptyEventRule()] }
+          : g,
+      ),
+    );
+  const updateEventRule = (groupId: string, ruleId: string, updated: EventRule) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? { ...g, eventRules: g.eventRules.map(r => (r.id === ruleId ? updated : r)) }
+          : g,
+      ),
+    );
+  const removeEventRule = (groupId: string, ruleId: string) =>
+    setGroups(gs =>
+      gs.map(g =>
+        g.id === groupId
+          ? { ...g, eventRules: g.eventRules.filter(r => r.id !== ruleId) }
+          : g,
+      ),
+    );
+
+  // Save
   const doSave = async () => {
     setIsSaving(true);
     try {
-      const body = { name, description, conditionGroups: groups, eventRules: eventRules.filter(r => r.eventName) };
+      const body = {
+        name,
+        description,
+        conditionGroups: groups,
+        eventRules: allEventRules,
+      };
       const res = await fetch(segmentId ? `/api/segments/${segmentId}` : '/api/segments', {
         method: segmentId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,9 +266,7 @@ export default function SegmentBuilder({
       const savedPayload = (await res.json()) as unknown;
       if (savedPayload && typeof savedPayload === 'object' && 'segment' in savedPayload) {
         const segment = (savedPayload as { segment?: CustomerSegment }).segment;
-        if (segment) {
-          onSaved?.(segment);
-        }
+        if (segment) onSaved?.(segment);
       } else if (savedPayload) {
         onSaved?.(savedPayload as CustomerSegment);
       }
@@ -172,183 +275,323 @@ export default function SegmentBuilder({
     }
   };
 
+  const previewCount = previewData?.customerCount ?? previewData?.count ?? null;
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Segment Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <input
+    <div className="flex gap-6 items-start">
+      {/* ─── Left Column: Builder ─── */}
+      <div className="flex-1 min-w-0 space-y-5">
+        {/* Segment Details */}
+        <div className="space-y-3">
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Segment name"
-            className="w-full px-3 py-2 border rounded-lg"
+            className="text-lg font-medium h-12 bg-card"
           />
-          <textarea
+          <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
-            className="w-full px-3 py-2 border rounded-lg"
+            className="bg-card"
           />
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Condition Summary */}
-      {hasConditions && (
-        <ConditionSummary groups={groups} eventRules={eventRules} />
-      )}
+        {/* Condition Summary */}
+        {hasConditions && <ConditionSummary groups={groups} />}
 
-      {/* Condition Groups */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Conditions</CardTitle>
-            <Button variant="outline" size="sm" onClick={addGroup}>
+        {/* Unified Filter Builder */}
+        <Card className="border-border">
+          <CardContent className="p-4 space-y-4">
+            {groups.map((group, groupIndex) => {
+              const isCollapsed = collapsedGroups.has(group.id);
+              const totalItems = group.conditions.length + group.eventRules.length;
+
+              return (
+                <div key={group.id}>
+                  {/* AND separator between groups */}
+                  {groupIndex > 0 && (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground py-3">
+                      <div className="h-px flex-1 bg-border" />
+                      AND
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+
+                  <Collapsible open={!isCollapsed} onOpenChange={() => toggleGroupCollapse(group.id)}>
+                    <div className="rounded-lg border border-border bg-card">
+                      {/* Group header */}
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
+                        <CollapsibleTrigger asChild>
+                          <button className="flex items-center gap-2 text-sm text-foreground hover:text-foreground/80">
+                            {isCollapsed ? (
+                              <ChevronRight className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                            <span className="font-medium">Group {groupIndex + 1}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({totalItems} {totalItems === 1 ? 'filter' : 'filters'})
+                            </span>
+                          </button>
+                        </CollapsibleTrigger>
+
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-xs text-muted-foreground">Match</span>
+                          <select
+                            value={group.groupOperator}
+                            onChange={e =>
+                              setGroupOp(group.id, e.target.value === 'OR' ? 'OR' : 'AND')
+                            }
+                            className="px-2 py-1 border border-border rounded text-xs bg-card text-foreground"
+                          >
+                            <option value="AND">ALL (AND)</option>
+                            <option value="OR">ANY (OR)</option>
+                          </select>
+                          {groups.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeGroup(group.id)}
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="p-4 space-y-3">
+                          {/* Empty state */}
+                          {totalItems === 0 && (
+                            <div className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">
+                              No filters yet. Add a condition or event rule to start filtering customers.
+                            </div>
+                          )}
+
+                          {/* Condition rows */}
+                          {group.conditions.map(c => (
+                            <ConditionRow
+                              key={c.id}
+                              condition={c}
+                              onChange={next => updateCondition(group.id, c.id, next)}
+                              onRemove={() => removeCondition(group.id, c.id)}
+                            />
+                          ))}
+
+                          {/* Event rule rows (merged into group) */}
+                          {group.eventRules.map((rule, ruleIndex) => (
+                            <div key={rule.id}>
+                              {(group.conditions.length > 0 || ruleIndex > 0) && (
+                                <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground py-1">
+                                  <div className="h-px flex-1 bg-border" />
+                                  {group.groupOperator}
+                                  <div className="h-px flex-1 bg-border" />
+                                </div>
+                              )}
+                              <EventRuleRow
+                                rule={rule}
+                                onChange={updated =>
+                                  updateEventRule(group.id, rule.id, updated)
+                                }
+                                onRemove={() => removeEventRule(group.id, rule.id)}
+                              />
+                            </div>
+                          ))}
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addCondition(group.id)}
+                              className="text-xs"
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1" />
+                              Add Condition
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addEventRule(group.id)}
+                              className="text-xs border-primary/30 text-primary hover:bg-primary/5"
+                            >
+                              <Zap className="w-3.5 h-3.5 mr-1" />
+                              Add Event Rule
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </div>
+              );
+            })}
+
+            {/* Add Group button */}
+            <Button variant="outline" size="sm" onClick={addGroup} className="w-full">
               <Plus className="w-4 h-4 mr-1" /> Add Group
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {groups.map((group, groupIndex) => {
-            const isCollapsed = collapsedGroups.has(group.id);
+          </CardContent>
+        </Card>
+      </div>
 
-            return (
-              <div key={group.id}>
-                {/* AND separator between groups */}
-                {groupIndex > 0 && (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 py-2">
-                    <div className="h-px flex-1 bg-gray-200" />
-                    AND
-                    <div className="h-px flex-1 bg-gray-200" />
+      {/* ─── Right Column: Live Preview Panel ─── */}
+      <div className="w-80 shrink-0 hidden lg:block">
+        <div className="sticky top-6 space-y-4">
+          <Card className="border-primary/10 overflow-hidden">
+            {/* Preview header */}
+            <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                Live Preview
+              </h3>
+            </div>
+
+            <CardContent className="p-4 space-y-4">
+              {/* Customer count */}
+              <div className="text-center py-3">
+                {isPreviewing ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                    <span className="text-sm text-muted-foreground">Calculating...</span>
+                  </div>
+                ) : hasConditions && previewCount != null ? (
+                  <>
+                    <p className="text-4xl font-bold text-foreground">
+                      {previewCount.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">customers match</p>
+                  </>
+                ) : (
+                  <div className="py-2">
+                    <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Add filters to preview matching customers
+                    </p>
                   </div>
                 )}
+              </div>
 
-                <Collapsible open={!isCollapsed} onOpenChange={() => toggleGroupCollapse(group.id)}>
-                  <div className="rounded-lg border bg-white">
-                    {/* Group header */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50/50">
-                      <CollapsibleTrigger asChild>
-                        <button className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          <span className="font-medium">
-                            Group {groupIndex + 1}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            ({group.conditions.length} condition{group.conditions.length !== 1 ? 's' : ''})
-                          </span>
-                        </button>
-                      </CollapsibleTrigger>
+              {/* Quick stats */}
+              {hasConditions && previewData && !isPreviewing && (
+                <>
+                  <div className="h-px bg-border" />
+                  <div className="grid grid-cols-2 gap-3">
+                    {previewData.totalValue != null && (
+                      <div className="rounded-lg bg-muted/30 p-3">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                          <TrendingUp className="w-3 h-3" />
+                          Revenue
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {new Intl.NumberFormat('en-IN', {
+                            style: 'currency',
+                            currency: 'INR',
+                            maximumFractionDigits: 0,
+                          }).format(previewData.totalValue)}
+                        </p>
+                      </div>
+                    )}
+                    {previewData.averageOrderValue != null && (
+                      <div className="rounded-lg bg-muted/30 p-3">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                          <TrendingUp className="w-3 h-3" />
+                          Avg Order
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {new Intl.NumberFormat('en-IN', {
+                            style: 'currency',
+                            currency: 'INR',
+                            maximumFractionDigits: 0,
+                          }).format(previewData.averageOrderValue)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-xs text-gray-500">Match</span>
-                        <select
-                          value={group.groupOperator}
-                          onChange={event => setGroupOp(group.id, event.target.value === 'OR' ? 'OR' : 'AND')}
-                          className="px-2 py-1 border rounded text-xs"
-                        >
-                          <option value="AND">ALL (AND)</option>
-                          <option value="OR">ANY (OR)</option>
-                        </select>
-                        {groups.length > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeGroup(group.id)}
-                            className="h-7 w-7 text-gray-400 hover:text-red-500"
+              {/* Sample customers */}
+              {hasConditions &&
+                previewData?.sampleCustomers &&
+                previewData.sampleCustomers.length > 0 &&
+                !isPreviewing && (
+                  <>
+                    <div className="h-px bg-border" />
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        Sample Customers
+                      </p>
+                      <div className="space-y-2">
+                        {previewData.sampleCustomers.slice(0, 5).map((customer, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center gap-2 text-sm"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <User className="w-3 h-3 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-foreground truncate text-xs font-medium">
+                                {customer.name || 'Unknown'}
+                              </p>
+                              <p className="text-muted-foreground truncate text-[10px]">
+                                {customer.email || customer.phone || ''}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-
-                    <CollapsibleContent>
-                      <div className="p-4 space-y-3">
-                        {group.conditions.length === 0 && (
-                          <div className="text-sm text-gray-500 text-center py-4 border border-dashed rounded-lg">
-                            No conditions yet. Add a condition to filter customers.
-                          </div>
-                        )}
-
-                        {group.conditions.map((c) => (
-                          <ConditionRow
-                            key={c.id}
-                            condition={c}
-                            onChange={(next) => updateCondition(group.id, c.id, next)}
-                            onRemove={() => removeCondition(group.id, c.id)}
-                          />
-                        ))}
-
-                        <Button variant="outline" size="sm" onClick={() => addCondition(group.id)}>
-                          <Plus className="w-4 h-4 mr-1" /> Add condition
-                        </Button>
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Event Rules Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-[#D4A574]" />
-              <CardTitle>Advanced Event Rules</CardTitle>
-            </div>
-            <Button variant="outline" size="sm" onClick={addEventRule}>
-              <Plus className="w-4 h-4 mr-1" /> Add Event Rule
-            </Button>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Filter customers based on Shopify events they performed (or did not perform).
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {eventRules.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No event rules added. Click &quot;Add Event Rule&quot; to filter by customer events like Product Viewed, Order Created, etc.
-            </div>
-          ) : (
-            eventRules.map((rule, index) => (
-              <div key={rule.id}>
-                {index > 0 && (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 py-2">
-                    <div className="h-px flex-1 bg-gray-200" />
-                    AND
-                    <div className="h-px flex-1 bg-gray-200" />
-                  </div>
+                  </>
                 )}
-                <EventRuleRow
-                  rule={rule}
-                  onChange={(updated) => updateEventRule(rule.id, updated)}
-                  onRemove={() => removeEventRule(rule.id)}
-                />
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
 
-      {/* Preview & Save bar */}
-      <div className="flex items-center gap-3 text-sm text-gray-600 sticky bottom-0 bg-white/95 backdrop-blur-sm p-4 border rounded-lg shadow-sm">
-        <div className="flex items-center gap-2 flex-1">
-          <Eye className={`w-4 h-4 ${isPreviewing ? 'animate-pulse text-blue-500' : 'text-gray-400'}`} />
-          {isPreviewing && hasConditions && <span>Calculating preview...</span>}
-          {!isPreviewing && hasConditions && previewCount != null && (
-            <span><span className="font-semibold text-lg">{previewCount.toLocaleString()}</span> customers match</span>
-          )}
-          {!isPreviewing && !hasConditions && <span className="text-gray-400">Add conditions to preview matching customers</span>}
+            {/* Save button */}
+            <div className="px-4 pb-4">
+              <Button
+                onClick={doSave}
+                disabled={!name || isSaving}
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                size="lg"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isSaving ? 'Saving...' : segmentId ? 'Update Segment' : 'Save Segment'}
+              </Button>
+            </div>
+          </Card>
         </div>
-        <Button onClick={doSave} disabled={!name || isSaving} size="lg">
-          <Save className="w-4 h-4 mr-2" />
-          {isSaving ? 'Saving...' : segmentId ? 'Update Segment' : 'Save Segment'}
-        </Button>
+      </div>
+
+      {/* ─── Mobile: Sticky bottom bar ─── */}
+      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-card/95 backdrop-blur-sm border-t border-border px-4 py-3 z-50">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-2">
+            <Users className={`w-4 h-4 ${isPreviewing ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+            {isPreviewing && hasConditions && (
+              <span className="text-sm text-muted-foreground">Calculating...</span>
+            )}
+            {!isPreviewing && hasConditions && previewCount != null && (
+              <span className="text-sm">
+                <span className="font-semibold text-foreground">{previewCount.toLocaleString()}</span>
+                <span className="text-muted-foreground"> customers</span>
+              </span>
+            )}
+            {!isPreviewing && !hasConditions && (
+              <span className="text-sm text-muted-foreground">Add filters to preview</span>
+            )}
+          </div>
+          <Button
+            onClick={doSave}
+            disabled={!name || isSaving}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            <Save className="w-4 h-4 mr-1" />
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
       </div>
     </div>
   );

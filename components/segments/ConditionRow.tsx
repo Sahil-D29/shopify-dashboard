@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Trash2, Clock, Hash, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash2, Clock, Hash, Plus, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,7 +30,7 @@ import { FlowSelect } from '@/components/selectors/FlowSelect';
 import { AgentSelect } from '@/components/selectors/AgentSelect';
 import { CollectionSelect } from '@/components/selectors/CollectionSelect';
 import type { SubFilter, TimeWindow, FrequencyQualifier } from '@/lib/types/segment';
-import { getSubFilterProperties, FIELD_TO_SUBFILTER_CATEGORY } from '@/lib/constants/sub-filter-properties';
+import { getSubFilterProperties, FIELD_TO_SUBFILTER_CATEGORY, UNIVERSAL_SUB_FILTER_PROPERTIES } from '@/lib/constants/sub-filter-properties';
 
 type NumberRange = [number, number];
 
@@ -83,15 +83,16 @@ export default function ConditionRow({
 
   const showTimeWindow = fieldMeta?.supportsTimeWindow ?? false;
   const showFrequency = fieldMeta?.supportsFrequency ?? false;
-  const showSubFilters = fieldMeta?.supportsSubFilters ?? false;
   const subFilterCategory = FIELD_TO_SUBFILTER_CATEGORY[condition.field];
-  const availableSubFilterProps = subFilterCategory ? getSubFilterProperties(condition.field) : [];
+  const availableSubFilterProps = subFilterCategory
+    ? getSubFilterProperties(condition.field)
+    : UNIVERSAL_SUB_FILTER_PROPERTIES;
 
   const [isExpanded, setIsExpanded] = useState(
     !!(condition.subFilters?.length || condition.timeWindow?.amount || condition.frequency?.count)
   );
 
-  const hasAdvanced = showTimeWindow || showFrequency || showSubFilters;
+  const hasAdvanced = true; // Every condition has expandable filters
 
   const isNoValueOp =
     condition.operator === 'is_empty' ||
@@ -130,18 +131,17 @@ export default function ConditionRow({
   };
 
   return (
-    <div className="rounded-lg border bg-gray-50 overflow-hidden">
+    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
       {/* Main condition row */}
       <div className="flex items-center gap-2 p-3">
         {/* Expand toggle for advanced options */}
-        {hasAdvanced && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-gray-400 hover:text-gray-600 shrink-0"
-          >
-            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-        )}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`shrink-0 transition-colors ${isExpanded ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+          title="Toggle filters"
+        >
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <Filter className="w-4 h-4" />}
+        </button>
 
         {/* Field selector */}
         <FieldSelect
@@ -281,7 +281,7 @@ export default function ConditionRow({
         {/* Frequency qualifier inline */}
         {showFrequency && isExpanded && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <Hash className="w-3.5 h-3.5 text-gray-400" />
+            <Hash className="w-3.5 h-3.5 text-muted-foreground" />
             <Select
               value={condition.frequency?.type || ''}
               onValueChange={(type) =>
@@ -320,7 +320,7 @@ export default function ConditionRow({
                   }
                   className="w-16 h-8 text-xs"
                 />
-                <span className="text-xs text-gray-500">times</span>
+                <span className="text-xs text-muted-foreground">times</span>
               </>
             )}
           </div>
@@ -330,7 +330,7 @@ export default function ConditionRow({
           variant="ghost"
           size="icon"
           onClick={onRemove}
-          className="ml-auto shrink-0 text-gray-400 hover:text-red-500"
+          className="ml-auto shrink-0 text-muted-foreground hover:text-destructive"
           aria-label="Remove condition"
         >
           <Trash2 className="w-4 h-4" />
@@ -338,13 +338,13 @@ export default function ConditionRow({
       </div>
 
       {/* Expanded section: Time window + Sub-filters */}
-      {hasAdvanced && isExpanded && (
-        <div className="border-t bg-white px-3 py-2 space-y-2">
+      {isExpanded && (
+        <div className="border-t border-border bg-card px-3 py-2 space-y-2">
           {/* Time Window */}
           {showTimeWindow && (
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span className="text-xs text-gray-500">in the last</span>
+              <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground">in the last</span>
               <Input
                 type="number"
                 min={0}
@@ -385,7 +385,7 @@ export default function ConditionRow({
               {condition.timeWindow?.amount ? (
                 <button
                   onClick={() => onChange({ ...condition, timeWindow: undefined })}
-                  className="text-xs text-gray-400 hover:text-red-500"
+                  className="text-xs text-muted-foreground hover:text-destructive"
                 >
                   clear
                 </button>
@@ -393,12 +393,11 @@ export default function ConditionRow({
             </div>
           )}
 
-          {/* Sub-filters */}
-          {showSubFilters && (
-            <div className="space-y-1">
-              {(condition.subFilters || []).length > 0 && (
-                <div className="flex items-center gap-2 pl-6 pb-1">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">Property filters</span>
+          {/* Sub-filters - available on ALL conditions */}
+          <div className="space-y-1">
+            {(condition.subFilters || []).length > 0 && (
+              <div className="flex items-center gap-2 pl-6 pb-1">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Property filters</span>
                   <Select
                     value={condition.subFilterOperator || 'AND'}
                     onValueChange={(op) => onChange({ ...condition, subFilterOperator: op as 'AND' | 'OR' })}
@@ -424,15 +423,14 @@ export default function ConditionRow({
                 />
               ))}
 
-              <button
-                onClick={addSubFilter}
-                className="flex items-center gap-1 pl-6 text-xs text-blue-600 hover:text-blue-700 py-1"
-              >
-                <Plus className="w-3 h-3" />
-                Add property filter
-              </button>
-            </div>
-          )}
+            <button
+              onClick={addSubFilter}
+              className="flex items-center gap-1 pl-6 text-xs text-primary hover:text-primary/80 py-1"
+            >
+              <Plus className="w-3 h-3" />
+              Add property filter
+            </button>
+          </div>
         </div>
       )}
     </div>

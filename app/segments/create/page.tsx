@@ -7,8 +7,13 @@ export default function CreateSegmentPage() {
   const router = useRouter();
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Create Segment</h1>
+    <div className="space-y-6 pb-20 lg:pb-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create Segment</h1>
+        <p className="text-muted-foreground mt-1">
+          Define conditions to group customers for targeted WhatsApp campaigns
+        </p>
+      </div>
       <SegmentBuilder
         onSaved={(res) => {
           const id = res?.id;

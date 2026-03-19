@@ -171,12 +171,12 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                           }}
                           disabled={isDisabled}
                           className={cn(
-                            'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 transition-colors',
-                            isSelected && 'bg-blue-50',
+                            'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-muted/50 transition-colors',
+                            isSelected && 'bg-primary/10',
                             isDisabled && 'opacity-50 cursor-not-allowed'
                           )}
                         >
-                          <Check className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'opacity-100 text-blue-600' : 'opacity-0')} />
+                          <Check className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')} />
                           <span className="truncate">{field.label}</span>
                           <span className="ml-auto flex items-center gap-1">
                             {field.supportsSubFilters && (
