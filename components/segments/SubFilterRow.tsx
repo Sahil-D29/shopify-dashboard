@@ -16,14 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { SubFilter } from '@/lib/types/segment';
 import {
@@ -57,9 +50,9 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
   // Smart dropdown state
   const hasApiEndpoint = !!selectedProp?.apiEndpoint;
   const hasStaticOptions = !!selectedProp?.staticOptions?.length;
-  const hasDropdown = hasApiEndpoint || hasStaticOptions;
 
-  const [options, setOptions] = useState<Array<Record<string, string>>>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -97,7 +90,7 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
 
   // Get display label for the current value
   const displayLabel = useMemo(() => {
-    if (!subFilter.value) return 'Select...';
+    if (!subFilter.value && subFilter.value !== 0) return 'Select...';
     const strValue = String(subFilter.value);
 
     if (hasStaticOptions) {
@@ -109,7 +102,7 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
       const valueField = selectedProp?.valueField || 'id';
       const labelField = selectedProp?.labelField || 'title';
       const found = options.find(o => String(o[valueField]) === strValue);
-      return found?.[labelField] || strValue;
+      if (found) return String(found[labelField]);
     }
 
     return strValue;
@@ -126,7 +119,7 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
           value={typeof subFilter.value === 'string' ? subFilter.value : String(subFilter.value ?? '')}
           onValueChange={(val) => onChange({ ...subFilter, value: val })}
         >
-          <SelectTrigger className="w-[140px] h-8 text-xs">
+          <SelectTrigger className="w-[160px] h-8 text-xs">
             <SelectValue placeholder="Select..." />
           </SelectTrigger>
           <SelectContent>
@@ -142,6 +135,9 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
 
     // Searchable API dropdown (products, vendors, discount codes, etc.)
     if (hasApiEndpoint) {
+      const valueField = selectedProp?.valueField || 'id';
+      const labelField = selectedProp?.labelField || 'title';
+
       return (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -149,62 +145,65 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className="w-[160px] h-8 justify-between text-xs font-normal"
+              className="w-[180px] h-8 justify-between text-xs font-normal"
             >
               <span className="truncate">{displayLabel}</span>
               <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[280px] p-0" align="start">
-            <Command>
-              {selectedProp?.searchable && (
-                <CommandInput
-                  placeholder={`Search ${selectedProp.label.toLowerCase()}...`}
+          <PopoverContent className="w-[260px] p-0" align="start">
+            {/* Search input */}
+            {selectedProp?.searchable && (
+              <div className="flex items-center border-b px-3 py-2">
+                <input
                   value={searchQuery}
-                  onValueChange={setSearchQuery}
-                  className="text-xs"
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${selectedProp.label.toLowerCase()}...`}
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
-              )}
-              <CommandList>
-                <CommandEmpty>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="ml-2 text-xs text-muted-foreground">Loading...</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs">No results found.</span>
-                  )}
-                </CommandEmpty>
-                <CommandGroup>
+              </div>
+            )}
+
+            <ScrollArea className="max-h-[200px]">
+              {loading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-xs text-muted-foreground">Loading...</span>
+                </div>
+              ) : options.length === 0 ? (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  No results found.
+                </div>
+              ) : (
+                <div className="py-1">
                   {options.map((option, idx) => {
-                    const valueField = selectedProp?.valueField || 'id';
-                    const labelField = selectedProp?.labelField || 'title';
                     const optValue = String(option[valueField] ?? option.value ?? option.name ?? '');
                     const optLabel = String(option[labelField] ?? option.label ?? option.title ?? option.name ?? optValue);
                     const isSelected = String(subFilter.value) === optValue;
 
                     return (
-                      <CommandItem
+                      <button
                         key={`${optValue}-${idx}`}
-                        value={optValue}
-                        onSelect={() => {
+                        onClick={() => {
                           onChange({ ...subFilter, value: optValue });
                           setOpen(false);
                           setSearchQuery('');
                         }}
-                        className="text-xs"
+                        className={cn(
+                          'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors',
+                          isSelected && 'bg-primary/10'
+                        )}
                       >
                         <Check
-                          className={cn('mr-2 h-3 w-3', isSelected ? 'opacity-100' : 'opacity-0')}
+                          className={cn('h-3 w-3 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')}
                         />
                         <span className="truncate">{optLabel}</span>
-                      </CommandItem>
+                      </button>
                     );
                   })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+                </div>
+              )}
+            </ScrollArea>
           </PopoverContent>
         </Popover>
       );
@@ -222,7 +221,7 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
           })
         }
         placeholder="Enter value..."
-        className="w-[140px] h-8 text-xs"
+        className="w-[160px] h-8 text-xs"
       />
     );
   };

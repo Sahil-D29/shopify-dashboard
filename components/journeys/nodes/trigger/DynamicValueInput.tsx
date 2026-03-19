@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, ChevronsUpDown, X, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, X, Loader2, Search } from 'lucide-react';
 import { getPropertyMetadata } from '@/lib/types/trigger-filter-metadata';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/lib/hooks/useToast';
@@ -19,20 +19,12 @@ interface DynamicValueInputProps {
   onChange: (value: any) => void;
 }
 
-// Debounce hook
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
-
   return debouncedValue;
 }
 
@@ -48,10 +40,9 @@ export function DynamicValueInput({
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = useState(false);
   const toast = useToast();
-  
+
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Fetch options if property has API endpoint
   useEffect(() => {
     if (metadata?.apiEndpoint && metadata.searchable) {
       fetchOptions(debouncedSearch);
@@ -62,32 +53,18 @@ export function DynamicValueInput({
 
   const fetchOptions = useCallback(async (search?: string) => {
     if (!metadata?.apiEndpoint) return;
-
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      
       const res = await fetch(`${metadata.apiEndpoint}?${params}`);
-      if (!res.ok) {
-        throw new Error('Failed to fetch options');
-      }
-      
+      if (!res.ok) throw new Error('Failed to fetch options');
       const data = await res.json();
-      
-      // Handle different response formats
-      if (data.items) {
-        setOptions(data.items);
-      } else if (data.options) {
-        setOptions(data.options);
-      } else if (data.products) {
-        // Handle products API format
-        setOptions(data.products);
-      } else if (Array.isArray(data)) {
-        setOptions(data);
-      } else {
-        setOptions([]);
-      }
+      if (data.items) setOptions(data.items);
+      else if (data.options) setOptions(data.options);
+      else if (data.products) setOptions(data.products);
+      else if (Array.isArray(data)) setOptions(data);
+      else setOptions([]);
     } catch (error) {
       console.error('Failed to fetch options:', error);
       toast.error('Failed to load options');
@@ -97,16 +74,14 @@ export function DynamicValueInput({
     }
   }, [metadata?.apiEndpoint, toast]);
 
-  // Render based on value type
+  // No metadata - fallback to text input
   if (!metadata) {
-    // Fallback to text input - check if it's a product_id field
-    const isProductId = propertyId.toLowerCase().includes('product') && propertyId.toLowerCase().includes('id');
     return (
       <Input
         type="text"
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={isProductId ? "Choose value" : "Enter value..."}
+        placeholder="Enter value..."
         className="w-48"
       />
     );
@@ -124,7 +99,7 @@ export function DynamicValueInput({
           placeholder="Min"
           className="w-24"
         />
-        <span className="text-xs uppercase tracking-[0.2em] text-[#B9AA9F]">and</span>
+        <span className="text-xs text-muted-foreground">and</span>
         <Input
           type="number"
           value={rangeValue.max || ''}
@@ -136,7 +111,6 @@ export function DynamicValueInput({
     );
   }
 
-  // Check if operator requires multi-select
   const requiresMultiSelect = metadata.multiSelect || operator === 'in' || operator === 'not_in';
 
   // Shopify data with searchable dropdown (single select)
@@ -160,68 +134,73 @@ export function DynamicValueInput({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[400px] p-0">
-          <Command>
-            <CommandInput
-              placeholder={`Search ${metadata.label.toLowerCase()}...`}
+        <PopoverContent className="w-[400px] p-0" align="start">
+          {/* Search input */}
+          <div className="flex items-center border-b px-3 py-2">
+            <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
+            <input
               value={searchQuery}
-              onValueChange={setSearchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${metadata.label.toLowerCase()}...`}
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
-            <CommandList>
-              <CommandEmpty>
-                {loading ? (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="ml-2">Loading...</span>
-                  </div>
-                ) : (
-                  'No results found.'
-                )}
-              </CommandEmpty>
-              <CommandGroup>
-                {options.map((option) => {
+          </div>
+
+          <ScrollArea className="max-h-[260px]">
+            {loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+              </div>
+            ) : options.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                No results found.
+              </div>
+            ) : (
+              <div className="py-1">
+                {options.map((option, idx) => {
                   const optionValue = option[metadata.valueField || 'id'];
                   const optionLabel = option[metadata.labelField || 'title'];
                   const isSelected = String(optionValue) === String(value);
-                  
+
                   return (
-                    <CommandItem
-                      key={optionValue}
-                      value={String(optionValue)}
-                      onSelect={() => {
+                    <button
+                      key={`${optionValue}-${idx}`}
+                      onClick={() => {
                         onChange(optionValue);
                         setOpen(false);
+                        setSearchQuery('');
                       }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors',
+                        isSelected && 'bg-primary/10'
+                      )}
                     >
                       <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          isSelected ? "opacity-100" : "opacity-0"
-                        )}
+                        className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')}
                       />
-                      {/* Show product image for products */}
                       {metadata.valueType === 'shopify_product' && option.image && (
                         <img
                           src={option.image}
                           alt={optionLabel}
-                          className="w-8 h-8 object-cover rounded mr-2"
+                          className="w-8 h-8 object-cover rounded"
                         />
                       )}
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="truncate">{optionLabel}</span>
                         {option.price && (
-                          <span className="text-xs text-gray-500">${option.price}</span>
+                          <span className="text-xs text-muted-foreground">${option.price}</span>
                         )}
                         {option.sku && (
-                          <span className="text-xs text-gray-500">SKU: {option.sku}</span>
+                          <span className="text-xs text-muted-foreground">SKU: {option.sku}</span>
                         )}
                       </div>
-                    </CommandItem>
+                    </button>
                   );
                 })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+              </div>
+            )}
+          </ScrollArea>
         </PopoverContent>
       </Popover>
     );
@@ -230,7 +209,7 @@ export function DynamicValueInput({
   // Shopify data with multi-select
   if (metadata.valueType.startsWith('shopify_') && requiresMultiSelect) {
     const selectedValues = Array.isArray(value) ? value : (value ? [value] : []);
-    
+
     return (
       <div className="space-y-2 w-full">
         <Popover open={open} onOpenChange={setOpen}>
@@ -246,81 +225,85 @@ export function DynamicValueInput({
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[400px] p-0">
-            <Command>
-              <CommandInput
-                placeholder={`Search ${metadata.label.toLowerCase()}...`}
+          <PopoverContent className="w-[400px] p-0" align="start">
+            {/* Search input */}
+            <div className="flex items-center border-b px-3 py-2">
+              <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
+              <input
                 value={searchQuery}
-                onValueChange={setSearchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search ${metadata.label.toLowerCase()}...`}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
-              <CommandList>
-                <CommandEmpty>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-6">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="ml-2">Loading...</span>
-                    </div>
-                  ) : (
-                    'No results found.'
-                  )}
-                </CommandEmpty>
-                <CommandGroup>
-                  {options.map((option) => {
+            </div>
+
+            <ScrollArea className="max-h-[260px]">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                </div>
+              ) : options.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  No results found.
+                </div>
+              ) : (
+                <div className="py-1">
+                  {options.map((option, idx) => {
                     const optionValue = option[metadata.valueField || 'id'];
                     const optionLabel = option[metadata.labelField || 'title'];
                     const isSelected = selectedValues.some(v => String(v) === String(optionValue));
-                    
+
                     return (
-                      <CommandItem
-                        key={optionValue}
-                        value={String(optionValue)}
-                        onSelect={() => {
+                      <button
+                        key={`${optionValue}-${idx}`}
+                        onClick={() => {
                           const newValues = isSelected
-                            ? selectedValues.filter((v) => String(v) !== String(optionValue))
+                            ? selectedValues.filter((v: any) => String(v) !== String(optionValue))
                             : [...selectedValues, optionValue];
                           onChange(newValues);
                         }}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors',
+                          isSelected && 'bg-primary/10'
+                        )}
                       >
                         <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            isSelected ? "opacity-100" : "opacity-0"
-                          )}
+                          className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')}
                         />
                         {metadata.valueType === 'shopify_product' && option.image && (
                           <img
                             src={option.image}
                             alt={optionLabel}
-                            className="w-8 h-8 object-cover rounded mr-2"
+                            className="w-8 h-8 object-cover rounded"
                           />
                         )}
                         <span className="truncate">{optionLabel}</span>
-                      </CommandItem>
+                      </button>
                     );
                   })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+                </div>
+              )}
+            </ScrollArea>
           </PopoverContent>
         </Popover>
 
-        {/* Selected items as chips */}
         {selectedValues.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {selectedValues.map((val) => {
+            {selectedValues.map((val: any) => {
               const option = options.find((o) => {
                 const optionValue = o[metadata.valueField || 'id'];
                 return String(optionValue) === String(val);
               });
               const label = option?.[metadata.labelField || 'title'] || val;
-              
+
               return (
                 <Badge key={String(val)} variant="secondary" className="gap-1">
                   {String(label)}
                   <X
                     className="h-3 w-3 cursor-pointer"
                     onClick={() => {
-                      onChange(selectedValues.filter((v) => String(v) !== String(val)));
+                      onChange(selectedValues.filter((v: any) => String(v) !== String(val)));
                     }}
                   />
                 </Badge>
@@ -335,8 +318,8 @@ export function DynamicValueInput({
   // Static dropdown (order status, fulfillment status, etc.)
   if (metadata.apiEndpoint && !metadata.searchable) {
     return (
-      <Select 
-        value={value != null ? String(value) : ''} 
+      <Select
+        value={value != null ? String(value) : ''}
         onValueChange={(val) => onChange(val)}
       >
         <SelectTrigger className="w-48">
@@ -346,12 +329,8 @@ export function DynamicValueInput({
           {options.map((option) => {
             const optionValue = option[metadata.valueField || 'value'] || option.value;
             const optionLabel = option[metadata.labelField || 'label'] || option.label || optionValue;
-            
             return (
-              <SelectItem
-                key={optionValue}
-                value={String(optionValue)}
-              >
+              <SelectItem key={optionValue} value={String(optionValue)}>
                 {optionLabel}
               </SelectItem>
             );
@@ -401,16 +380,14 @@ export function DynamicValueInput({
     );
   }
 
-  // Default: text input - check if it's a product-related field
-  const isProductField = metadata.category === 'product' || propertyId.toLowerCase().includes('product');
+  // Default: text input
   return (
     <Input
       type="text"
       value={value != null ? String(value) : ''}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={isProductField ? "Choose value" : "Enter value..."}
+      placeholder="Enter value..."
       className="w-48"
     />
   );
 }
-
