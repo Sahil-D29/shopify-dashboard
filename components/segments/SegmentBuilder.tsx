@@ -282,159 +282,187 @@ export default function SegmentBuilder({
       {/* ─── Left Column: Builder ─── */}
       <div className="flex-1 min-w-0 space-y-5">
         {/* Segment Details */}
-        <div className="space-y-3">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Segment name"
-            className="text-lg font-medium h-12 bg-card"
-          />
-          <Input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-            className="bg-card"
-          />
-        </div>
+        <Card className="border-border">
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                Segment Name
+              </label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., High-value customers in Mumbai"
+                className="text-base font-medium h-11"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                Description
+              </label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe who this segment targets (optional)"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Condition Summary */}
         {hasConditions && <ConditionSummary groups={groups} />}
 
         {/* Unified Filter Builder */}
-        <Card className="border-border">
-          <CardContent className="p-4 space-y-4">
-            {groups.map((group, groupIndex) => {
-              const isCollapsed = collapsedGroups.has(group.id);
-              const totalItems = group.conditions.length + group.eventRules.length;
+        <div className="space-y-4">
+          {groups.map((group, groupIndex) => {
+            const isCollapsed = collapsedGroups.has(group.id);
+            const totalItems = group.conditions.length + group.eventRules.length;
+            const condCount = group.conditions.length;
+            const eventCount = group.eventRules.length;
 
-              return (
-                <div key={group.id}>
-                  {/* AND separator between groups */}
-                  {groupIndex > 0 && (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground py-3">
-                      <div className="h-px flex-1 bg-border" />
-                      AND
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  )}
+            return (
+              <div key={group.id}>
+                {/* AND separator between groups */}
+                {groupIndex > 0 && (
+                  <div className="flex items-center gap-3 py-4">
+                    <div className="h-px flex-1 bg-primary/20" />
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">AND</span>
+                    <div className="h-px flex-1 bg-primary/20" />
+                  </div>
+                )}
 
-                  <Collapsible open={!isCollapsed} onOpenChange={() => toggleGroupCollapse(group.id)}>
-                    <div className="rounded-lg border border-border bg-card">
-                      {/* Group header */}
-                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
-                        <CollapsibleTrigger asChild>
-                          <button className="flex items-center gap-2 text-sm text-foreground hover:text-foreground/80">
-                            {isCollapsed ? (
-                              <ChevronRight className="w-4 h-4" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4" />
+                <Collapsible open={!isCollapsed} onOpenChange={() => toggleGroupCollapse(group.id)}>
+                  <Card className="border-border overflow-hidden">
+                    {/* Group header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
+                      <CollapsibleTrigger asChild>
+                        <button className="flex items-center gap-2 text-sm text-foreground hover:text-foreground/80 transition-colors">
+                          {isCollapsed ? (
+                            <ChevronRight className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                          <span className="font-semibold">Group {groupIndex + 1}</span>
+                          <span className="text-xs text-muted-foreground ml-1">
+                            {totalItems === 0 ? '(empty)' : (
+                              <>
+                                {condCount > 0 && `${condCount} condition${condCount !== 1 ? 's' : ''}`}
+                                {condCount > 0 && eventCount > 0 && ', '}
+                                {eventCount > 0 && `${eventCount} event${eventCount !== 1 ? 's' : ''}`}
+                              </>
                             )}
-                            <span className="font-medium">Group {groupIndex + 1}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({totalItems} {totalItems === 1 ? 'filter' : 'filters'})
-                            </span>
-                          </button>
-                        </CollapsibleTrigger>
+                          </span>
+                        </button>
+                      </CollapsibleTrigger>
 
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-xs text-muted-foreground">Match</span>
-                          <select
-                            value={group.groupOperator}
-                            onChange={e =>
-                              setGroupOp(group.id, e.target.value === 'OR' ? 'OR' : 'AND')
-                            }
-                            className="px-2 py-1 border border-border rounded text-xs bg-card text-foreground"
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-xs text-muted-foreground hidden sm:inline">Match</span>
+                        <select
+                          value={group.groupOperator}
+                          onChange={e =>
+                            setGroupOp(group.id, e.target.value === 'OR' ? 'OR' : 'AND')
+                          }
+                          className="px-2 py-1.5 border border-border rounded-md text-xs bg-card text-foreground font-medium cursor-pointer hover:bg-muted/50 transition-colors"
+                        >
+                          <option value="AND">ALL (AND)</option>
+                          <option value="OR">ANY (OR)</option>
+                        </select>
+                        {groups.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeGroup(group.id)}
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           >
-                            <option value="AND">ALL (AND)</option>
-                            <option value="OR">ANY (OR)</option>
-                          </select>
-                          {groups.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeGroup(group.id)}
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </div>
+                    </div>
 
-                      <CollapsibleContent>
-                        <div className="p-4 space-y-3">
-                          {/* Empty state */}
-                          {totalItems === 0 && (
-                            <div className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">
-                              No filters yet. Add a condition or event rule to start filtering customers.
-                            </div>
-                          )}
+                    <CollapsibleContent>
+                      <CardContent className="p-4 space-y-3">
+                        {/* Empty state */}
+                        {totalItems === 0 && (
+                          <div className="text-center py-8 border border-dashed border-border rounded-lg bg-muted/10">
+                            <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">
+                              No filters yet. Add a condition or event rule below.
+                            </p>
+                          </div>
+                        )}
 
-                          {/* Condition rows */}
-                          {group.conditions.map(c => (
+                        {/* Condition rows */}
+                        {group.conditions.map((c, cIndex) => (
+                          <div key={c.id}>
+                            {cIndex > 0 && (
+                              <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground py-1.5">
+                                <div className="h-px flex-1 bg-border" />
+                                {group.groupOperator}
+                                <div className="h-px flex-1 bg-border" />
+                              </div>
+                            )}
                             <ConditionRow
-                              key={c.id}
                               condition={c}
                               onChange={next => updateCondition(group.id, c.id, next)}
                               onRemove={() => removeCondition(group.id, c.id)}
                             />
-                          ))}
-
-                          {/* Event rule rows (merged into group) */}
-                          {group.eventRules.map((rule, ruleIndex) => (
-                            <div key={rule.id}>
-                              {(group.conditions.length > 0 || ruleIndex > 0) && (
-                                <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground py-1">
-                                  <div className="h-px flex-1 bg-border" />
-                                  {group.groupOperator}
-                                  <div className="h-px flex-1 bg-border" />
-                                </div>
-                              )}
-                              <EventRuleRow
-                                rule={rule}
-                                onChange={updated =>
-                                  updateEventRule(group.id, rule.id, updated)
-                                }
-                                onRemove={() => removeEventRule(group.id, rule.id)}
-                              />
-                            </div>
-                          ))}
-
-                          {/* Action buttons */}
-                          <div className="flex items-center gap-2 pt-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addCondition(group.id)}
-                              className="text-xs"
-                            >
-                              <Plus className="w-3.5 h-3.5 mr-1" />
-                              Add Condition
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addEventRule(group.id)}
-                              className="text-xs border-primary/30 text-primary hover:bg-primary/5"
-                            >
-                              <Zap className="w-3.5 h-3.5 mr-1" />
-                              Add Event Rule
-                            </Button>
                           </div>
-                        </div>
-                      </CollapsibleContent>
-                    </div>
-                  </Collapsible>
-                </div>
-              );
-            })}
+                        ))}
 
-            {/* Add Group button */}
-            <Button variant="outline" size="sm" onClick={addGroup} className="w-full">
-              <Plus className="w-4 h-4 mr-1" /> Add Group
-            </Button>
-          </CardContent>
-        </Card>
+                        {/* Event rule rows (merged into group) */}
+                        {group.eventRules.map((rule, ruleIndex) => (
+                          <div key={rule.id}>
+                            {(group.conditions.length > 0 || ruleIndex > 0) && (
+                              <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground py-1.5">
+                                <div className="h-px flex-1 bg-border" />
+                                {group.groupOperator}
+                                <div className="h-px flex-1 bg-border" />
+                              </div>
+                            )}
+                            <EventRuleRow
+                              rule={rule}
+                              onChange={updated =>
+                                updateEventRule(group.id, rule.id, updated)
+                              }
+                              onRemove={() => removeEventRule(group.id, rule.id)}
+                            />
+                          </div>
+                        ))}
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 pt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addCondition(group.id)}
+                            className="text-xs h-9"
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1.5" />
+                            Add Condition
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addEventRule(group.id)}
+                            className="text-xs h-9 border-primary/30 text-primary hover:bg-primary/5"
+                          >
+                            <Zap className="w-3.5 h-3.5 mr-1.5" />
+                            Add Event Rule
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              </div>
+            );
+          })}
+
+          {/* Add Group button */}
+          <Button variant="outline" size="sm" onClick={addGroup} className="w-full h-10 border-dashed border-2">
+            <Plus className="w-4 h-4 mr-1.5" /> Add Another Group
+          </Button>
+        </div>
       </div>
 
       {/* ─── Right Column: Live Preview Panel ─── */}

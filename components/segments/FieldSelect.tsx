@@ -89,7 +89,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
       <PopoverContent className="w-[480px] p-0" align="start">
         {/* Search bar */}
         <div className="flex items-center border-b px-3 py-2">
-          <Search className="h-4 w-4 text-gray-400 mr-2 shrink-0" />
+          <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -106,12 +106,12 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                 <button
                   onClick={() => setActiveGroup(null)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-gray-50 transition-colors',
-                    !activeGroup && 'bg-gray-100 font-medium'
+                    'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors',
+                    !activeGroup && 'bg-muted font-medium'
                   )}
                 >
                   <span className="truncate">All Fields</span>
-                  <span className="ml-auto text-[10px] text-gray-400">{SEGMENT_FIELD_OPTIONS.length}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/60">{SEGMENT_FIELD_OPTIONS.length}</span>
                 </button>
                 {SEGMENT_FIELD_GROUPS.map(({ name, icon }) => {
                   const Icon = ICON_MAP[icon];
@@ -122,13 +122,13 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                       key={name}
                       onClick={() => setActiveGroup(name)}
                       className={cn(
-                        'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-gray-50 transition-colors',
-                        activeGroup === name && 'bg-gray-100 font-medium'
+                        'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors',
+                        activeGroup === name && 'bg-muted font-medium'
                       )}
                     >
-                      {Icon && <Icon className="h-3.5 w-3.5 text-gray-500 shrink-0" />}
+                      {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                       <span className="truncate">{name}</span>
-                      <span className="ml-auto text-[10px] text-gray-400">{count}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground/60">{count}</span>
                     </button>
                   );
                 })}
@@ -149,7 +149,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                 return (
                   <div key={group}>
                     {/* Group header */}
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50 sticky top-0">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/50 sticky top-0">
                       {Icon && <Icon className="h-3 w-3" />}
                       {group}
                     </div>
@@ -203,7 +203,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
               })}
 
               {Object.keys(filteredGrouped).length === 0 && (
-                <div className="px-3 py-6 text-center text-sm text-gray-500">
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                   No fields match &quot;{search}&quot;
                 </div>
               )}

@@ -87,66 +87,78 @@ export function EventRuleRow({ rule, onChange, onRemove }: EventRuleRowProps) {
   };
 
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
-      {/* Compact main row */}
-      <div className="flex items-center gap-2 p-3">
-        {/* Event badge */}
-        <div className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-primary/10">
-          <Zap className="h-3.5 w-3.5 text-primary" />
-        </div>
-
-        {/* Event selector */}
-        <div className="flex-1 min-w-0">
-          <EventSelector
-            selectedEventId={rule.eventName || undefined}
-            onSelectEvent={handleEventSelect}
-            placeholder="Select event..."
-          />
-        </div>
-
-        {/* Action selector */}
-        {rule.eventName && (
-          <Select value={rule.action} onValueChange={handleActionChange}>
-            <SelectTrigger className="w-28 shrink-0">
-              <SelectValue placeholder="Action" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="did">Did</SelectItem>
-              <SelectItem value="did_not">Did Not</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-
-        {/* Property filter toggle */}
-        {rule.eventName && availableProperties.length > 0 && (
+    <div className="rounded-lg border border-primary/20 bg-card overflow-hidden transition-shadow hover:shadow-sm">
+      {/* Main row */}
+      <div className="p-3 space-y-2">
+        {/* Row 1: Event badge + Event selector + Action + Delete */}
+        <div className="flex items-center gap-2">
+          {/* Expand toggle with event badge */}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`shrink-0 transition-colors ${isExpanded ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => rule.eventName && availableProperties.length > 0 && setIsExpanded(!isExpanded)}
+            className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+              isExpanded ? 'bg-primary/20 text-primary' : 'bg-primary/10 text-primary/70 hover:bg-primary/15'
+            }`}
             title="Toggle property filters"
           >
-            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            <Zap className="h-3.5 w-3.5" />
           </button>
-        )}
 
-        {/* Remove */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="shrink-0 h-7 w-7 text-muted-foreground hover:text-destructive"
-          title="Remove event rule"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+          {/* Event selector */}
+          <div className="flex-1 min-w-0">
+            <EventSelector
+              selectedEventId={rule.eventName || undefined}
+              onSelectEvent={handleEventSelect}
+              placeholder="Select event..."
+            />
+          </div>
+
+          {/* Action selector */}
+          {rule.eventName && (
+            <Select value={rule.action} onValueChange={handleActionChange}>
+              <SelectTrigger className="w-28 shrink-0">
+                <SelectValue placeholder="Action" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="did">Did</SelectItem>
+                <SelectItem value="did_not">Did Not</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Property filter toggle */}
+          {rule.eventName && availableProperties.length > 0 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`shrink-0 p-1 rounded transition-colors ${isExpanded ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}`}
+              title="Toggle property filters"
+            >
+              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
+          {/* Remove */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
+            title="Remove event rule"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Expandable property filters */}
       {rule.eventName && isExpanded && (
-        <div className="border-t border-primary/10 bg-card px-3 py-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Property Filters
-            </span>
+        <div className="border-t border-primary/10 bg-muted/20 px-3 py-3 space-y-2">
+          <div className="flex items-center justify-between pl-4">
+            <div className="flex items-center gap-1.5">
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                Property Filters
+              </span>
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -161,7 +173,7 @@ export function EventRuleRow({ rule, onChange, onRemove }: EventRuleRowProps) {
           </div>
 
           {rule.conditions.length > 0 ? (
-            <div className="space-y-1.5">
+            <div className="pl-4 space-y-1.5">
               {rule.conditions.map((condition, index) => (
                 <div key={condition.id}>
                   {index > 0 && (
@@ -181,7 +193,7 @@ export function EventRuleRow({ rule, onChange, onRemove }: EventRuleRowProps) {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground py-1">
+            <p className="text-xs text-muted-foreground py-1 pl-4">
               No filters added. Click &quot;Add filter&quot; to narrow by event properties.
             </p>
           )}
