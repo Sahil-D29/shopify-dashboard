@@ -62,7 +62,7 @@ export function PropertyConditionRow({
   const operators = OPERATORS_BY_TYPE[propertyType] ?? OPERATORS_BY_TYPE.string;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:gap-3">
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:gap-3">
       <div className="flex-1">
         <Select value={condition.property} onValueChange={value => onUpdate({ property: value })}>
           <SelectTrigger className="w-full">
@@ -73,7 +73,7 @@ export function PropertyConditionRow({
               <SelectItem key={item.name} value={item.name}>
                 <div className="flex flex-col">
                   <span className="font-medium text-sm">{item.name}</span>
-                  <span className="text-xs text-gray-500">{item.type}</span>
+                  <span className="text-xs text-muted-foreground">{item.type}</span>
                 </div>
               </SelectItem>
             ))}
@@ -105,16 +105,17 @@ export function PropertyConditionRow({
             onChange={(newValue) => {
               onUpdate({ value: newValue });
             }}
+            propertyType={propertyType as 'string' | 'number' | 'date' | 'boolean'}
           />
         ) : (
-          <div className="text-sm italic text-gray-500">No value required</div>
+          <div className="text-sm italic text-muted-foreground">No value required</div>
         )}
       </div>
 
       <button
         type="button"
         onClick={onRemove}
-        className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+        className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
         title="Remove filter"
       >
         <Trash2 className="h-4 w-4" />

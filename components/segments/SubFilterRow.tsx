@@ -23,6 +23,7 @@ import {
   type SubFilterProperty,
   getSubFilterOperators,
 } from '@/lib/constants/sub-filter-properties';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 interface SubFilterRowProps {
   subFilter: SubFilter;
@@ -41,6 +42,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function SubFilterRow({ subFilter, availableProperties, onChange, onRemove }: SubFilterRowProps) {
+  const { currentStore } = useTenant();
   const selectedProp = availableProperties.find(p => p.name === subFilter.property);
   const propType = selectedProp?.type ?? 'text';
   const operators = getSubFilterOperators(propType);
@@ -66,7 +68,9 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      const res = await fetch(`${selectedProp.apiEndpoint}?${params}`);
+      const headers: Record<string, string> = {};
+      if (currentStore?.id) headers['x-store-id'] = currentStore.id;
+      const res = await fetch(`${selectedProp.apiEndpoint}?${params}`, { headers });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       // Handle various response formats
@@ -78,7 +82,7 @@ export function SubFilterRow({ subFilter, availableProperties, onChange, onRemov
     } finally {
       setLoading(false);
     }
-  }, [selectedProp?.apiEndpoint]);
+  }, [selectedProp?.apiEndpoint, currentStore?.id]);
 
   useEffect(() => {
     if (hasApiEndpoint && selectedProp?.searchable) {

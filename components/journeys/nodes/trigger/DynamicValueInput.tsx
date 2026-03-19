@@ -11,12 +11,15 @@ import { Check, ChevronsUpDown, X, Loader2, Search } from 'lucide-react';
 import { getPropertyMetadata } from '@/lib/types/trigger-filter-metadata';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/lib/hooks/useToast';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 interface DynamicValueInputProps {
   propertyId: string;
   operator: string;
   value: any;
   onChange: (value: any) => void;
+  /** Fallback type when no metadata is found (from event property definition) */
+  propertyType?: 'string' | 'number' | 'date' | 'boolean';
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -32,7 +35,8 @@ export function DynamicValueInput({
   propertyId,
   operator,
   value,
-  onChange
+  onChange,
+  propertyType,
 }: DynamicValueInputProps) {
   const metadata = getPropertyMetadata(propertyId);
   const [options, setOptions] = useState<any[]>([]);
@@ -40,6 +44,7 @@ export function DynamicValueInput({
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = useState(false);
   const toast = useToast();
+  const { currentStore } = useTenant();
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -57,7 +62,9 @@ export function DynamicValueInput({
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      const res = await fetch(`${metadata.apiEndpoint}?${params}`);
+      const headers: Record<string, string> = {};
+      if (currentStore?.id) headers['x-store-id'] = currentStore.id;
+      const res = await fetch(`${metadata.apiEndpoint}?${params}`, { headers });
       if (!res.ok) throw new Error('Failed to fetch options');
       const data = await res.json();
       if (data.items) setOptions(data.items);
@@ -72,10 +79,44 @@ export function DynamicValueInput({
     } finally {
       setLoading(false);
     }
-  }, [metadata?.apiEndpoint, toast]);
+  }, [metadata?.apiEndpoint, toast, currentStore?.id]);
 
-  // No metadata - fallback to text input
+  // No metadata - use propertyType for smart fallback
   if (!metadata) {
+    if (propertyType === 'date') {
+      return (
+        <Input
+          type="datetime-local"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-52"
+        />
+      );
+    }
+    if (propertyType === 'number') {
+      return (
+        <Input
+          type="number"
+          value={value != null ? String(value) : ''}
+          onChange={(e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
+          placeholder="Enter number..."
+          className="w-48"
+        />
+      );
+    }
+    if (propertyType === 'boolean') {
+      return (
+        <Select value={value === true ? 'true' : value === false ? 'false' : ''} onValueChange={(v) => onChange(v === 'true')}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="Select..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true">True</SelectItem>
+            <SelectItem value="false">False</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
     return (
       <Input
         type="text"
@@ -84,6 +125,27 @@ export function DynamicValueInput({
         placeholder="Enter value..."
         className="w-48"
       />
+    );
+  }
+
+  // Static options dropdown (payment_method, currency, fulfillment_status, etc.)
+  if (metadata.valueType === 'static' && metadata.staticOptions?.length) {
+    return (
+      <Select
+        value={value != null ? String(value) : ''}
+        onValueChange={(val) => onChange(val)}
+      >
+        <SelectTrigger className="w-48">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {metadata.staticOptions.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
 

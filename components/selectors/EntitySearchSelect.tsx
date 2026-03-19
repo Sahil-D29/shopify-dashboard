@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 export interface EntityOption {
   value: string;
@@ -41,7 +41,9 @@ export function EntitySearchSelect({
   const [options, setOptions] = useState<EntityOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const cachedRef = useRef(false);
+  const { currentStore } = useTenant();
 
   const fetchOptions = useCallback(async () => {
     if (cachedRef.current && options.length > 0) return;
@@ -51,7 +53,9 @@ export function EntitySearchSelect({
       const { getBaseUrl } = await import('@/lib/utils/getBaseUrl');
       const baseUrl = getBaseUrl();
       const url = fetchUrl.startsWith('http') ? fetchUrl : `${baseUrl}${fetchUrl}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const headers: Record<string, string> = {};
+      if (currentStore?.id) headers['x-store-id'] = currentStore.id;
+      const res = await fetch(url, { cache: 'no-store', headers });
       if (!res.ok) throw new Error(`Failed to fetch (${res.status})`);
       const data = await res.json();
       const parsed = parseResponse(data);
@@ -62,7 +66,7 @@ export function EntitySearchSelect({
     } finally {
       setLoading(false);
     }
-  }, [fetchUrl, parseResponse, options.length]);
+  }, [fetchUrl, parseResponse, options.length, currentStore?.id]);
 
   useEffect(() => {
     if (open && !cachedRef.current) {
@@ -70,11 +74,26 @@ export function EntitySearchSelect({
     }
   }, [open, fetchOptions]);
 
+  // Invalidate cache when store changes
+  useEffect(() => {
+    cachedRef.current = false;
+    setOptions([]);
+  }, [currentStore?.id]);
+
   const selectedOption = options.find(o => o.value === value);
   const displayLabel = selectedOption?.label || (value ? value : placeholder);
 
+  // Client-side search filtering
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const term = search.toLowerCase();
+    return options.filter(
+      o => o.label.toLowerCase().includes(term) || o.value.toLowerCase().includes(term) || (o.subtitle?.toLowerCase().includes(term))
+    );
+  }, [options, search]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(''); }}>
       <PopoverTrigger asChild disabled={disabled}>
         <Button
           variant="outline"
@@ -87,47 +106,57 @@ export function EntitySearchSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[320px] p-0" align="start">
-        <Command loop>
-          <CommandInput placeholder={searchPlaceholder} />
-          {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+        {/* Search input */}
+        <div className="flex items-center border-b px-3 py-2">
+          <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+          </div>
+        ) : error ? (
+          <div className="py-6 text-center text-sm text-destructive">{error}</div>
+        ) : filteredOptions.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+        ) : (
+          <ScrollArea className="max-h-64">
+            <div className="py-1">
+              {filteredOptions.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      onValueChange(option.value, option.label);
+                      setOpen(false);
+                      setSearch('');
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors',
+                      isSelected && 'bg-primary/10'
+                    )}
+                  >
+                    <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium truncate">{option.label}</span>
+                      {option.subtitle && (
+                        <span className="text-xs text-muted-foreground truncate">{option.subtitle}</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          ) : error ? (
-            <div className="py-6 text-center text-sm text-destructive">{error}</div>
-          ) : (
-            <>
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <ScrollArea className="max-h-64">
-                <CommandGroup>
-                  {options.map(option => {
-                    const isSelected = option.value === value;
-                    return (
-                      <CommandItem
-                        key={option.value}
-                        value={`${option.label} ${option.subtitle ?? ''}`}
-                        onSelect={() => {
-                          onValueChange(option.value, option.label);
-                          setOpen(false);
-                        }}
-                        className="flex items-center gap-2 py-2"
-                      >
-                        <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-sm font-medium truncate">{option.label}</span>
-                          {option.subtitle && (
-                            <span className="text-xs text-muted-foreground truncate">{option.subtitle}</span>
-                          )}
-                        </div>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </ScrollArea>
-            </>
-          )}
-        </Command>
+          </ScrollArea>
+        )}
       </PopoverContent>
     </Popover>
   );
