@@ -281,6 +281,8 @@ model Store {
   quickReplies      QuickReply[]
   autoReplyRules    AutoReplyRule[]
   whatsappFlows     WhatsAppFlow[]
+  apiKeys           ApiKey[]
+  customEventDefs   CustomEventDefinition[]
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1180,5 +1182,51 @@ model StorefrontEvent {
   @@index([storeId, customerId])
   @@index([storeId, eventType])
   @@map("storefront_events")
+}
+
+// ============================================
+// CUSTOM EVENTS
+// ============================================
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  storeId    String
+  name       String
+  keyPrefix  String
+  keyHash    String    @unique
+  scopes     String[]  @default(["events:write"])
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model CustomEventDefinition {
+  id          String    @id @default(uuid())
+  storeId     String
+  eventName   String
+  displayName String
+  description String?
+  category    String    @default("custom")
+  properties  Json      @default("[]")
+  isActive    Boolean   @default(true)
+  eventCount  Int       @default(0)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, eventName])
+  @@index([storeId])
+  @@index([eventName])
+  @@map("custom_event_definitions")
 }
 

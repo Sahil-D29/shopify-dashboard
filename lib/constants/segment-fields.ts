@@ -218,6 +218,7 @@ export const SEGMENT_FIELD_GROUPS: { name: string; icon: string }[] = [
   { name: 'RFM Analysis', icon: 'BarChart3' },
   { name: 'Predictive', icon: 'Brain' },
   { name: 'Shopify Events', icon: 'ShoppingBag' },
+  { name: 'Custom Events', icon: 'Webhook' },
 ];
 
 /** Group SEGMENT_FIELD_OPTIONS by their group property */
@@ -227,4 +228,18 @@ export function getFieldOptionsByGroup(): Record<string, SegmentFieldOption[]> {
     acc[field.group].push(field);
     return acc;
   }, {} as Record<string, SegmentFieldOption[]>);
+}
+
+/** Generate dynamic segment field options from custom event definitions */
+export function getCustomEventSegmentFields(
+  customEvents: Array<{ eventName: string; displayName: string }>
+): SegmentFieldOption[] {
+  return customEvents.map((event) => ({
+    value: `custom_event:${event.eventName}`,
+    label: `Triggered: ${event.displayName}`,
+    type: 'boolean' as SegmentFieldType,
+    group: 'Custom Events',
+    supportsTimeWindow: true,
+    supportsFrequency: true,
+  }));
 }

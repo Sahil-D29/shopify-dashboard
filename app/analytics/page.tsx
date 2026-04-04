@@ -24,6 +24,7 @@ import {
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { CustomEventsChart } from '@/components/analytics/CustomEventsChart';
 import dynamic from 'next/dynamic';
 
 // Lazy-load Recharts to avoid SSR issues
@@ -608,6 +609,9 @@ function AnalyticsContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Custom Events Analytics */}
+      <CustomEventsChart />
     </div>
   );
 }

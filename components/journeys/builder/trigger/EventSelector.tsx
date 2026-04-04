@@ -10,6 +10,7 @@ import {
   type EnhancedShopifyEvent,
 } from '@/constants/shopifyEvents';
 import { Input } from '@/components/ui/input';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 interface EventSelectorProps {
   selectedEventId?: string;
@@ -28,17 +29,59 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
   const [portalRect, setPortalRect] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(
     null,
   );
+  const [customEvents, setCustomEvents] = useState<EnhancedShopifyEvent[]>([]);
+  const { currentStore } = useTenant();
+
+  // Fetch custom events from API
+  useEffect(() => {
+    if (!currentStore?.id) return;
+    fetch('/api/settings/custom-events', {
+      headers: { 'x-store-id': currentStore.id },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.events)) {
+          setCustomEvents(
+            data.events
+              .filter((e: { isActive: boolean }) => e.isActive)
+              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }> }) => ({
+                id: `custom:${e.eventName}`,
+                label: e.displayName,
+                description: e.description || `Custom event: ${e.displayName}`,
+                category: 'custom' as EnhancedShopifyEvent['category'],
+                properties: (e.properties || []).map((p: { name: string; type: string; description?: string }) => ({
+                  name: p.name,
+                  type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as 'string' | 'number' | 'boolean' | 'date',
+                  description: p.description || p.name,
+                })),
+              }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [currentStore?.id]);
+
+  const allEventsIncludingCustom = useMemo(() => {
+    return [...Object.values(ENHANCED_SHOPIFY_EVENTS).flat(), ...customEvents];
+  }, [customEvents]);
 
   const selectedEvent = useMemo(() => {
     if (!selectedEventId) return undefined;
-    const allEvents = Object.values(ENHANCED_SHOPIFY_EVENTS).flat();
-    return allEvents.find(event => event.id === selectedEventId);
-  }, [selectedEventId]);
+    return allEventsIncludingCustom.find(event => event.id === selectedEventId);
+  }, [selectedEventId, allEventsIncludingCustom]);
 
   const filteredEvents = useMemo(() => {
-    if (!searchQuery) return Object.values(ENHANCED_SHOPIFY_EVENTS).flat();
-    return searchEnhancedEvents(searchQuery);
-  }, [searchQuery]);
+    if (!searchQuery) return allEventsIncludingCustom;
+    const builtInResults = searchEnhancedEvents(searchQuery);
+    const lowerQuery = searchQuery.toLowerCase();
+    const customResults = customEvents.filter(
+      event =>
+        event.label.toLowerCase().includes(lowerQuery) ||
+        event.description.toLowerCase().includes(lowerQuery) ||
+        event.id.toLowerCase().includes(lowerQuery)
+    );
+    return [...builtInResults, ...customResults];
+  }, [searchQuery, allEventsIncludingCustom, customEvents]);
 
   const groupedEvents = useMemo(() => {
     return filteredEvents.reduce<Record<string, EnhancedShopifyEvent[]>>((acc, event) => {
@@ -163,7 +206,14 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
                         type="button"
                         className="flex w-full flex-col px-4 py-2 text-left transition-colors hover:bg-blue-50"
                       >
-                        <span className="font-medium text-gray-900">{event.label}</span>
+                        <span className="flex items-center gap-2 font-medium text-gray-900">
+                          {event.label}
+                          {event.id.startsWith('custom:') && (
+                            <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">
+                              Custom
+                            </span>
+                          )}
+                        </span>
                         <span className="text-sm text-gray-500">{event.description}</span>
                       </button>
                     ))}

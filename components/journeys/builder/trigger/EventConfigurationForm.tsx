@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { nanoid } from 'nanoid';
 
@@ -12,6 +12,7 @@ import type { CleverTapStyleRule, EventCondition, TimeFrame } from '@/lib/types/
 import type { EnhancedShopifyEvent, ShopifyEventProperty } from '@/constants/shopifyEvents';
 import { getEnhancedEventById } from '@/constants/shopifyEvents';
 import { useToast } from '@/lib/hooks/useToast';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 interface EventConfigurationFormProps {
   rule: CleverTapStyleRule;
@@ -35,15 +36,51 @@ const DEFAULT_TIMEFRAME: TimeFrame = {
 
 export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigurationFormProps) {
   const toast = useToast();
+  const { currentStore } = useTenant();
   const [localRule, setLocalRule] = useState<CleverTapStyleRule>(() => ({
     ...rule,
     timeFrame: rule.timeFrame ?? DEFAULT_TIMEFRAME,
   }));
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>(rule.eventName ?? undefined);
-  const selectedEvent = useMemo<EnhancedShopifyEvent | undefined>(
-    () => (selectedEventId ? getEnhancedEventById(selectedEventId) : undefined),
-    [selectedEventId],
-  );
+  const [customEventsCache, setCustomEventsCache] = useState<EnhancedShopifyEvent[]>([]);
+
+  // Fetch custom events so we can resolve custom event IDs
+  useEffect(() => {
+    if (!currentStore?.id) return;
+    fetch('/api/settings/custom-events', {
+      headers: { 'x-store-id': currentStore.id },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.events)) {
+          setCustomEventsCache(
+            data.events
+              .filter((e: { isActive: boolean }) => e.isActive)
+              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }> }) => ({
+                id: `custom:${e.eventName}`,
+                label: e.displayName,
+                description: e.description || `Custom event: ${e.displayName}`,
+                category: 'custom' as EnhancedShopifyEvent['category'],
+                properties: (e.properties || []).map((p: { name: string; type: string; description?: string }) => ({
+                  name: p.name,
+                  type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as 'string' | 'number' | 'boolean' | 'date',
+                  description: p.description || p.name,
+                })),
+              }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [currentStore?.id]);
+
+  const selectedEvent = useMemo<EnhancedShopifyEvent | undefined>(() => {
+    if (!selectedEventId) return undefined;
+    // First try built-in events
+    const builtIn = getEnhancedEventById(selectedEventId);
+    if (builtIn) return builtIn;
+    // Then check custom events
+    return customEventsCache.find(e => e.id === selectedEventId);
+  }, [selectedEventId, customEventsCache]);
   const availableProperties = useMemo<ShopifyEventProperty[]>(() => selectedEvent?.properties ?? [], [selectedEvent]);
 
   const handleEventSelect = (event: EnhancedShopifyEvent) => {

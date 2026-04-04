@@ -108,7 +108,14 @@ export function EventSelector({ selectedEvents, onChange, disabled }: EventSelec
               disabled={disabled}
             >
               <div className="flex flex-col text-sm">
-                <span>{event.displayName || event.name}</span>
+                <span className="flex items-center gap-2">
+                  {event.displayName || event.name}
+                  {event.name.startsWith('custom:') && (
+                    <span className="inline-flex items-center rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                      Custom
+                    </span>
+                  )}
+                </span>
                 {event.displayName && event.displayName !== event.name ? (
                   <span className="text-xs text-slate-500">{event.name}</span>
                 ) : null}

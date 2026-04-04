@@ -449,4 +449,28 @@ export const getEnhancedEventById = (id: string): EnhancedShopifyEvent | undefin
   return getAllEnhancedShopifyEvents().find(event => event.id === id);
 };
 
+/** Convert custom event definitions into EnhancedShopifyEvent format for use in event selectors */
+export const mergeCustomEvents = (
+  definitions: Array<{
+    eventName: string;
+    displayName: string;
+    description?: string | null;
+    properties?: Array<{ name: string; type: string; description?: string }>;
+  }>
+): Record<string, EnhancedShopifyEvent[]> => {
+  const customEvents: EnhancedShopifyEvent[] = definitions.map((def) => ({
+    id: `custom:${def.eventName}`,
+    label: def.displayName,
+    description: def.description || `Custom event: ${def.displayName}`,
+    category: 'custom' as unknown as EnhancedShopifyEvent['category'],
+    properties: (def.properties || []).map((p) => ({
+      name: p.name,
+      type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as ShopifyEventProperty['type'],
+      description: p.description || p.name,
+    })),
+  }));
+
+  return customEvents.length > 0 ? { custom: customEvents } : {};
+};
+
 

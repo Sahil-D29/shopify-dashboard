@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Settings, CheckCircle2, XCircle, Eye, EyeOff, Loader2, Info, 
+import {
+  Settings, CheckCircle2, XCircle, Eye, EyeOff, Loader2, Info,
   ShoppingBag, MessageSquare, Phone, ShieldCheck, RefreshCcw, ExternalLink,
-  CreditCard, Bell, Link as LinkIcon, Users, UserPlus, Mail, Activity, 
-  Search, MoreVertical, Edit, Trash2, Shield
+  CreditCard, Bell, Link as LinkIcon, Users, UserPlus, Mail, Activity,
+  Search, MoreVertical, Edit, Trash2, Shield, Webhook, Key
 } from 'lucide-react';
+import { CustomEventsManager } from '@/components/settings/CustomEventsManager';
+import { ApiKeysManager } from '@/components/settings/ApiKeysManager';
 import { StoreConfigManager, ShopifyConfig } from '@/lib/store-config';
 import { getWindowStorage } from '@/lib/window-storage';
 import { useTenant } from '@/lib/tenant/tenant-context';
@@ -63,6 +65,8 @@ const settingsSections = [
   { id: 'shop', name: 'Shop', icon: ShoppingBag, description: 'Shopify integration' },
   { id: 'wa', name: 'WA', icon: MessageSquare, description: 'WhatsApp configuration' },
   { id: 'team', name: 'Team', icon: Users, description: 'Team management', requiresOwner: true },
+  { id: 'custom-events', name: 'Custom Events', icon: Webhook, description: 'Define custom events' },
+  { id: 'api-keys', name: 'API Keys', icon: Key, description: 'Manage API keys' },
   { id: 'integrations', name: 'Integrations', icon: LinkIcon, description: 'Third-party apps', disabled: true },
   { id: 'payments', name: 'Payments', icon: CreditCard, description: 'Payment settings', disabled: true },
   { id: 'webhooks', name: 'Webhooks', icon: Settings, description: 'Webhook configuration', disabled: true },
@@ -1377,6 +1381,14 @@ function SettingsContent() {
           )}
 
           {/* Coming Soon Sections */}
+          {activeSection === 'custom-events' && (
+            <CustomEventsManager />
+          )}
+
+          {activeSection === 'api-keys' && (
+            <ApiKeysManager />
+          )}
+
           {activeSection === 'integrations' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
               <div className="max-w-md mx-auto">

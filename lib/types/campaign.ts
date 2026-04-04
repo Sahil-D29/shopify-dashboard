@@ -11,7 +11,9 @@ export type TriggerEvent =
   | 'wishlist_added'
   | 'customer_birthday'
   | 'segment_entered'
-  | 'segment_exited';
+  | 'segment_exited'
+  | 'custom_event'
+  | `custom:${string}`;
 
 export interface CampaignMedia {
   type: 'image' | 'video' | 'document';

@@ -240,6 +240,19 @@ function extractPrimaryCustomer(payload: JsonRecord): JourneyEventCustomer | nul
       phone: typeof payload.phone === 'string' ? payload.phone : null,
     };
   }
+  // For custom events: resolve by email or phone when no customer_id is present
+  const email = typeof payload.email === 'string' ? payload.email : typeof payload._email === 'string' ? payload._email : null;
+  const phone = typeof payload.phone === 'string' ? payload.phone : typeof payload._phone === 'string' ? payload._phone : null;
+  if (email || phone) {
+    // Use customerId from payload if available (set by processCustomEvent after Contact lookup)
+    const resolvedId = typeof payload.customerId === 'string' ? payload.customerId : null;
+    if (resolvedId) {
+      return { id: resolvedId, email, phone };
+    }
+    // Return with email/phone as identifiers for downstream resolution
+    if (email) return { id: `email:${email}`, email, phone };
+    if (phone) return { id: `phone:${phone}`, email, phone };
+  }
   return null;
 }
 

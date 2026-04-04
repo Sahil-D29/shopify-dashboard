@@ -124,7 +124,9 @@ export type ConditionField =
   | 'cart_abandoned'
   | 'email_opened'
   | 'email_clicked'
-  | 'accepts_marketing';
+  | 'accepts_marketing'
+  // Custom Events
+  | `custom_event:${string}`;
 
 export type ConditionOperator =
   | 'equals'

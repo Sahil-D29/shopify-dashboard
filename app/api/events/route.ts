@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 interface EventDefinition {
   name: string;
@@ -9,7 +11,7 @@ interface EventDefinition {
   properties?: Array<{ key: string; type: 'string' | 'number' | 'boolean' }>;
 }
 
-const EVENTS: EventDefinition[] = [
+const BUILT_IN_EVENTS: EventDefinition[] = [
   {
     name: 'order_placed',
     category: 'shopify',
@@ -57,10 +59,41 @@ const EVENTS: EventDefinition[] = [
   },
 ];
 
-export async function GET() {
-  return NextResponse.json({
-    events: EVENTS,
-    syncedAt: new Date().toISOString(),
-  });
+export async function GET(request: NextRequest) {
+  try {
+    const storeId = await getCurrentStoreId(request);
+
+    let customEvents: EventDefinition[] = [];
+
+    if (storeId) {
+      const definitions = await prisma.customEventDefinition.findMany({
+        where: { storeId, isActive: true },
+        orderBy: { displayName: 'asc' },
+      });
+
+      customEvents = definitions.map((def) => ({
+        name: `custom:${def.eventName}`,
+        category: 'custom' as const,
+        label: def.displayName,
+        description: def.description || `Custom event: ${def.displayName}`,
+        properties: Array.isArray(def.properties)
+          ? (def.properties as Array<{ name: string; type: string }>).map((p) => ({
+              key: p.name,
+              type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : 'string') as 'string' | 'number' | 'boolean',
+            }))
+          : [],
+      }));
+    }
+
+    return NextResponse.json({
+      events: [...BUILT_IN_EVENTS, ...customEvents],
+      syncedAt: new Date().toISOString(),
+    });
+  } catch {
+    return NextResponse.json({
+      events: BUILT_IN_EVENTS,
+      syncedAt: new Date().toISOString(),
+    });
+  }
 }
 
