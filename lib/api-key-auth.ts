@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 const KEY_PREFIX = 'sk_live_';
 

@@ -1,4 +1,4 @@
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { getAllEnhancedShopifyEvents } from '@/constants/shopifyEvents';
 
 const EVENT_NAME_REGEX = /^[a-z][a-z0-9_]{2,49}$/;

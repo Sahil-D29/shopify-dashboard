@@ -109,7 +109,7 @@ export function CustomEventsManager() {
 
   const updateProperty = (index: number, field: keyof EventProperty, value: unknown) => {
     const updated = [...properties];
-    (updated[index] as Record<string, unknown>)[field] = value;
+    (updated[index] as unknown as Record<string, unknown>)[field] = value;
     setProperties(updated);
   };
 

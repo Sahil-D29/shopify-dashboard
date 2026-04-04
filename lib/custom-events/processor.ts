@@ -1,4 +1,4 @@
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 
 export interface CustomEventInput {
@@ -59,13 +59,15 @@ export async function processCustomEvent(input: CustomEventInput): Promise<strin
 
   // 3. Fan out to downstream systems (non-blocking)
   const eventData = {
-    storeId,
-    customerId: resolvedCustomerId,
-    email,
-    phone,
-    properties,
-    eventName,
-    eventType,
+    payload: {
+      storeId,
+      customerId: resolvedCustomerId,
+      email: email || null,
+      phone: phone || null,
+      properties,
+      eventName,
+      eventType,
+    },
   };
 
   // Journey trigger matching
