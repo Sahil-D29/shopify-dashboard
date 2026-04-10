@@ -37,9 +37,11 @@ export async function POST(request: NextRequest) {
       isVisible = true, isActive = true, displayOrder = 0,
     } = body;
 
-    if (!planId || !name || price === undefined) {
-      return NextResponse.json({ error: 'planId, name, and price are required' }, { status: 400 });
+    if (!planId || !name || (price === undefined && !priceINR)) {
+      return NextResponse.json({ error: 'planId, name, and at least one price (USD or INR) are required' }, { status: 400 });
     }
+
+    const finalPrice = (price !== undefined && !isNaN(Number(price))) ? price : 0;
 
     // Check if planId already exists
     const existing = await prisma.planFeature.findUnique({ where: { planId } });
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
       data: {
         planId,
         name,
-        price,
+        price: finalPrice,
         priceINR: priceINR ?? null,
         billingCycle,
         messagesPerMonth,

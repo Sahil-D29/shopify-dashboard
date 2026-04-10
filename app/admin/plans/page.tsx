@@ -117,7 +117,7 @@ export default function PlansPage() {
       const payload = {
         planId: form.planId,
         name: form.name,
-        price: parseFloat(form.price),
+        price: form.price ? parseFloat(form.price) : 0,
         priceINR: form.priceINR ? parseFloat(form.priceINR) : null,
         billingCycle: form.billingCycle,
         messagesPerMonth: parseInt(form.messagesPerMonth),
@@ -229,7 +229,7 @@ export default function PlansPage() {
                 </span>
                 <span className="text-gray-500">/{plan.billingCycle}</span>
               </div>
-              {plan.priceINR && (
+              {plan.priceINR && Number(plan.price) > 0 && (
                 <span className="text-sm text-gray-400">${Number(plan.price)} USD</span>
               )}
             </CardHeader>
