@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBAC Access Flowchart</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2d3748;
+            margin-bottom: 40px;
+            font-size: 2.5rem;
+        }
+        
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+        
+        .start-node {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .arrow {
+            font-size: 2rem;
+            color: #667eea;
+        }
+        
+        .decision {
+            background: #fef3c7;
+            border: 3px solid #f59e0b;
+            padding: 20px 30px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: center;
+            min-width: 250px;
+        }
+        
+        .role-branches {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .role-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .admin-column {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+        }
+        
+        .owner-column {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+        }
+        
+        .user-column {
+            background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+        }
+        
+        .role-header {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .access-item {
+            background: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.95rem;
+            transition: transform 0.2s;
+        }
+        
+        .access-item:hover {
+            transform: translateX(5px);
+        }
+        
+        .allowed {
+            border-left: 4px solid #22c55e;
+        }
+        
+        .denied {
+            border-left: 4px solid #ef4444;
+            opacity: 0.7;
+        }
+        
+        .icon {
+            font-size: 1.3rem;
+        }
+        
+        .section-title {
+            color: white;
+            font-weight: 600;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            padding-left: 5px;
+            font-size: 1.1rem;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 40px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .legend-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+        }
+        
+        @media (max-width: 1024px) {
+            .role-branches {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                border-radius: 15px;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+                margin-bottom: 30px;
+            }
+
+            .start-node {
+                padding: 15px 30px;
+                font-size: 1.1rem;
+            }
+
+            .decision {
+                padding: 15px 20px;
+                font-size: 1rem;
+                min-width: 200px;
+            }
+
+            .role-column {
+                padding: 15px;
+            }
+
+            .role-header {
+                font-size: 1.25rem;
+                padding: 12px;
+            }
+
+            .access-item {
+                padding: 10px 12px;
+                font-size: 0.9rem;
+            }
+
+            .section-title {
+                font-size: 1rem;
+            }
+
+            .legend {
+                flex-direction: column;
+                gap: 20px;
+                padding: 15px;
+            }
+
+            .arrow {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+                margin-bottom: 20px;
+            }
+
+            .start-node {
+                padding: 12px 24px;
+                font-size: 1rem;
+            }
+
+            .decision {
+                padding: 12px 16px;
+                font-size: 0.95rem;
+                min-width: 180px;
+            }
+
+            .role-column {
+                padding: 12px;
+            }
+
+            .role-header {
+                font-size: 1.1rem;
+                padding: 10px;
+            }
+
+            .access-item {
+                padding: 8px 10px;
+                font-size: 0.85rem;
+            }
+
+            .icon {
+                font-size: 1.1rem;
+            }
+
+            .section-title {
+                font-size: 0.95rem;
+            }
+
+            .legend {
+                padding: 12px;
+            }
+
+            .legend-item {
+                flex-direction: column;
+                text-align: center;
+                gap: 5px;
+            }
+
+            .arrow {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 RBAC Access Control Flowchart</h1>
+        
+        <div class="flowchart">
+            <div class="start-node">
+                👤 User Logs In
+            </div>
+            
+            <div class="arrow">↓</div>
+            
+            <div class="decision">
+                🔍 Check User Role
+            </div>
+            
+            <div class="role-branches">
+                <!-- ADMIN Column -->
+                <div class="role-column admin-column">
+                    <div class="role-header">
+                        🔐 ADMIN
+                    </div>
+                    
+                    <div class="section-title">Portal Access</div>
+                    <div class="access-item allowed">
+                        <span class="icon">🏛️</span>
+                        <span>Admin Portal</span>
+                    </div>
+                    
+                    <div class="section-title">Platform Control</div>
+                    <div class="access-item allowed">
+                        <span class="icon">🏪</span>
+                        <span>View ALL Stores</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">👥</span>
+                        <span>Manage ALL Users</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">📊</span>
+                        <span>System Analytics</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">⚙️</span>
+                        <span>Platform Settings</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">📋</span>
+                        <span>Audit Logs</span>
+                    </div>
+                    
+                    <div class="section-title">Full Access To</div>
+                    <div class="access-item allowed">
+                        <span class="icon">💳</span>
+                        <span>All Billing Data</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">🔧</span>
+                        <span>System Configuration</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">🗑️</span>
+                        <span>Delete Any Data</span>
+                    </div>
+                </div>
+                
+                <!-- STORE OWNER Column -->
+                <div class="role-column owner-column">
+                    <div class="role-header">
+                        🏢 STORE OWNER
+                    </div>
+                    
+                    <div class="section-title">Portal Access</div>
+                    <div class="access-item allowed">
+                        <span class="icon">📊</span>
+                        <span>Store Dashboard</span>
+                    </div>
+                    
+                    <div class="section-title">Own Store Control</div>
+                    <div class="access-item allowed">
+                        <span class="icon">📈</span>
+                        <span>View Own Analytics</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">✏️</span>
+                        <span>Edit Everything</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">🗑️</span>
+                        <span>Delete Store Data</span>
+                    </div>
+                    
+                    <div class="section-title">Team Management</div>
+                    <div class="access-item allowed">
+                        <span class="icon">➕</span>
+                        <span>Invite Team Members</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">🔐</span>
+                        <span>Set User Permissions</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">❌</span>
+                        <span>Remove Team Members</span>
+                    </div>
+                    
+                    <div class="section-title">Business Operations</div>
+                    <div class="access-item allowed">
+                        <span class="icon">🎯</span>
+                        <span>Create Campaigns</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">💰</span>
+                        <span>Manage Subscription</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">⚙️</span>
+                        <span>Configure Store</span>
+                    </div>
+                    
+                    <div class="section-title">Restricted</div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Other Stores' Data</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Admin Panel</span>
+                    </div>
+                </div>
+                
+                <!-- USER Column -->
+                <div class="role-column user-column">
+                    <div class="role-header">
+                        👤 USER (Team Member)
+                    </div>
+                    
+                    <div class="section-title">Portal Access</div>
+                    <div class="access-item allowed">
+                        <span class="icon">📊</span>
+                        <span>Store Dashboard</span>
+                    </div>
+                    
+                    <div class="section-title">✅ Allowed (If Granted)</div>
+                    <div class="access-item allowed">
+                        <span class="icon">👁️</span>
+                        <span>View Campaigns</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">➕</span>
+                        <span>Create Campaigns*</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">✏️</span>
+                        <span>Edit Customers*</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">📦</span>
+                        <span>Manage Products*</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">📋</span>
+                        <span>Edit Orders*</span>
+                    </div>
+                    <div class="access-item allowed">
+                        <span class="icon">🎯</span>
+                        <span>View Segments</span>
+                    </div>
+                    
+                    <div class="section-title">❌ Never Allowed</div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Team Management</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Billing Access</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Store Settings</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Delete Store Data</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Admin Panel</span>
+                    </div>
+                    <div class="access-item denied">
+                        <span class="icon">❌</span>
+                        <span>Other Stores' Data</span>
+                    </div>
+                    
+                    <div style="color: white; font-size: 0.85rem; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        * Permission must be granted by Store Owner
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-box" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);"></div>
+                <span><strong>Admin</strong> - Platform Level</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box" style="background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);"></div>
+                <span><strong>Store Owner</strong> - Business Level</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);"></div>
+                <span><strong>User</strong> - Employee Level</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

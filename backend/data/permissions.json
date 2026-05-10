@@ -1,0 +1,67 @@
+{
+  "rolePermissions": {
+    "super_admin": ["*"],
+    "store_owner": ["*"],
+    "manager": [
+      "view_dashboard",
+      "view_analytics",
+      "create_campaigns",
+      "edit_campaigns",
+      "delete_campaigns",
+      "view_customers",
+      "edit_customers",
+      "view_products",
+      "edit_products",
+      "view_orders",
+      "manage_team_members"
+    ],
+    "team_member": [
+      "view_dashboard",
+      "view_campaigns",
+      "view_customers",
+      "view_products",
+      "view_orders"
+    ],
+    "viewer": [
+      "view_dashboard",
+      "view_analytics",
+      "view_campaigns"
+    ]
+  },
+  "permissionCategories": {
+    "dashboard": {
+      "view_dashboard": "View dashboard and overview"
+    },
+    "analytics": {
+      "view_analytics": "View analytics and reports"
+    },
+    "campaigns": {
+      "view_campaigns": "View campaigns",
+      "create_campaigns": "Create new campaigns",
+      "edit_campaigns": "Edit existing campaigns",
+      "delete_campaigns": "Delete campaigns"
+    },
+    "customers": {
+      "view_customers": "View customer data",
+      "edit_customers": "Edit customer information"
+    },
+    "products": {
+      "view_products": "View products",
+      "edit_products": "Edit product information"
+    },
+    "orders": {
+      "view_orders": "View orders"
+    },
+    "team": {
+      "manage_team_members": "Invite and manage team members"
+    },
+    "settings": {
+      "edit_store_settings": "Edit store settings"
+    },
+    "billing": {
+      "view_billing": "View billing information",
+      "manage_billing": "Manage subscription and billing"
+    }
+  }
+}
+

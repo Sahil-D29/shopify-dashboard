@@ -1,0 +1,16 @@
+{
+  "server": {
+    "startedAt": null,
+    "uptimeSeconds": 0
+  },
+  "workers": {
+    "campaign": "stopped",
+    "journey": "stopped"
+  },
+  "shopify": {
+    "lastTokenCheck": null,
+    "tokenValid": false,
+    "lastSuccessfulSync": null
+  },
+  "lastUpdated": null
+}

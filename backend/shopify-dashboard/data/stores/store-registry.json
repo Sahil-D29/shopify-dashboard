@@ -1,0 +1,35 @@
+{
+  "stores": [
+    {
+      "id": "store_default",
+      "name": "Default Store",
+      "shopDomain": "demo.myshopify.com",
+      "owner": "owner@store.com",
+      "status": "active",
+      "plan": "pro",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "usersCount": 0,
+      "messagesCount": 0
+    },
+    {
+      "id": "store_1764940418979_28dzn6y73",
+      "name": "Dorec",
+      "shopDomain": "dorec.in",
+      "owner": "sahilgt03@gmail.com",
+      "status": "active",
+      "plan": "free",
+      "createdAt": "2025-12-05T13:13:38.979Z",
+      "usersCount": 0,
+      "messagesCount": 0
+    },
+    {
+      "id": "store_sai_laxmi_dev",
+      "name": "sai-laxmi-dev",
+      "shopDomain": "sai-laxmi-dev.myshopify.com",
+      "owner": "sailakshmisinghbaghel@gmail.com",
+      "status": "active",
+      "plan": "basic",
+      "createdAt": "2026-01-05T05:32:00.545Z"
+    }
+  ]
+}
