@@ -31,6 +31,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Separate backend & frontend apps (not part of dashboard deployment)
+/backend/
+/frontend/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
