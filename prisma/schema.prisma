@@ -283,6 +283,7 @@ model Store {
   whatsappFlows     WhatsAppFlow[]
   apiKeys           ApiKey[]
   customEventDefs   CustomEventDefinition[]
+  emailTemplates    EmailTemplate[]         @relation("StoreEmailTemplates")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1228,5 +1229,31 @@ model CustomEventDefinition {
   @@index([storeId])
   @@index([eventName])
   @@map("custom_event_definitions")
+}
+
+model EmailTemplate {
+  id            String   @id @default(uuid())
+  storeId       String?
+  name          String
+  description   String?
+  category      String   @default("custom")
+  subject       String   @default("")
+  preheaderText String   @default("")
+  htmlBody      String   @default("")
+  mjmlBody      String   @default("")
+  jsonDesign    Json?
+  thumbnailUrl  String?
+  isGlobal      Boolean  @default(false)
+  tags          String[] @default([])
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store Store? @relation("StoreEmailTemplates", fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([category])
+  @@index([isGlobal])
+  @@map("email_templates")
 }
 
