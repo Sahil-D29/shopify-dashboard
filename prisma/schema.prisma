@@ -284,6 +284,7 @@ model Store {
   apiKeys           ApiKey[]
   customEventDefs   CustomEventDefinition[]
   emailTemplates    EmailTemplate[]         @relation("StoreEmailTemplates")
+  emailSubscribers  EmailSubscriber[]       @relation("StoreEmailSubscribers")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1255,5 +1256,48 @@ model EmailTemplate {
   @@index([category])
   @@index([isGlobal])
   @@map("email_templates")
+}
+
+enum EmailSubscriberStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+  BOUNCED
+  COMPLAINED
+  PENDING
+}
+
+enum EmailSubscriberSource {
+  SHOPIFY
+  MANUAL
+  CSV_IMPORT
+  SIGNUP_FORM
+  API
+}
+
+model EmailSubscriber {
+  id                  String                @id @default(uuid())
+  storeId             String
+  email               String
+  firstName           String?
+  lastName            String?
+  status              EmailSubscriberStatus @default(SUBSCRIBED)
+  source              EmailSubscriberSource @default(MANUAL)
+  shopifyCustomerId   String?
+  syncedFromShopifyAt DateTime?
+  suppressionReason   String?
+  tags                String[]              @default([])
+  subscribedAt        DateTime              @default(now())
+  unsubscribedAt      DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  store Store @relation("StoreEmailSubscribers", fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, email])
+  @@index([storeId])
+  @@index([status])
+  @@index([source])
+  @@index([shopifyCustomerId])
+  @@map("email_subscribers")
 }
 
