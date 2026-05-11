@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, FormEvent, useMemo } from 'react';
+import { useState, FormEvent, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Save, ArrowLeft, Eye, Loader2 } from 'lucide-react';
+import { Save, ArrowLeft, Eye, Loader2, LayoutGrid, Code2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/lib/hooks/useToast';
+import { cn } from '@/lib/utils';
+import { BlockEditor } from '@/components/email/BlockEditor';
+import {
+  type EmailDocument,
+  createEmptyDocument,
+  createBlock,
+} from '@/lib/email/blocks/types';
+import { compileEmailDocument, parseEmailDocument } from '@/lib/email/blocks/compile';
 
 export interface TemplateFormValues {
   id?: string;
@@ -18,6 +26,7 @@ export interface TemplateFormValues {
   preheaderText: string;
   htmlBody: string;
   tags: string[];
+  jsonDesign?: unknown;
 }
 
 const CATEGORIES: Array<{ value: string; label: string }> = [
@@ -32,25 +41,19 @@ const CATEGORIES: Array<{ value: string; label: string }> = [
   { value: 'custom', label: 'Custom' },
 ];
 
-const DEFAULT_STARTER_HTML = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Email</title></head>
-<body style="margin:0;padding:24px;background:#f4f4f4;font-family:Arial,sans-serif;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
-    <h1 style="color:#1a1a2e;margin:0 0 16px;">Hi {{first_name}},</h1>
-    <p style="color:#555;line-height:1.6;">
-      Your message goes here. Use merge tags like {{shop_name}} and {{first_name}}
-      to personalize.
-    </p>
-    <p style="text-align:center;margin-top:32px;">
-      <a href="{{shop_url}}"
-         style="background:#e94560;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;">
-        Call to Action
-      </a>
-    </p>
-  </div>
-</body>
-</html>`;
+function makeStarterDocument(): EmailDocument {
+  const doc = createEmptyDocument();
+  doc.blocks = [
+    createBlock('heading'),
+    createBlock('text'),
+    createBlock('button'),
+    createBlock('divider'),
+    createBlock('footer'),
+  ];
+  return doc;
+}
+
+const DEFAULT_STARTER_HTML = compileEmailDocument(makeStarterDocument());
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
@@ -69,10 +72,56 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
   const [category, setCategory] = useState(initial?.category ?? 'custom');
   const [subject, setSubject] = useState(initial?.subject ?? '');
   const [preheaderText, setPreheaderText] = useState(initial?.preheaderText ?? '');
-  const [htmlBody, setHtmlBody] = useState(initial?.htmlBody ?? DEFAULT_STARTER_HTML);
   const [tagsInput, setTagsInput] = useState((initial?.tags ?? []).join(', '));
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Visual / HTML mode + state
+  const initialDoc = useMemo<EmailDocument>(() => {
+    const parsed = parseEmailDocument(initial?.jsonDesign);
+    if (parsed) return parsed;
+    if (initial?.htmlBody) {
+      // No structured design: start in HTML mode
+      return makeStarterDocument();
+    }
+    return makeStarterDocument();
+  }, [initial?.jsonDesign, initial?.htmlBody]);
+
+  const [editorMode, setEditorMode] = useState<'visual' | 'html'>(() => {
+    // If we have a real jsonDesign, default to visual; otherwise stay in HTML
+    return parseEmailDocument(initial?.jsonDesign) ? 'visual' : (initial?.htmlBody ? 'html' : 'visual');
+  });
+  const [doc, setDoc] = useState<EmailDocument>(initialDoc);
+  const [htmlBody, setHtmlBody] = useState(
+    initial?.htmlBody ?? (parseEmailDocument(initial?.jsonDesign) ? compileEmailDocument(initialDoc) : DEFAULT_STARTER_HTML),
+  );
+
+  // Keep htmlBody in sync with the block document while in visual mode.
+  // In html mode we leave htmlBody untouched (manual edits are source of truth).
+  useEffect(() => {
+    if (editorMode === 'visual') {
+      setHtmlBody(compileEmailDocument(doc));
+    }
+  }, [doc, editorMode]);
+
+  function switchToHtmlMode() {
+    // Compile latest doc once before switching so the textarea has fresh content
+    setHtmlBody(compileEmailDocument(doc));
+    setEditorMode('html');
+  }
+
+  function switchToVisualMode() {
+    // Warn: switching back loses any manual HTML edits beyond what the doc represents
+    if (
+      htmlBody.trim() !== compileEmailDocument(doc).trim() &&
+      !window.confirm(
+        'Switching back to Visual mode will discard any direct HTML edits and re-render from the blocks. Continue?',
+      )
+    ) {
+      return;
+    }
+    setEditorMode('visual');
+  }
 
   const previewSrcDoc = useMemo(
     () => htmlBody || '<p style="padding:24px;color:#999;">Empty body</p>',
@@ -91,13 +140,20 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
       .map(t => t.trim())
       .filter(Boolean);
 
+    // If user is in visual mode, the htmlBody we send is always the freshly
+    // compiled doc; jsonDesign carries the block tree.
+    // If user is in HTML mode, we send the textarea content as htmlBody and
+    // clear jsonDesign so the round-trip on next edit doesn't overwrite their
+    // manual edits.
+    const compiledHtml = editorMode === 'visual' ? compileEmailDocument(doc) : htmlBody;
     const payload = {
       name: name.trim(),
       description: description.trim() || null,
       category,
       subject,
       preheaderText,
-      htmlBody,
+      htmlBody: compiledHtml,
+      jsonDesign: editorMode === 'visual' ? doc : null,
       tags,
     };
 
@@ -129,7 +185,7 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Link href="/email/templates">
             <Button type="button" variant="outline" size="sm" className="gap-2">
@@ -158,7 +214,7 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <div>
@@ -233,16 +289,48 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
           </div>
         </div>
 
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-2 h-full">
-            <Label htmlFor="htmlBody">HTML Body</Label>
-            <textarea
-              id="htmlBody"
-              value={htmlBody}
-              onChange={e => setHtmlBody(e.target.value)}
-              className="w-full h-[520px] rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-              spellCheck={false}
-            />
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center gap-1 px-3 py-2 border-b bg-gray-50">
+              <ModeTab
+                active={editorMode === 'visual'}
+                onClick={switchToVisualMode}
+                icon={LayoutGrid}
+                label="Visual Blocks"
+              />
+              <ModeTab
+                active={editorMode === 'html'}
+                onClick={switchToHtmlMode}
+                icon={Code2}
+                label="HTML Code"
+              />
+              <div className="ml-auto text-xs text-gray-400">
+                {editorMode === 'visual'
+                  ? 'Drag-and-drop email blocks like Klaviyo/Mailchimp'
+                  : 'Direct HTML — for advanced users'}
+              </div>
+            </div>
+
+            {editorMode === 'visual' ? (
+              <div className="p-4">
+                <BlockEditor value={doc} onChange={setDoc} />
+              </div>
+            ) : (
+              <div className="p-4 space-y-2">
+                <Label htmlFor="htmlBody">HTML Body</Label>
+                <textarea
+                  id="htmlBody"
+                  value={htmlBody}
+                  onChange={e => setHtmlBody(e.target.value)}
+                  className="w-full h-[520px] rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                  spellCheck={false}
+                />
+                <p className="text-xs text-amber-600">
+                  ⚠️ Saving in HTML mode discards the block design. Switch back to Visual to
+                  re-generate from blocks.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -279,5 +367,33 @@ export function TemplateForm({ mode, initial }: TemplateFormProps) {
         </div>
       )}
     </form>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+        active
+          ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+          : 'text-gray-500 hover:text-gray-700',
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }

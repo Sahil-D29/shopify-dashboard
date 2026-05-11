@@ -31,6 +31,7 @@ interface Campaign {
   replyTo: string | null;
   preheaderText: string | null;
   htmlBody: string;
+  jsonDesign: unknown | null;
   audienceMode: 'ALL_SUBSCRIBERS' | 'SEGMENTS';
   scheduleType: 'IMMEDIATE' | 'SCHEDULED';
   scheduledAt: string | null;
@@ -160,6 +161,7 @@ export default function CampaignDetailPage({
       replyTo: campaign.replyTo ?? '',
       preheaderText: campaign.preheaderText ?? '',
       htmlBody: campaign.htmlBody,
+      jsonDesign: campaign.jsonDesign,
       audienceMode: campaign.audienceMode,
       scheduleType: campaign.scheduleType,
       scheduledAt: campaign.scheduledAt

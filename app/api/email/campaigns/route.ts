@@ -26,6 +26,7 @@ interface CreateCampaignPayload {
   replyTo?: string | null;
   preheaderText?: string | null;
   htmlBody?: string;
+  jsonDesign?: unknown;
   templateId?: string | null;
   audienceMode?: string;
   segmentIds?: string[];
@@ -165,6 +166,7 @@ export async function POST(request: NextRequest) {
         replyTo: body.replyTo?.trim() || null,
         preheaderText: body.preheaderText?.trim() || null,
         htmlBody: body.htmlBody ?? '',
+        jsonDesign: (body.jsonDesign ?? null) as any,
         templateId: body.templateId ?? null,
         audienceMode,
         segmentIds: Array.isArray(body.segmentIds) ? body.segmentIds : [],

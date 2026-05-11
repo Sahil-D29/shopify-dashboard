@@ -43,6 +43,7 @@ export default function EditEmailTemplatePage({
           preheaderText: t.preheaderText ?? '',
           htmlBody: t.htmlBody ?? '',
           tags: Array.isArray(t.tags) ? t.tags : [],
+          jsonDesign: t.jsonDesign ?? null,
         });
       } catch (error) {
         toast.error(getErrorMessage(error, 'Unable to load template'));

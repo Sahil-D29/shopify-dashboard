@@ -107,6 +107,7 @@ export async function PATCH(
     if (body.replyTo !== undefined) data.replyTo = body.replyTo?.trim() || null;
     if (body.preheaderText !== undefined) data.preheaderText = body.preheaderText?.trim() || null;
     if (typeof body.htmlBody === 'string') data.htmlBody = body.htmlBody;
+    if (body.jsonDesign !== undefined) data.jsonDesign = body.jsonDesign;
     if (body.templateId !== undefined) data.templateId = body.templateId || null;
     if (typeof body.audienceMode === 'string' && VALID_AUDIENCE_MODES.has(body.audienceMode)) {
       data.audienceMode = body.audienceMode;

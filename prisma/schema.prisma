@@ -1380,6 +1380,7 @@ model EmailCampaign {
   replyTo       String?
   preheaderText String?
   htmlBody      String                    @default("")
+  jsonDesign    Json?
   templateId    String?
 
   audienceMode    String   @default("ALL_SUBSCRIBERS") // ALL_SUBSCRIBERS | SEGMENTS

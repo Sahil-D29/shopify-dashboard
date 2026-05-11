@@ -13,12 +13,21 @@ import {
   Clock,
   Zap,
   Mail,
+  LayoutGrid,
+  Code2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/lib/hooks/useToast';
 import { cn } from '@/lib/utils';
+import { BlockEditor } from '@/components/email/BlockEditor';
+import {
+  type EmailDocument,
+  createEmptyDocument,
+  createBlock,
+} from '@/lib/email/blocks/types';
+import { compileEmailDocument, parseEmailDocument } from '@/lib/email/blocks/compile';
 
 export interface CampaignFormValues {
   id?: string;
@@ -29,6 +38,7 @@ export interface CampaignFormValues {
   replyTo: string;
   preheaderText: string;
   htmlBody: string;
+  jsonDesign?: unknown;
   audienceMode: 'ALL_SUBSCRIBERS' | 'SEGMENTS';
   scheduleType: 'IMMEDIATE' | 'SCHEDULED';
   scheduledAt: string; // ISO string for datetime-local
@@ -44,6 +54,19 @@ interface EmailTemplate {
   subject: string;
   preheaderText: string;
   htmlBody: string;
+  jsonDesign?: unknown;
+}
+
+function makeStarterDocument(): EmailDocument {
+  const doc = createEmptyDocument();
+  doc.blocks = [
+    createBlock('heading'),
+    createBlock('text'),
+    createBlock('button'),
+    createBlock('divider'),
+    createBlock('footer'),
+  ];
+  return doc;
 }
 
 interface VerifiedDomain {
@@ -91,7 +114,51 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
   const [fromEmail, setFromEmail] = useState(initial?.fromEmail ?? '');
   const [replyTo, setReplyTo] = useState(initial?.replyTo ?? '');
   const [preheaderText, setPreheaderText] = useState(initial?.preheaderText ?? '');
-  const [htmlBody, setHtmlBody] = useState(initial?.htmlBody ?? DEFAULT_HTML_BODY);
+
+  // Block-editor state
+  const initialDoc = useMemo<EmailDocument>(() => {
+    const parsed = parseEmailDocument(initial?.jsonDesign);
+    if (parsed) return parsed;
+    return makeStarterDocument();
+  }, [initial?.jsonDesign]);
+  const [editorMode, setEditorMode] = useState<'visual' | 'html'>(() =>
+    parseEmailDocument(initial?.jsonDesign)
+      ? 'visual'
+      : initial?.htmlBody
+        ? 'html'
+        : 'visual',
+  );
+  const [doc, setDoc] = useState<EmailDocument>(initialDoc);
+  const [htmlBody, setHtmlBody] = useState(
+    initial?.htmlBody ??
+      (parseEmailDocument(initial?.jsonDesign)
+        ? compileEmailDocument(initialDoc)
+        : DEFAULT_HTML_BODY),
+  );
+
+  useEffect(() => {
+    if (editorMode === 'visual') {
+      setHtmlBody(compileEmailDocument(doc));
+    }
+  }, [doc, editorMode]);
+
+  function switchToHtmlMode() {
+    setHtmlBody(compileEmailDocument(doc));
+    setEditorMode('html');
+  }
+
+  function switchToVisualMode() {
+    if (
+      htmlBody.trim() !== compileEmailDocument(doc).trim() &&
+      !window.confirm(
+        'Switching back to Visual mode will discard direct HTML edits and re-render from blocks. Continue?',
+      )
+    ) {
+      return;
+    }
+    setEditorMode('visual');
+  }
+
   const [audienceMode, setAudienceMode] = useState<CampaignFormValues['audienceMode']>(
     initial?.audienceMode ?? 'ALL_SUBSCRIBERS',
   );
@@ -146,16 +213,31 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
     const tpl = templates.find(t => t.id === templateId);
     if (!tpl) return;
     if (htmlBody && htmlBody !== DEFAULT_HTML_BODY) {
-      if (!window.confirm('Loading this template will replace the current HTML body. Continue?'))
+      if (
+        !window.confirm(
+          'Loading this template will replace the current email design. Continue?',
+        )
+      )
         return;
     }
-    setHtmlBody(tpl.htmlBody);
+    const parsedTpl = parseEmailDocument(tpl.jsonDesign);
+    if (parsedTpl) {
+      // Template has a structured design — load it into the block editor
+      setDoc(parsedTpl);
+      setHtmlBody(compileEmailDocument(parsedTpl));
+      setEditorMode('visual');
+    } else {
+      // Template is HTML-only — switch to HTML mode and load its body
+      setHtmlBody(tpl.htmlBody);
+      setEditorMode('html');
+    }
     if (!subject) setSubject(tpl.subject);
     if (!preheaderText) setPreheaderText(tpl.preheaderText);
     toast.success(`Loaded template: ${tpl.name}`);
   }
 
   async function buildPayload(): Promise<any> {
+    const compiledHtml = editorMode === 'visual' ? compileEmailDocument(doc) : htmlBody;
     return {
       name: name.trim(),
       subject: subject.trim(),
@@ -163,7 +245,8 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
       fromEmail: fromEmail.trim(),
       replyTo: replyTo.trim() || null,
       preheaderText: preheaderText.trim() || null,
-      htmlBody,
+      htmlBody: compiledHtml,
+      jsonDesign: editorMode === 'visual' ? doc : null,
       audienceMode,
       segmentIds: [],
       scheduleType,
@@ -414,12 +497,23 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">HTML Body</h2>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center gap-1 px-3 py-2 border-b bg-gray-50 flex-wrap">
+              <CampaignModeTab
+                active={editorMode === 'visual'}
+                onClick={() => !isLocked && switchToVisualMode()}
+                icon={LayoutGrid}
+                label="Visual Blocks"
+              />
+              <CampaignModeTab
+                active={editorMode === 'html'}
+                onClick={() => !isLocked && switchToHtmlMode()}
+                icon={Code2}
+                label="HTML Code"
+              />
               {templates.length > 0 && (
                 <select
-                  className="text-xs rounded border border-gray-200 px-2 py-1 bg-white"
+                  className="ml-auto text-xs rounded border border-gray-200 px-2 py-1 bg-white"
                   defaultValue=""
                   onChange={e => {
                     if (e.target.value) {
@@ -438,19 +532,32 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
                 </select>
               )}
             </div>
-            <textarea
-              value={htmlBody}
-              onChange={e => setHtmlBody(e.target.value)}
-              className="w-full h-[420px] rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-              spellCheck={false}
-              disabled={isLocked}
-            />
-            <div className="text-xs text-gray-500">
-              Use merge tags: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code>{' '}
-              <code className="bg-gray-100 px-1 rounded">{'{{shop_name}}'}</code>{' '}
-              <code className="bg-gray-100 px-1 rounded">{'{{shop_url}}'}</code>{' '}
-              <code className="bg-gray-100 px-1 rounded">{'{{unsubscribe_url}}'}</code>
-            </div>
+
+            {editorMode === 'visual' ? (
+              <div className="p-4">
+                <BlockEditor value={doc} onChange={setDoc} />
+              </div>
+            ) : (
+              <div className="p-4 space-y-2">
+                <textarea
+                  value={htmlBody}
+                  onChange={e => setHtmlBody(e.target.value)}
+                  className="w-full h-[420px] rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                  spellCheck={false}
+                  disabled={isLocked}
+                />
+                <p className="text-xs text-amber-600">
+                  ⚠️ HTML mode discards the visual block design on save. Switch back to
+                  Visual to keep blocks.
+                </p>
+                <div className="text-xs text-gray-500">
+                  Merge tags: <code className="bg-gray-100 px-1 rounded">{'{{first_name}}'}</code>{' '}
+                  <code className="bg-gray-100 px-1 rounded">{'{{shop_name}}'}</code>{' '}
+                  <code className="bg-gray-100 px-1 rounded">{'{{shop_url}}'}</code>{' '}
+                  <code className="bg-gray-100 px-1 rounded">{'{{unsubscribe_url}}'}</code>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -653,5 +760,33 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
         </div>
       )}
     </form>
+  );
+}
+
+function CampaignModeTab({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+        active
+          ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+          : 'text-gray-500 hover:text-gray-700',
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }
