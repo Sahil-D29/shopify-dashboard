@@ -285,6 +285,7 @@ model Store {
   customEventDefs   CustomEventDefinition[]
   emailTemplates    EmailTemplate[]         @relation("StoreEmailTemplates")
   emailSubscribers  EmailSubscriber[]       @relation("StoreEmailSubscribers")
+  emailDomains      EmailDomain[]           @relation("StoreEmailDomains")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1299,5 +1300,35 @@ model EmailSubscriber {
   @@index([source])
   @@index([shopifyCustomerId])
   @@map("email_subscribers")
+}
+
+enum EmailDomainStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+model EmailDomain {
+  id             String            @id @default(uuid())
+  storeId        String
+  name           String
+  region         String            @default("us-east-1")
+  resendDomainId String?           @unique
+  status         EmailDomainStatus @default(PENDING)
+  dnsRecords     Json?
+  lastCheckedAt  DateTime?
+  verifiedAt     DateTime?
+  isDefault      Boolean           @default(false)
+  createdBy      String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  store Store @relation("StoreEmailDomains", fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([status])
+  @@map("email_domains")
 }
 
