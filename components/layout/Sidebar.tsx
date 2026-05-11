@@ -24,7 +24,16 @@ import {
   Contact,
   Workflow,
   BarChart3,
-  CreditCard
+  CreditCard,
+  Mail,
+  Send,
+  FileText,
+  PieChart,
+  Globe,
+  FlaskConical,
+  BellRing,
+  ArrowRightLeft,
+  UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getWindowStorage } from '@/lib/window-storage';
@@ -37,6 +46,7 @@ const USER_PREFERENCES_KEY = 'user:preferences';
 
 interface UserPreferences {
   sidebarCustomersExpanded?: boolean;
+  sidebarEmailExpanded?: boolean;
 }
 
 interface SidebarProps {
@@ -57,6 +67,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [isCustomersExpanded, setIsCustomersExpanded] = useState(false);
+  const [isEmailExpanded, setIsEmailExpanded] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [canAccessSettings, setCanAccessSettings] = useState(false);
@@ -141,6 +152,20 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
         console.warn('[Sidebar] Failed to load user preferences', error);
       }
     }
+    // Auto-expand email section when on email pages
+    if (pathname?.startsWith('/email')) {
+      setIsEmailExpanded(true);
+    } else {
+      try {
+        const storage = getWindowStorage();
+        const preferences = storage.getJSON<UserPreferences>(USER_PREFERENCES_KEY, {});
+        if (preferences?.sidebarEmailExpanded != null) {
+          setIsEmailExpanded(Boolean(preferences.sidebarEmailExpanded));
+        }
+      } catch (error) {
+        console.warn('[Sidebar] Failed to load email preferences', error);
+      }
+    }
   }, [pathname]);
 
   const toggleCustomers = () => {
@@ -157,6 +182,19 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
       storage.setJSON(USER_PREFERENCES_KEY, updated);
     } catch (error) {
       console.warn('[Sidebar] Failed to persist user preferences', error);
+    }
+  };
+
+  const toggleEmail = () => {
+    const newState = !isEmailExpanded;
+    setIsEmailExpanded(newState);
+    try {
+      const storage = getWindowStorage();
+      const preferences = storage.getJSON<UserPreferences>(USER_PREFERENCES_KEY, {}) ?? {};
+      const updated: UserPreferences = { ...preferences, sidebarEmailExpanded: newState };
+      storage.setJSON(USER_PREFERENCES_KEY, updated);
+    } catch (error) {
+      console.warn('[Sidebar] Failed to persist email preferences', error);
     }
   };
 
@@ -337,6 +375,64 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Zap className="h-5 w-5 shrink-0" />
           Campaigns
         </Link>
+
+        {/* Email Marketing Section */}
+        <div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleEmail}
+              className={cn(
+                "flex-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                pathname?.startsWith('/email')
+                  ? "bg-gray-800 text-white"
+                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
+              )}
+            >
+              <Mail className="h-5 w-5 shrink-0" />
+              <span className="flex-1 text-left">Email Marketing</span>
+              {isEmailExpanded ? (
+                <ChevronDown className="h-4 w-4 transition-transform duration-200" />
+              ) : (
+                <ChevronRight className="h-4 w-4 transition-transform duration-200" />
+              )}
+            </button>
+          </div>
+
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-300 ease-in-out",
+              isEmailExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+            )}
+          >
+            <div className="ml-4 space-y-0.5 mt-1">
+              {[
+                { name: 'Campaigns', href: '/email/campaigns', icon: Send },
+                { name: 'Templates', href: '/email/templates', icon: FileText },
+                { name: 'Analytics', href: '/email/analytics', icon: PieChart },
+                { name: 'Subscribers', href: '/email/subscribers', icon: UserPlus },
+                { name: 'Domains', href: '/email/domains', icon: Globe },
+                { name: 'A/B Tests', href: '/email/ab-tests', icon: FlaskConical },
+                { name: 'Back-in-Stock', href: '/email/back-in-stock', icon: BellRing },
+                { name: 'Cross-Sell', href: '/email/cross-sell', icon: ArrowRightLeft },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={isMobile ? onClose : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    pathname === item.href
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                  )}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="text-xs">{item.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* Journeys */}
         <Link
