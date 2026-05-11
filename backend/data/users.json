@@ -1,0 +1,36 @@
+{
+  "users": [
+    {
+      "id": "u_admin_001",
+      "email": "admin@site.com",
+      "name": "System Admin",
+      "role": "super_admin",
+      "ownedStores": [],
+      "assignedStores": [],
+      "stores": [],
+      "permissions": {},
+      "invitedBy": null,
+      "status": "active",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "lastLogin": null
+    },
+    {
+      "id": "u_user_001",
+      "email": "sailakshmisinghbaghel@gmail.com",
+      "name": "Sailakshmi Singh Baghel",
+      "role": "super_admin",
+      "ownedStores": [],
+      "assignedStores": [],
+      "stores": [],
+      "permissions": {},
+      "invitedBy": null,
+      "status": "active",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "lastLogin": null
+    }
+  ]
+}
+
+

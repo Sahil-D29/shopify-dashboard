@@ -1,0 +1,319 @@
+import { NextRequest, NextResponse } from 'next/server';
+import type { CustomerSegment } from '@/lib/types/segment';
+import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { filterByStoreId, ensureStoreId, getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { getUserContext, buildStoreFilter } from '@/lib/user-context';
+import { calculateSegmentStatsFromFiles } from '@/lib/utils/segment-stats-file-based';
+
+// Ensure this route runs on Node.js runtime (not edge)
+export const runtime = 'nodejs';
+
+interface SegmentCreationPayload {
+  name: string;
+  description?: string;
+  type?: CustomerSegment['type'];
+  conditionGroups?: CustomerSegment['conditionGroups'];
+  customerCount?: number;
+  totalRevenue?: number;
+  averageOrderValue?: number;
+  lastCalculated?: number;
+  folderId?: string;
+  isArchived?: boolean;
+}
+
+const parseLimit = (value: string | null, fallback: number): number => {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseBoolean = (value: string | null): boolean => value === 'true';
+
+const matchesSearch = (segment: CustomerSegment, search: string): boolean =>
+  Boolean(
+    segment.name?.toLowerCase().includes(search) ||
+      segment.description?.toLowerCase().includes(search) ||
+      segment.id?.toLowerCase().includes(search),
+  );
+
+const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+export async function GET(request: NextRequest) {
+  try {
+    // Get user context for role-based access
+    const userContext = await getUserContext(request);
+    
+    if (!userContext) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Unauthorized',
+          segments: [] 
+        },
+        { status: 401 }
+      );
+    }
+
+    // Get store ID from request
+    const requestedStoreId = await getCurrentStoreId(request);
+    
+    // Build store filter based on user role
+    const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
+    
+    // Load segments from file
+    let segments = readJsonFile<CustomerSegment>('segments.json');
+    
+    // Flexible filtering - show all data including legacy (null/default/empty storeId)
+    if (userContext.role === 'ADMIN') {
+      // Admin sees everything - no filtering
+      // segments already contains all segments
+    } else if (userContext.role === 'STORE_OWNER') {
+      // Store owner sees their store + any legacy data (null/default/empty storeId)
+      const userStoreId = userContext.storeId;
+      segments = segments.filter(s => {
+        // Include if matches user's store
+        if (s.storeId === userStoreId) return true;
+        // Include legacy data (no storeId or default values)
+        if (!s.storeId || s.storeId === 'default' || s.storeId === '' || s.storeId === null) return true;
+        return false;
+      });
+    } else {
+      // USER sees assigned store + legacy data
+      const userStoreId = userContext.assignedStoreId || userContext.storeId;
+      segments = segments.filter(s => {
+        // Include if matches user's assigned store
+        if (s.storeId === userStoreId) return true;
+        // Include legacy data (no storeId or default values)
+        if (!s.storeId || s.storeId === 'default' || s.storeId === '' || s.storeId === null) return true;
+        return false;
+      });
+    }
+    
+    const refresh = parseBoolean(request.nextUrl.searchParams.get('refresh'));
+    const search = request.nextUrl.searchParams.get('search')?.toLowerCase() ?? '';
+    const limit = parseLimit(request.nextUrl.searchParams.get('limit'), 20);
+
+    const filteredSegments = search ? segments.filter(segment => matchesSearch(segment, search)) : segments;
+
+    // Calculate stats from file-based customer data (no Shopify dependency)
+    const enrichedSegments = await Promise.all(
+      filteredSegments.slice(0, limit).map(async segment => {
+        try {
+          // Calculate stats from file-based customer data
+          const stats = await calculateSegmentStatsFromFiles({
+            segmentId: segment.id,
+            conditionGroups: segment.conditionGroups,
+            storeId: storeFilter.storeId || undefined,
+            forceRefresh: refresh,
+          });
+
+          // Update segment with calculated stats
+          const updatedSegment = {
+            ...segment,
+            customerCount: stats.customerCount,
+            totalValue: stats.totalValue,
+            totalRevenue: stats.totalValue, // Keep for backward compatibility
+            averageOrderValue: stats.avgOrderValue,
+            lastUpdated: stats.lastUpdated,
+            lastCalculated: stats.lastUpdated, // Keep for backward compatibility
+            usingCachedStats: false, // File-based, not cached
+          };
+
+          // Save updated stats to segment file (optional - can be done async)
+          // This ensures stats persist for next time
+          try {
+            const allSegments = readJsonFile<CustomerSegment>('segments.json');
+            const segmentIndex = allSegments.findIndex(s => s.id === segment.id);
+            if (segmentIndex !== -1) {
+              allSegments[segmentIndex] = {
+                ...allSegments[segmentIndex],
+                customerCount: stats.customerCount,
+                totalRevenue: stats.totalValue,
+                averageOrderValue: stats.avgOrderValue,
+                lastCalculated: stats.lastUpdated,
+                updatedAt: Date.now(),
+              };
+              writeJsonFile('segments.json', allSegments);
+            }
+          } catch (saveError) {
+            // Non-critical - stats calculation succeeded even if save fails
+            console.warn(`[Segments][GET] Failed to save stats for segment ${segment.id}:`, getErrorMessage(saveError));
+          }
+
+          return updatedSegment;
+        } catch (statsError) {
+          console.warn(`[Segments][GET] Failed to calculate stats for segment ${segment.id}:`, getErrorMessage(statsError));
+          // Return segment with existing cached values if calculation fails
+          return {
+            ...segment,
+            customerCount: segment.customerCount ?? 0,
+            totalValue: segment.totalRevenue ?? 0,
+            averageOrderValue: segment.averageOrderValue ?? 0,
+            lastUpdated: segment.lastCalculated ?? Date.now(),
+            usingCachedStats: true,
+          };
+        }
+      }),
+    );
+
+    return NextResponse.json({
+      success: true,
+      segments: enrichedSegments,
+      total: filteredSegments.length,
+      search,
+      fetchedAt: Date.now(),
+      // No warnings - file-based calculation is always available
+    });
+  } catch (error) {
+    console.error('[Segments][GET] Error fetching segments:', error);
+    
+    // Always return 200 with empty array to prevent frontend crashes
+    // Try to return segments even on error (graceful degradation)
+    try {
+      const userContext = await getUserContext(request);
+      if (!userContext) {
+        return NextResponse.json({
+          success: false,
+          error: 'Unauthorized',
+          segments: [],
+          total: 0,
+        }, { status: 200 });
+      }
+
+      const segments = readJsonFile<CustomerSegment>('segments.json');
+      const storeFilter = buildStoreFilter(userContext, await getCurrentStoreId(request) || undefined);
+      
+      let filteredSegments = segments;
+      if (!storeFilter.allowAll && storeFilter.storeId) {
+        filteredSegments = filterByStoreId(segments, storeFilter.storeId);
+      } else if (!storeFilter.allowAll) {
+        filteredSegments = [];
+      }
+
+      return NextResponse.json({
+        success: false,
+        segments: filteredSegments.map(s => ({
+          ...s,
+          customerCount: s.customerCount ?? 0,
+          totalValue: s.totalRevenue ?? 0,
+          averageOrderValue: s.averageOrderValue ?? 0,
+          lastUpdated: s.lastCalculated ?? Date.now(),
+          usingCachedStats: true,
+        })),
+        total: filteredSegments.length,
+        error: 'Failed to enrich segments, showing cached data',
+        details: getErrorMessage(error),
+      }, { status: 200 });
+    } catch (fallbackError) {
+      // If even reading the file fails, return empty array
+      return NextResponse.json({
+        success: false,
+        segments: [],
+        total: 0,
+        error: 'Failed to load segments',
+        details: getErrorMessage(error),
+      }, { status: 200 }); // Return 200 with empty array instead of 500
+    }
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Get user context
+    const userContext = await getUserContext(request);
+    
+    if (!userContext) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get store ID based on role
+    const requestedStoreId = await getCurrentStoreId(request);
+    const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
+    
+    // Determine effective store ID
+    let storeId: string;
+    if (storeFilter.allowAll) {
+      // ADMIN can create segments for any store, use requested or default
+      storeId = requestedStoreId || userContext.storeId || 'default';
+    } else if (storeFilter.storeId) {
+      storeId = storeFilter.storeId;
+    } else {
+      return NextResponse.json(
+        { error: 'Store context required' },
+        { status: 400 }
+      );
+    }
+    
+    const data = (await request.json()) as SegmentCreationPayload;
+    
+    // Validate required fields
+    if (!data.name?.trim()) {
+      return NextResponse.json(
+        { error: 'Missing required field: name' },
+        { status: 400 }
+      );
+    }
+
+    // Read existing segments
+    let segments = readJsonFile<CustomerSegment>('segments.json');
+    
+    // Filter by store to check for duplicates within store
+    const storeSegments = filterByStoreId(segments, storeId);
+    
+    // Check if segment with same name already exists in this store
+    const existingSegment = storeSegments.find(s => s.name.toLowerCase() === data.name.toLowerCase());
+    if (existingSegment) {
+      return NextResponse.json(
+        { error: 'Segment with this name already exists' },
+        { status: 409 }
+      );
+    }
+
+    // Generate unique ID
+    const id = `seg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create new segment with defaults
+    const newSegment: CustomerSegment = {
+      id,
+      name: data.name,
+      description: data.description,
+      type: data.type || 'DYNAMIC',
+      conditionGroups: data.conditionGroups || [],
+      // Custom segment fields
+      customerIds: data.customerIds,
+      source: data.source,
+      importMetadata: data.importMetadata,
+      customerCount: data.customerCount || (data.customerIds?.length || 0),
+      totalRevenue: data.totalRevenue || 0,
+      averageOrderValue: data.averageOrderValue || 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      lastCalculated: data.lastCalculated,
+      folderId: data.folderId,
+      isArchived: data.isArchived || false,
+      storeId, // Add storeId
+    };
+
+    // Add to array and save
+    segments.push(newSegment);
+    writeJsonFile('segments.json', segments);
+
+    console.log(`✅ Segment created: ${id} (${newSegment.name})`);
+    
+    return NextResponse.json(
+      {
+        segment: newSegment,
+        success: true,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error('Error creating segment:', error);
+    return NextResponse.json(
+      { error: 'Failed to create segment', details: getErrorMessage(error) },
+      { status: 500 }
+    );
+  }
+}
