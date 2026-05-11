@@ -286,6 +286,8 @@ model Store {
   emailTemplates    EmailTemplate[]         @relation("StoreEmailTemplates")
   emailSubscribers  EmailSubscriber[]       @relation("StoreEmailSubscribers")
   emailDomains      EmailDomain[]           @relation("StoreEmailDomains")
+  emailCampaigns    EmailCampaign[]         @relation("StoreEmailCampaigns")
+  emailEvents       EmailEvent[]            @relation("StoreEmailEvents")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1330,5 +1332,146 @@ model EmailDomain {
   @@index([storeId])
   @@index([status])
   @@map("email_domains")
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum EmailCampaignScheduleType {
+  IMMEDIATE
+  SCHEDULED
+}
+
+enum EmailCampaignSendStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
+enum EmailEventType {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  UNSUBSCRIBED
+  FAILED
+}
+
+model EmailCampaign {
+  id            String                    @id @default(uuid())
+  storeId       String
+  name          String
+  subject       String
+  fromName      String
+  fromEmail     String
+  replyTo       String?
+  preheaderText String?
+  htmlBody      String                    @default("")
+  templateId    String?
+
+  audienceMode    String   @default("ALL_SUBSCRIBERS") // ALL_SUBSCRIBERS | SEGMENTS
+  segmentIds      String[] @default([])
+
+  status       EmailCampaignStatus       @default(DRAFT)
+  scheduleType EmailCampaignScheduleType @default(IMMEDIATE)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  abTestEnabled        Boolean @default(false)
+  abTestPercent        Int     @default(20) // percent of audience that gets the test
+  abTestVariantSubject String?
+  abTestWinnerMetric   String  @default("OPEN_RATE") // OPEN_RATE | CLICK_RATE
+
+  totalRecipients   Int @default(0)
+  sentCount         Int @default(0)
+  deliveredCount    Int @default(0)
+  openedCount       Int @default(0)
+  clickedCount      Int @default(0)
+  bouncedCount      Int @default(0)
+  complainedCount   Int @default(0)
+  unsubscribedCount Int @default(0)
+  failedCount       Int @default(0)
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store                @relation("StoreEmailCampaigns", fields: [storeId], references: [id], onDelete: Cascade)
+  sends EmailCampaignSend[]
+  events EmailEvent[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("email_campaigns")
+}
+
+model EmailCampaignSend {
+  id            String                  @id @default(uuid())
+  campaignId    String
+  subscriberId  String?
+  email         String
+  variant       String                  @default("A") // A or B for A/B testing
+  resendEmailId String?                 @unique
+  status        EmailCampaignSendStatus @default(PENDING)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  bouncedAt     DateTime?
+  complainedAt  DateTime?
+  errorMessage  String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, email])
+  @@index([campaignId])
+  @@index([subscriberId])
+  @@index([status])
+  @@index([resendEmailId])
+  @@map("email_campaign_sends")
+}
+
+model EmailEvent {
+  id            String         @id @default(uuid())
+  storeId       String
+  campaignId    String?
+  campaignSendId String?
+  subscriberId  String?
+  resendEmailId String?
+  email         String
+  type          EmailEventType
+  payload       Json?
+  url           String? // for CLICKED events
+  userAgent     String?
+  ipAddress     String?
+  occurredAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+
+  store    Store          @relation("StoreEmailEvents", fields: [storeId], references: [id], onDelete: Cascade)
+  campaign EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([storeId])
+  @@index([campaignId])
+  @@index([type])
+  @@index([resendEmailId])
+  @@index([occurredAt])
+  @@map("email_events")
 }
 
