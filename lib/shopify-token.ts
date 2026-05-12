@@ -17,9 +17,13 @@ export function encryptToken(plainToken: string): string {
  */
 export function getDecryptedToken(store: { accessToken: string }): string {
   if (!store.accessToken) return '';
+  let token: string;
   if (isEncrypted(store.accessToken)) {
-    return decrypt(store.accessToken);
+    token = decrypt(store.accessToken);
+  } else {
+    // Plain text token (legacy / not yet migrated)
+    token = store.accessToken;
   }
-  // Plain text token (legacy / not yet migrated)
-  return store.accessToken;
+  // Strip common prefixes like "token " or "Bearer " (user may have pasted with prefix)
+  return token.trim().replace(/^(token|bearer)\s+/i, '');
 }

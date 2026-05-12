@@ -6,6 +6,7 @@ import type { ShopifyConfig } from '@/lib/store-config';
 import { prisma } from '@/lib/prisma';
 import { UserStatus, UserRole } from '@prisma/client';
 import { encryptToken } from '@/lib/shopify-token';
+import { registerWebhooks } from '@/lib/shopify-webhooks';
 
 /**
  * POST /api/settings/shopify
@@ -147,9 +148,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ── Register webhooks with Shopify (fire-and-forget) ──────────
+    registerWebhooks(config.shopUrl, config.accessToken).catch((err) =>
+      console.error('[Shopify Settings] Webhook registration failed:', err),
+    );
+
+    // ── Trigger initial customer sync (fire-and-forget) ─────────
+    const baseUrl = request.nextUrl.origin;
+    fetch(`${baseUrl}/api/contacts/sync-shopify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: request.headers.get('cookie') || '',
+        'x-store-id': store.id,
+      },
+      body: JSON.stringify({ overwrite: false }),
+    }).catch((err) =>
+      console.error('[Shopify Settings] Initial customer sync failed:', err),
+    );
+
     const response = NextResponse.json({
       success: true,
-      message: 'Shopify configuration saved successfully',
+      message: 'Shopify configuration saved successfully. Webhooks registered and customer sync started.',
       store: {
         id: store.id,
         name: store.storeName,
