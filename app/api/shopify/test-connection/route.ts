@@ -63,23 +63,27 @@ export async function POST(request: NextRequest) {
     // Use normalized shop URL
     const shopUrl = normalizedShopUrl;
 
+    // Normalize access token — strip common prefixes like "token " or "Bearer "
+    const rawToken = config.accessToken.trim();
+    const accessToken = rawToken.replace(/^(token|bearer)\s+/i, '');
+
     // Test the connection by making a simple API call to Shopify
     // Try latest API version first, then fallback to stable version
     const apiVersion = process.env.SHOPIFY_API_VERSION || '2024-10';
     const testUrl = `https://${shopUrl}/admin/api/${apiVersion}/shop.json`;
-    
+
     console.log('[Test Connection] Testing Shopify connection:', {
       originalShopUrl: config.shopUrl,
       normalizedShopUrl: shopUrl,
       apiVersion,
       testUrl,
-      hasAccessToken: !!config.accessToken,
-      accessTokenLength: config.accessToken?.length || 0,
+      hasAccessToken: !!accessToken,
+      accessTokenLength: accessToken.length,
     });
-    
+
     const response = await fetch(testUrl, {
       headers: {
-        'X-Shopify-Access-Token': config.accessToken,
+        'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
       },
     });

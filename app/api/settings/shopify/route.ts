@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
     
     const config: ShopifyConfig = {
       shopUrl: body?.shopUrl || '',
-      accessToken: body?.accessToken || '',
+      // Strip common prefixes like "token " or "Bearer " from access token
+      accessToken: (body?.accessToken || '').trim().replace(/^(token|bearer)\s+/i, ''),
       apiKey: body?.apiKey || '',
       apiSecret: body?.apiSecret || '',
     };
