@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     });
 
     const appUrl = getBaseUrl();
-    return NextResponse.redirect(`${appUrl}/settings?installed=true&shop=${normalizedShop}`);
+    return NextResponse.redirect(`${appUrl}/dashboard?installed=true&shop=${normalizedShop}`);
   } catch (error: any) {
     console.error('OAuth callback error:', error);
     return NextResponse.json(

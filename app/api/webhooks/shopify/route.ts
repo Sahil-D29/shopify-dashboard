@@ -26,6 +26,7 @@ const SUPPORTED_TOPICS = new Set([
   'checkouts/create',
   'customers/create',
   'customers/update',
+  'app/uninstalled',
 ]);
 
 const isRecord = (value: unknown): value is JsonRecord =>
@@ -119,6 +120,19 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('[webhooks][shopify] Campaign attribution error:', error);
+  }
+
+  // ─── Handle app/uninstalled ─────────────────────────────────
+  if (topic === 'app/uninstalled' && shopHeader) {
+    try {
+      await prisma.store.updateMany({
+        where: { shopifyDomain: shopHeader },
+        data: { isActive: false },
+      });
+      console.log(`[webhooks][shopify] app/uninstalled: deactivated store ${shopHeader}`);
+    } catch (err) {
+      console.error('[webhooks][shopify] app/uninstalled handler failed:', err);
+    }
   }
 
   // Queue segment re-evaluation for customer/order events

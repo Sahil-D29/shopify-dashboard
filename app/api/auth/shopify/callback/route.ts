@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
 
     // Where should we go after success? (set during GET /api/auth/shopify)
     const returnTo = request.cookies.get('shopify_oauth_return_to')?.value;
-    const destPath = returnTo === 'onboarding' ? '/onboarding' : '/settings';
+    const destPath = returnTo === 'onboarding' ? '/onboarding'
+                   : returnTo === 'settings' ? '/settings'
+                   : '/dashboard';
 
     console.log('[Shopify Callback] Params:', { code: !!code, shop, state: !!state, error, returnTo });
 

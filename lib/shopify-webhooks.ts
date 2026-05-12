@@ -10,6 +10,9 @@ const REQUIRED_WEBHOOKS = [
   'customers/create',
   'customers/update',
   'app/uninstalled',
+  'customers/data_request',
+  'customers/redact',
+  'shop/redact',
 ] as const;
 
 /**
@@ -22,6 +25,9 @@ export async function registerWebhooks(
 ): Promise<{ registered: string[]; skipped: string[]; errors: string[] }> {
   const baseUrl = getBaseUrl();
   const callbackUrl = `${baseUrl}/api/webhooks/shopify`;
+  const complianceUrl = `${baseUrl}/api/webhooks/shopify/compliance`;
+
+  const COMPLIANCE_TOPICS = new Set(['customers/data_request', 'customers/redact', 'shop/redact']);
 
   const registered: string[] = [];
   const skipped: string[] = [];
@@ -63,7 +69,7 @@ export async function registerWebhooks(
           body: JSON.stringify({
             webhook: {
               topic,
-              address: callbackUrl,
+              address: COMPLIANCE_TOPICS.has(topic) ? complianceUrl : callbackUrl,
               format: 'json',
             },
           }),

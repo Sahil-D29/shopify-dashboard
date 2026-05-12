@@ -1,65 +1,126 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
-import { buildInstallUrl, normalizeShopDomain } from '@/lib/shopify';
 import crypto from 'crypto';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 
-export const runtime = 'nodejs';
+const SHOPIFY_API_KEY = process.env.SHOPIFY_CLIENT_ID || process.env.SHOPIFY_API_KEY || '';
+const SHOPIFY_API_SECRET = process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET || '';
+const SHOPIFY_SCOPES = [
+  'read_products',
+  'write_products',
+  'read_orders',
+  'write_orders',
+  'read_customers',
+  'write_customers',
+  'read_checkouts',
+  'write_checkouts',
+].join(',');
 
-export async function GET(req: NextRequest) {
+/**
+ * GET /api/auth/install?shop=xxx.myshopify.com
+ *
+ * Entry point for Shopify app installation.
+ * Shopify sends merchants here when they click "Install" from the App Store.
+ * Must immediately redirect to Shopify OAuth authorization screen.
+ *
+ * Set this as your App URL in the Shopify Partner Dashboard:
+ *   https://app.dorza.io/api/auth/install
+ */
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = request.nextUrl;
     const shop = searchParams.get('shop');
+    const hmac = searchParams.get('hmac');
+    const timestamp = searchParams.get('timestamp');
 
     if (!shop) {
       return NextResponse.json(
         { error: 'Missing shop parameter' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const apiKey = process.env.SHOPIFY_API_KEY;
-    let appUrl: string;
-    try {
-      appUrl = getBaseUrl();
-    } catch {
-      appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '';
-    }
-
-    if (!apiKey) {
+    if (!SHOPIFY_API_KEY) {
+      console.error('[Install] SHOPIFY_API_KEY is not set');
       return NextResponse.json(
-        { error: 'SHOPIFY_API_KEY not configured' },
-        { status: 500 }
+        { error: 'Shopify app not configured' },
+        { status: 500 },
       );
     }
 
-    if (!appUrl) {
+    // Validate shop domain format
+    let normalizedShop = shop.trim().toLowerCase();
+    if (!normalizedShop.includes('.')) {
+      normalizedShop = `${normalizedShop}.myshopify.com`;
+    }
+    if (!normalizedShop.match(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/)) {
       return NextResponse.json(
-        { error: 'APP_URL not configured. Set APP_URL or NEXT_PUBLIC_APP_URL in .env.local' },
-        { status: 500 }
+        { error: 'Invalid shop domain' },
+        { status: 400 },
       );
     }
 
-    const normalizedShop = normalizeShopDomain(shop);
-    const redirectUri = `${appUrl}/api/auth/callback`;
-    const state = crypto.randomUUID();
+    // Verify HMAC if present (Shopify includes it when redirecting from App Store)
+    if (hmac && SHOPIFY_API_SECRET) {
+      const params = new URLSearchParams(searchParams);
+      params.delete('hmac');
+      params.delete('signature');
+      const sortedParams = Array.from(params.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => `${key}=${value}`)
+        .join('&');
+      const digest = crypto
+        .createHmac('sha256', SHOPIFY_API_SECRET)
+        .update(sortedParams, 'utf8')
+        .digest('hex');
+      const isValid = crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(digest));
+      if (!isValid) {
+        console.error('[Install] HMAC verification failed');
+        return NextResponse.json(
+          { error: 'Invalid HMAC signature' },
+          { status: 401 },
+        );
+      }
+    }
 
-    // Store state in session/cookie for verification (simplified - use proper session in production)
-    const installUrl = buildInstallUrl(
-      normalizedShop,
-      apiKey,
+    // Generate state nonce for CSRF protection
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const state = Buffer.from(JSON.stringify({ nonce })).toString('base64');
+
+    const baseUrl = getBaseUrl();
+    const redirectUri = `${baseUrl}/api/auth/shopify/callback`;
+
+    // Build Shopify OAuth URL
+    const installUrl = new URL(`https://${normalizedShop}/admin/oauth/authorize`);
+    installUrl.searchParams.set('client_id', SHOPIFY_API_KEY);
+    installUrl.searchParams.set('scope', SHOPIFY_SCOPES);
+    installUrl.searchParams.set('redirect_uri', redirectUri);
+    installUrl.searchParams.set('state', state);
+
+    console.log('[Install] Redirecting to Shopify OAuth:', {
+      shop: normalizedShop,
       redirectUri,
-      'read_products,read_orders,read_customers,read_locations',
-      state
-    );
+    });
 
-    return NextResponse.redirect(installUrl);
-  } catch (error: any) {
-    console.error('Install error:', error);
+    // Redirect immediately to Shopify OAuth
+    const response = NextResponse.redirect(installUrl.toString());
+
+    const useSecureCookie = baseUrl.startsWith('https');
+    response.cookies.set('shopify_oauth_state', state, {
+      httpOnly: true,
+      secure: useSecureCookie,
+      sameSite: 'lax',
+      maxAge: 600,
+    });
+
+    return response;
+  } catch (error) {
+    console.error('[Install] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to start OAuth install' },
-      { status: 500 }
+      { error: 'Failed to start installation' },
+      { status: 500 },
     );
   }
 }
-
