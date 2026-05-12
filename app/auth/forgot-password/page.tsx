@@ -109,7 +109,7 @@ export default function ForgotPasswordPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4">
             <span className="text-2xl">🛍️</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Shopify Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">dorza.io</h1>
         </div>
 
         {/* Forgot Password Form */}

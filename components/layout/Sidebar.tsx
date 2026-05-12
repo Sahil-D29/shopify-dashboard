@@ -232,7 +232,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
       {/* Desktop header */}
       {!isMobile && (
         <div className="flex h-16 items-center justify-center border-b border-gray-800">
-          <h1 className="text-xl font-bold">Shopify Dashboard</h1>
+          <h1 className="text-xl font-bold">dorza.io</h1>
         </div>
       )}
       

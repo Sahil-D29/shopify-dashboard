@@ -117,7 +117,7 @@ export default function SignUpPage() {
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
             <ShoppingBag className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-[#2B2118]">Shopify Dashboard</h1>
+          <h1 className="text-2xl font-bold text-[#2B2118]">dorza.io</h1>
         </div>
 
         {/* Signup Card */}

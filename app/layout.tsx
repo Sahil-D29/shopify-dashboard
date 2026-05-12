@@ -8,7 +8,7 @@ import { TenantProvider } from '@/lib/tenant/tenant-context';
 import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
-  title: "Shopify Dashboard",
+  title: "dorza.io",
   description: "WhatsApp Marketing & Automation for Shopify",
 };
 

@@ -71,7 +71,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex-1 text-sm font-semibold leading-6 text-gray-900">
-            Shopify Dashboard
+            dorza.io
           </div>
         </div>
 

@@ -194,7 +194,7 @@ function SignInForm() {
             <ShoppingBag className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Shopify Dashboard
+            dorza.io
           </h1>
           <p className="text-gray-600">
             Manage your store with ease

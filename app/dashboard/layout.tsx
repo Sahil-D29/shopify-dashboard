@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Dashboard | Shopify Dashboard',
+  title: 'Dashboard | dorza.io',
   description: 'Main dashboard for your store',
 };
 
