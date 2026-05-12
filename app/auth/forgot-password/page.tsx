@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { Mail, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function ForgotPasswordPage() {
+  const { settings: appSettings } = useAppConfig();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -109,7 +111,7 @@ export default function ForgotPasswordPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4">
             <span className="text-2xl">🛍️</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">dorza.io</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{appSettings.appName}</h1>
         </div>
 
         {/* Forgot Password Form */}

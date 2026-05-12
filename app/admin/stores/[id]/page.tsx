@@ -262,6 +262,13 @@ export default function StoreDetailPage() {
           {store.status}
         </Badge>
         <Badge variant="outline" className="text-sm">{store.plan}</Badge>
+        <a
+          href={`/admin/stores/${store.id}/features`}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-sm font-medium"
+        >
+          <Settings className="h-4 w-4" />
+          Sidebar Features
+        </a>
       </div>
 
       <Tabs defaultValue="overview">

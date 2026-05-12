@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
@@ -41,6 +41,7 @@ import { toast } from 'sonner';
 import { StoreSwitcher } from '@/components/layout/StoreSwitcher';
 import { ChatNotificationBadge } from '@/components/chat/ChatNotificationBadge';
 import { X } from 'lucide-react';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 
 const USER_PREFERENCES_KEY = 'user:preferences';
 
@@ -66,6 +67,12 @@ const navigation = [
 export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const { settings: appSettings, featureFlags } = useAppConfig();
+  const disabled = useMemo(
+    () => new Set(featureFlags.disabledItems),
+    [featureFlags.disabledItems],
+  );
+  const isEnabled = (key: string) => !disabled.has(key);
   const [isCustomersExpanded, setIsCustomersExpanded] = useState(false);
   const [isEmailExpanded, setIsEmailExpanded] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -231,8 +238,16 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
 
       {/* Desktop header */}
       {!isMobile && (
-        <div className="flex h-16 items-center justify-center border-b border-gray-800">
-          <h1 className="text-xl font-bold">dorza.io</h1>
+        <div className="flex h-16 items-center justify-center gap-2 border-b border-gray-800 px-3">
+          {appSettings.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={appSettings.logoUrl}
+              alt={appSettings.appName}
+              className="h-8 w-8 rounded object-contain"
+            />
+          ) : null}
+          <h1 className="text-xl font-bold truncate">{appSettings.appName}</h1>
         </div>
       )}
       
@@ -244,6 +259,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
       <nav className="flex-1 flex flex-col space-y-1 px-4 py-4 overflow-y-auto">
         <div className="flex-1 space-y-1">
           {/* Dashboard */}
+          {isEnabled('dashboard') && (
           <Link
             href="/"
             onClick={isMobile ? onClose : undefined}
@@ -257,8 +273,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             <LayoutDashboard className="h-5 w-5 shrink-0" />
             Dashboard
           </Link>
+          )}
 
           {/* Live Chat */}
+          {isEnabled('chat') && (
           <Link
             href="/chat"
             onClick={isMobile ? onClose : undefined}
@@ -273,8 +291,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             <span className="flex-1">Live Chat</span>
             <ChatNotificationBadge storeId={null} />
           </Link>
+          )}
 
         {/* Customers Section with Nested Segments */}
+        {isEnabled('customers') && (
         <div>
           <div className="flex items-center gap-1">
             <Link
@@ -309,6 +329,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           </div>
           
           {/* Nested Segments */}
+          {isEnabled('segments') && (
           <div
             className={cn(
               "overflow-hidden transition-all duration-300 ease-in-out",
@@ -329,9 +350,12 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
               <span className="text-xs">Segments</span>
             </Link>
           </div>
+          )}
         </div>
+        )}
 
         {/* Contacts (WhatsApp) */}
+        {isEnabled('contacts') && (
         <Link
           href="/contacts"
           onClick={isMobile ? onClose : undefined}
@@ -345,8 +369,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Contact className="h-5 w-5 shrink-0" />
           Contacts
         </Link>
+        )}
 
         {/* Templates */}
+        {isEnabled('templates') && (
         <Link
           href="/templates"
           onClick={isMobile ? onClose : undefined}
@@ -360,8 +386,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <MessageSquare className="h-5 w-5 shrink-0" />
           Templates
         </Link>
+        )}
 
         {/* Campaigns */}
+        {isEnabled('campaigns') && (
         <Link
           href="/campaigns"
           onClick={isMobile ? onClose : undefined}
@@ -375,8 +403,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Zap className="h-5 w-5 shrink-0" />
           Campaigns
         </Link>
+        )}
 
         {/* Email Marketing Section */}
+        {isEnabled('email_marketing') && (
         <div>
           <div className="flex items-center gap-1">
             <button
@@ -406,15 +436,17 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           >
             <div className="ml-4 space-y-0.5 mt-1">
               {[
-                { name: 'Campaigns', href: '/email/campaigns', icon: Send },
-                { name: 'Templates', href: '/email/templates', icon: FileText },
-                { name: 'Analytics', href: '/email/analytics', icon: PieChart },
-                { name: 'Subscribers', href: '/email/subscribers', icon: UserPlus },
-                { name: 'Domains', href: '/email/domains', icon: Globe },
-                { name: 'A/B Tests', href: '/email/ab-tests', icon: FlaskConical },
-                { name: 'Back-in-Stock', href: '/email/back-in-stock', icon: BellRing },
-                { name: 'Cross-Sell', href: '/email/cross-sell', icon: ArrowRightLeft },
-              ].map((item) => (
+                { name: 'Campaigns', href: '/email/campaigns', icon: Send, flag: 'email_campaigns' },
+                { name: 'Templates', href: '/email/templates', icon: FileText, flag: 'email_templates' },
+                { name: 'Analytics', href: '/email/analytics', icon: PieChart, flag: 'email_analytics' },
+                { name: 'Subscribers', href: '/email/subscribers', icon: UserPlus, flag: 'email_subscribers' },
+                { name: 'Domains', href: '/email/domains', icon: Globe, flag: 'email_domains' },
+                { name: 'A/B Tests', href: '/email/ab-tests', icon: FlaskConical, flag: 'email_ab_tests' },
+                { name: 'Back-in-Stock', href: '/email/back-in-stock', icon: BellRing, flag: 'email_back_in_stock' },
+                { name: 'Cross-Sell', href: '/email/cross-sell', icon: ArrowRightLeft, flag: 'email_cross_sell' },
+              ]
+                .filter(item => isEnabled(item.flag))
+                .map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -433,8 +465,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Journeys */}
+        {isEnabled('journeys') && (
         <Link
           href="/journeys"
           onClick={isMobile ? onClose : undefined}
@@ -448,8 +482,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Zap className="h-5 w-5 shrink-0" />
           Journeys
         </Link>
+        )}
 
         {/* Flows */}
+        {isEnabled('flows') && (
         <Link
           href="/flows"
           onClick={isMobile ? onClose : undefined}
@@ -463,8 +499,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Workflow className="h-5 w-5 shrink-0" />
           Flows
         </Link>
+        )}
 
         {/* Analytics */}
+        {isEnabled('analytics') && (
         <Link
           href="/analytics"
           onClick={isMobile ? onClose : undefined}
@@ -478,11 +516,19 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <BarChart3 className="h-5 w-5 shrink-0" />
           Analytics
         </Link>
+        )}
 
         {/* Other Navigation Items (excluding Dashboard and Settings) */}
         {navigation.map((item) => {
           if (item.name === 'Dashboard' || item.name === 'Settings') return null;
-          
+          const flagKey =
+            item.name === 'Orders' ? 'orders'
+              : item.name === 'Products' ? 'products'
+              : item.name === 'Abandoned Carts' ? 'abandoned_carts'
+              : item.name === 'Billing' ? 'billing'
+              : null;
+          if (flagKey && !isEnabled(flagKey)) return null;
+
           const isActive = pathname === item.href;
           return (
             <Link
@@ -503,6 +549,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
         })}
         
         {/* Settings - Right after Abandoned Carts */}
+        {isEnabled('settings') && (
         <Link
           href="/settings"
           onClick={isMobile ? onClose : undefined}
@@ -516,9 +563,37 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Settings className="h-5 w-5 shrink-0" />
           Settings
         </Link>
+        )}
         
         </div>
       </nav>
+
+      {/* Customer Support (shown if configured in admin settings) */}
+      {(appSettings.supportEmail || appSettings.supportPhone || appSettings.supportUrl || appSettings.helpDocsUrl) && (
+        <div className="border-t border-gray-800 px-4 py-3 space-y-1 text-xs text-gray-400">
+          <p className="font-semibold uppercase tracking-wider text-gray-500 mb-1">Support</p>
+          {appSettings.supportEmail && (
+            <a href={`mailto:${appSettings.supportEmail}`} className="block hover:text-white truncate">
+              ✉ {appSettings.supportEmail}
+            </a>
+          )}
+          {appSettings.supportPhone && (
+            <a href={`tel:${appSettings.supportPhone}`} className="block hover:text-white">
+              ☎ {appSettings.supportPhone}
+            </a>
+          )}
+          {appSettings.supportUrl && (
+            <a href={appSettings.supportUrl} target="_blank" rel="noreferrer noopener" className="block hover:text-white truncate">
+              ↗ Help Center
+            </a>
+          )}
+          {appSettings.helpDocsUrl && (
+            <a href={appSettings.helpDocsUrl} target="_blank" rel="noreferrer noopener" className="block hover:text-white truncate">
+              ↗ Docs
+            </a>
+          )}
+        </div>
+      )}
 
       {/* User Profile & Sign Out */}
       <div className="border-t border-gray-800 p-4 space-y-3">

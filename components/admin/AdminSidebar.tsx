@@ -47,6 +47,7 @@ const navGroups: NavGroup[] = [
       { name: 'Users', href: '/admin/users', icon: Users },
       { name: 'Stores', href: '/admin/stores', icon: Store },
       { name: 'Brand', href: '/admin/brand', icon: Palette },
+      { name: 'App Branding', href: '/admin/branding', icon: Palette },
     ],
   },
   {

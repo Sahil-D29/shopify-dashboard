@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent, Suspense } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -194,7 +195,7 @@ function SignInForm() {
             <ShoppingBag className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            dorza.io
+            <DynamicAppName />
           </h1>
           <p className="text-gray-600">
             Manage your store with ease
@@ -401,4 +402,9 @@ export default function SignInPage() {
       <SignInForm />
     </Suspense>
   );
+}
+
+function DynamicAppName() {
+  const { settings } = useAppConfig();
+  return <>{settings.appName}</>;
 }

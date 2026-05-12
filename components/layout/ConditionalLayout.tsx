@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Menu, X } from 'lucide-react';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { settings: appSettings } = useAppConfig();
   const isAuthPage = pathname?.startsWith('/auth');
   const isChatPage = pathname?.startsWith('/chat');
   const isBuilderPage = /^\/(journeys|flows)\/[^/]+\/builder/.test(pathname ?? '');
@@ -71,7 +73,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex-1 text-sm font-semibold leading-6 text-gray-900">
-            dorza.io
+            {appSettings.appName}
           </div>
         </div>
 

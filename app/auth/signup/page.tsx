@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { toast } from 'sonner';
 import { Mail, Lock, User, Eye, EyeOff, ShoppingBag, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 
 export default function SignUpPage() {
+  const { settings: appSettings } = useAppConfig();
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: '',
@@ -117,7 +119,7 @@ export default function SignUpPage() {
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
             <ShoppingBag className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-[#2B2118]">dorza.io</h1>
+          <h1 className="text-2xl font-bold text-[#2B2118]">{appSettings.appName}</h1>
         </div>
 
         {/* Signup Card */}

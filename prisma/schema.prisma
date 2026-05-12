@@ -291,6 +291,7 @@ model Store {
   backInStockSubs   BackInStockSubscription[] @relation("StoreBackInStockSubs")
   crossSellRules    CrossSellRule[]         @relation("StoreCrossSellRules")
   crossSellLogs     CrossSellLog[]          @relation("StoreCrossSellLogs")
+  featureFlags      StoreFeatureFlags?      @relation("StoreFeatureFlags")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1583,5 +1584,45 @@ model CrossSellLog {
   @@index([status])
   @@index([scheduledFor])
   @@map("cross_sell_logs")
+}
+
+/// Global app branding + support info, exposed to all stores.
+/// Single-row table (id is always "singleton"). Managed from the super
+/// admin panel at /admin/settings.
+model AppSettings {
+  id              String   @id @default("singleton")
+  appName         String   @default("dorza.io")
+  tagline         String?
+  logoUrl         String?
+  faviconUrl      String?
+  supportEmail    String   @default("")
+  supportPhone    String   @default("")
+  supportUrl      String   @default("")
+  helpDocsUrl     String   @default("")
+  primaryColor    String   @default("#1a1a2e")
+  accentColor     String   @default("#e94560")
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+
+  @@map("app_settings")
+}
+
+/// Per-store sidebar feature flags. `disabledItems` lists the sidebar
+/// item keys that should be hidden for this store. Default: empty
+/// (everything shown). Managed from /admin/stores/[id]/features by
+/// super admins.
+model StoreFeatureFlags {
+  id             String   @id @default(uuid())
+  storeId        String   @unique
+  disabledItems  String[] @default([])
+  notes          String?
+  updatedBy      String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  store Store @relation("StoreFeatureFlags", fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@map("store_feature_flags")
 }
 

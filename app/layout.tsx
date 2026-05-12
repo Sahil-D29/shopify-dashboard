@@ -5,12 +5,18 @@ import { ToastProvider } from '@/components/ui/toast-provider';
 import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider';
 import SessionProvider from '@/components/providers/SessionProvider';
 import { TenantProvider } from '@/lib/tenant/tenant-context';
+import { AppConfigProvider } from '@/components/providers/AppConfigProvider';
+import { getAppSettings } from '@/lib/app-config';
 import { Toaster } from 'sonner';
 
-export const metadata: Metadata = {
-  title: "dorza.io",
-  description: "WhatsApp Marketing & Automation for Shopify",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getAppSettings().catch(() => null);
+  const name = settings?.appName || 'dorza.io';
+  return {
+    title: name,
+    description: settings?.tagline || 'WhatsApp Marketing & Automation for Shopify',
+  };
+}
 
 export default function RootLayout({
   children,
@@ -28,11 +34,13 @@ export default function RootLayout({
         <SessionProvider>
           <ReactQueryProvider>
             <TenantProvider>
-              <ConditionalLayout>
-                {children}
-              </ConditionalLayout>
-              <ToastProvider />
-              <Toaster position="top-right" richColors />
+              <AppConfigProvider>
+                <ConditionalLayout>
+                  {children}
+                </ConditionalLayout>
+                <ToastProvider />
+                <Toaster position="top-right" richColors />
+              </AppConfigProvider>
             </TenantProvider>
           </ReactQueryProvider>
         </SessionProvider>
