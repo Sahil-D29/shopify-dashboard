@@ -288,6 +288,9 @@ model Store {
   emailDomains      EmailDomain[]           @relation("StoreEmailDomains")
   emailCampaigns    EmailCampaign[]         @relation("StoreEmailCampaigns")
   emailEvents       EmailEvent[]            @relation("StoreEmailEvents")
+  backInStockSubs   BackInStockSubscription[] @relation("StoreBackInStockSubs")
+  crossSellRules    CrossSellRule[]         @relation("StoreCrossSellRules")
+  crossSellLogs     CrossSellLog[]          @relation("StoreCrossSellLogs")
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1474,5 +1477,111 @@ model EmailEvent {
   @@index([resendEmailId])
   @@index([occurredAt])
   @@map("email_events")
+}
+
+enum BackInStockStatus {
+  PENDING
+  NOTIFIED
+  CANCELLED
+}
+
+model BackInStockSubscription {
+  id                String            @id @default(uuid())
+  storeId           String
+  email             String
+  firstName         String?
+  lastName          String?
+  shopifyProductId  String
+  shopifyVariantId  String
+  productTitle      String
+  productImage      String?
+  productUrl        String?
+  variantTitle      String?
+  status            BackInStockStatus @default(PENDING)
+  notifiedAt        DateTime?
+  resendEmailId     String?
+  source            String            @default("API")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  store Store @relation("StoreBackInStockSubs", fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, email, shopifyVariantId])
+  @@index([storeId])
+  @@index([shopifyVariantId])
+  @@index([shopifyProductId])
+  @@index([status])
+  @@index([email])
+  @@map("back_in_stock_subscriptions")
+}
+
+enum CrossSellRuleStatus {
+  ACTIVE
+  PAUSED
+  DRAFT
+}
+
+enum CrossSellLogStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+model CrossSellRule {
+  id                String              @id @default(uuid())
+  storeId           String
+  name              String
+  description       String?
+  status            CrossSellRuleStatus @default(ACTIVE)
+  sourceProductIds  String[]            @default([]) // empty = any product
+  targetProductIds  String[]            @default([])
+  emailDelayHours   Int                 @default(24)
+  templateId        String?
+  subject           String              @default("You might also love these")
+  fromName          String              @default("")
+  fromEmail         String              @default("")
+  htmlBody          String              @default("")
+  jsonDesign        Json?
+  triggerCount      Int                 @default(0)
+  sentCount         Int                 @default(0)
+  createdBy         String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  store Store          @relation("StoreCrossSellRules", fields: [storeId], references: [id], onDelete: Cascade)
+  logs  CrossSellLog[]
+
+  @@index([storeId])
+  @@index([status])
+  @@map("cross_sell_rules")
+}
+
+model CrossSellLog {
+  id            String             @id @default(uuid())
+  storeId       String
+  ruleId        String
+  shopifyOrderId String
+  customerEmail String
+  customerName  String?
+  status        CrossSellLogStatus @default(SCHEDULED)
+  scheduledFor  DateTime
+  sentAt        DateTime?
+  resendEmailId String?
+  errorMessage  String?
+  matchedProductIds String[]       @default([])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  store Store         @relation("StoreCrossSellLogs", fields: [storeId], references: [id], onDelete: Cascade)
+  rule  CrossSellRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, shopifyOrderId])
+  @@index([storeId])
+  @@index([ruleId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("cross_sell_logs")
 }
 
