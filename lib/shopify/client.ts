@@ -172,11 +172,21 @@ class ShopifyClient {
         }
         
         // Extract error message from Shopify response if available
-        const errorMessage = errorData?.errors 
-          ? (Array.isArray(errorData.errors) ? errorData.errors.join(', ') : String(errorData.errors))
-          : errorData?.error 
-          ? String(errorData.error)
-          : errorText || `${response.status} ${response.statusText}`;
+        let errorMessage = errorText || `${response.status} ${response.statusText}`;
+        if (errorData?.errors) {
+          if (typeof errorData.errors === 'string') {
+            errorMessage = errorData.errors;
+          } else if (Array.isArray(errorData.errors)) {
+            errorMessage = errorData.errors.join(', ');
+          } else if (typeof errorData.errors === 'object') {
+            // Handle { "base": ["msg"], "field": ["msg"] } format
+            errorMessage = Object.entries(errorData.errors)
+              .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : String(val)}`)
+              .join('; ');
+          }
+        } else if (errorData?.error) {
+          errorMessage = typeof errorData.error === 'string' ? errorData.error : JSON.stringify(errorData.error);
+        }
         
         const error = `Shopify API Error: ${response.status} ${response.statusText} - ${errorMessage}`;
         console.error('❌ Shopify API Error:', error);

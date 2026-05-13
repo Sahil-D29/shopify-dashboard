@@ -174,7 +174,13 @@ export async function GET(request: NextRequest) {
 
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit });
 
-    const orders = await client.fetchAll<ShopifyOrder>('orders', { status: 'any', limit });
+    // Fetch orders separately — don't let it crash the customer list
+    let orders: ShopifyOrder[] = [];
+    try {
+      orders = await client.fetchAll<ShopifyOrder>('orders', { status: 'any', limit });
+    } catch (orderErr) {
+      console.warn('Warning: Failed to fetch orders for last-order mapping:', orderErr instanceof Error ? orderErr.message : orderErr);
+    }
 
     const lastOrderMap = buildLastOrderMap(orders);
     const customers = shopifyCustomers.map(customer => formatShopifyCustomer(customer, lastOrderMap));
