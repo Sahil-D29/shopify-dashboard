@@ -105,7 +105,25 @@ export async function GET(request: NextRequest) {
     );
     if (custRes.ok) {
       const custData = await custRes.json();
-      steps.shopifyCustomersApi = { ok: true, count: custData.customers?.length || 0 };
+      const firstCustomer = custData.customers?.[0];
+      steps.shopifyCustomersApi = {
+        ok: true,
+        count: custData.customers?.length || 0,
+        // Show actual fields from first customer to diagnose missing data
+        sampleCustomer: firstCustomer ? {
+          id: firstCustomer.id,
+          email: firstCustomer.email,
+          first_name: firstCustomer.first_name,
+          last_name: firstCustomer.last_name,
+          phone: firstCustomer.phone,
+          orders_count: firstCustomer.orders_count,
+          total_spent: firstCustomer.total_spent,
+          state: firstCustomer.state,
+          verified_email: firstCustomer.verified_email,
+          tags: firstCustomer.tags,
+          availableFields: Object.keys(firstCustomer),
+        } : null,
+      };
     } else {
       const errText = await custRes.text().catch(() => '');
       steps.shopifyCustomersApi = { ok: false, status: custRes.status, statusText: custRes.statusText, body: errText.substring(0, 200) };
@@ -149,6 +167,25 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) {
     steps.webhooks = { ok: false, error: String(e) };
+  }
+
+  // Step 9: Check access scopes on the token
+  try {
+    const scopeRes = await fetch(
+      `https://${store.shopifyDomain}/admin/oauth/access_scopes.json`,
+      { headers: { 'X-Shopify-Access-Token': decryptedToken } },
+    );
+    if (scopeRes.ok) {
+      const scopeData = await scopeRes.json();
+      steps.accessScopes = {
+        ok: true,
+        scopes: (scopeData.access_scopes || []).map((s: { handle: string }) => s.handle),
+      };
+    } else {
+      steps.accessScopes = { ok: false, status: scopeRes.status };
+    }
+  } catch (e) {
+    steps.accessScopes = { ok: false, error: String(e) };
   }
 
   const allOk = Object.values(steps).every((s: any) => s.ok);
