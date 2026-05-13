@@ -42,6 +42,7 @@ export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [serverStats, setServerStats] = useState<{ total: number; optedIn: number; optedOut: number; pending: number } | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +92,9 @@ export default function ContactsPage() {
 
       setContacts(data.contacts || []);
       setTotalCount(data.pagination?.total || data.total || 0);
+      if (data.stats) {
+        setServerStats(data.stats);
+      }
     } catch (error) {
       console.error('Failed to load contacts:', error);
       if (isMountedRef.current) {
@@ -244,8 +248,8 @@ export default function ContactsPage() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Stats
-  const stats = {
+  // Stats — use server-side counts when available, fallback to page-level filter
+  const stats = serverStats || {
     total: totalCount,
     optedIn: contacts.filter(c => c.optInStatus === 'OPTED_IN').length,
     optedOut: contacts.filter(c => c.optInStatus === 'OPTED_OUT').length,

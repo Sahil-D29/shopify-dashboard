@@ -51,8 +51,9 @@ export async function GET(request: NextRequest) {
 
     const client = await getShopifyClientAsync(request);
 
-    const customers = await client.fetchAll<ShopifyCustomer>('customers', { 
-      limit: Math.min(limit, 250) // Shopify max is 250
+    const customers = await client.fetchAll<ShopifyCustomer>('customers', {
+      limit: Math.min(limit, 250),
+      fields: 'id,email,first_name,last_name,phone,orders_count,total_spent,state,verified_email,tags,addresses,created_at,updated_at,last_order_id,last_order_name',
     });
 
     // Sort by created_at descending (most recent first) and limit

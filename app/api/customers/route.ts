@@ -168,11 +168,11 @@ export async function GET(request: NextRequest) {
     }
 
     const client = await getShopifyClientAsync(request);
-    
-    // Check if client has valid config
-    const configHeader = request.headers.get('X-Shopify-Config');
 
-    const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit });
+    const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', {
+      limit,
+      fields: 'id,email,first_name,last_name,phone,orders_count,total_spent,state,verified_email,tags,addresses,created_at,updated_at,last_order_id,last_order_name',
+    });
 
     // Fetch orders separately — don't let it crash the customer list
     let orders: ShopifyOrder[] = [];

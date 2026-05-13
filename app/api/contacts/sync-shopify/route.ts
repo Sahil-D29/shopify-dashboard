@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     let updated = 0;
     const errors: string[] = [];
 
-    let nextUrl: string | null = '/customers.json?limit=250';
+    let nextUrl: string | null = '/customers.json?limit=250&fields=id,email,first_name,last_name,phone,tags';
 
     while (nextUrl) {
       const response = await shopifyClient.requestRaw(nextUrl);

@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       where.tags = { array_contains: [tag] };
     }
 
-    const [contacts, total] = await Promise.all([
+    const [contacts, total, optedInCount, optedOutCount, pendingCount] = await Promise.all([
       prisma.contact.findMany({
         where: where as any,
         orderBy: { [sortBy]: sortOrder },
@@ -70,7 +70,13 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.contact.count({ where: where as any }),
+      prisma.contact.count({ where: { storeId, optInStatus: 'OPTED_IN' } }),
+      prisma.contact.count({ where: { storeId, optInStatus: 'OPTED_OUT' } }),
+      prisma.contact.count({ where: { storeId, optInStatus: 'PENDING' } }),
     ]);
+
+    // Total contacts for this store (unfiltered)
+    const totalContacts = await prisma.contact.count({ where: { storeId } });
 
     return NextResponse.json({
       contacts,
@@ -79,6 +85,12 @@ export async function GET(request: NextRequest) {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+      stats: {
+        total: totalContacts,
+        optedIn: optedInCount,
+        optedOut: optedOutCount,
+        pending: pendingCount,
       },
     });
   } catch (error) {
