@@ -233,9 +233,13 @@ export default function CustomersClientPage() {
                   <TableRow key={customer.id}>
                     <TableCell className="text-xs text-muted-foreground">{customer.id}</TableCell>
                     <TableCell className="font-medium">
-                      {customer.first_name} {customer.last_name}
+                      {(customer.first_name || customer.last_name)
+                        ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
+                        : <span className="text-muted-foreground italic">No name</span>}
                     </TableCell>
-                    <TableCell>{customer.email}</TableCell>
+                    <TableCell>
+                      {customer.email || <span className="text-muted-foreground italic">No email</span>}
+                    </TableCell>
                     <TableCell>{customer.phone || 'N/A'}</TableCell>
                     <TableCell>{customer.orders_count ?? 0}</TableCell>
                     <TableCell>{formatCurrency(customer.total_spent)}</TableCell>

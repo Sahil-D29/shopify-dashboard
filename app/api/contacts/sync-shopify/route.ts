@@ -56,11 +56,12 @@ export async function POST(request: NextRequest) {
 
       for (const customer of customers) {
         try {
-          if (!customer.phone) {
+          // Allow customers with phone OR email (previously skipped customers without phone)
+          if (!customer.phone && !customer.email) {
             continue;
           }
 
-          const phone = normalizePhone(customer.phone);
+          const phone = customer.phone ? normalizePhone(customer.phone) : null;
           const firstName = customer.first_name || null;
           const lastName = customer.last_name || null;
           const name = firstName || lastName
@@ -72,9 +73,18 @@ export async function POST(request: NextRequest) {
             : [];
           const shopifyCustomerId = String(customer.id);
 
-          const existing = await prisma.contact.findUnique({
-            where: { storeId_phone: { storeId, phone } },
-          });
+          // Look up existing contact by phone (if available) or by shopifyCustomerId
+          let existing = null;
+          if (phone) {
+            existing = await prisma.contact.findUnique({
+              where: { storeId_phone: { storeId, phone } },
+            });
+          }
+          if (!existing) {
+            existing = await prisma.contact.findFirst({
+              where: { storeId, shopifyCustomerId },
+            });
+          }
 
           if (existing) {
             // Only update if overwrite is true or contact was originally from Shopify
@@ -84,6 +94,7 @@ export async function POST(request: NextRequest) {
                 data: {
                   name: name || existing.name,
                   email: email || existing.email,
+                  phone: phone || existing.phone,
                   firstName: firstName || existing.firstName,
                   lastName: lastName || existing.lastName,
                   tags: tags.length > 0 ? tags : (existing.tags as any),
@@ -94,10 +105,12 @@ export async function POST(request: NextRequest) {
               updated++;
             }
           } else {
+            // For contacts without phone, use a placeholder so the unique constraint works
+            const contactPhone = phone || `shopify_${customer.id}`;
             await prisma.contact.create({
               data: {
                 storeId,
-                phone,
+                phone: contactPhone,
                 name,
                 email,
                 firstName,

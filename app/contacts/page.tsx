@@ -30,11 +30,13 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 const PAGE_SIZE = 25;
 
 export default function ContactsPage() {
   const router = useRouter();
+  const { currentStore } = useTenant();
 
   // Data state
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -76,14 +78,19 @@ export default function ContactsPage() {
       if (sourceFilter !== 'ALL') params.set('source', sourceFilter);
       if (optInFilter !== 'ALL') params.set('optInStatus', optInFilter);
 
-      const res = await fetch(`/api/contacts?${params.toString()}`);
+      const fetchHeaders: Record<string, string> = {};
+      if (currentStore?.id) fetchHeaders['x-store-id'] = currentStore.id;
+      const res = await fetch(`/api/contacts?${params.toString()}`, {
+        credentials: 'include',
+        headers: fetchHeaders,
+      });
       if (!res.ok) throw new Error('Failed to load contacts');
 
       const data = await res.json();
       if (!isMountedRef.current) return;
 
       setContacts(data.contacts || []);
-      setTotalCount(data.total || 0);
+      setTotalCount(data.pagination?.total || data.total || 0);
     } catch (error) {
       console.error('Failed to load contacts:', error);
       if (isMountedRef.current) {
@@ -95,7 +102,7 @@ export default function ContactsPage() {
         setLoading(false);
       }
     }
-  }, [page, searchQuery, sourceFilter, optInFilter]);
+  }, [page, searchQuery, sourceFilter, optInFilter, currentStore?.id]);
 
   useEffect(() => {
     loadContacts();
@@ -134,9 +141,12 @@ export default function ContactsPage() {
   const handleAddContact = async (data: ContactFormData) => {
     setIsSubmitting(true);
     try {
+      const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentStore?.id) postHeaders['x-store-id'] = currentStore.id;
       const res = await fetch('/api/contacts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: postHeaders,
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -155,7 +165,13 @@ export default function ContactsPage() {
   const handleSyncShopify = async () => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/contacts/sync-shopify', { method: 'POST' });
+      const syncHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentStore?.id) syncHeaders['x-store-id'] = currentStore.id;
+      const res = await fetch('/api/contacts/sync-shopify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: syncHeaders,
+      });
       if (!res.ok) throw new Error('Sync failed');
       loadContacts();
     } catch (error) {
@@ -169,9 +185,12 @@ export default function ContactsPage() {
   const handleBulkDelete = async () => {
     if (!confirm(`Are you sure you want to delete ${selectedIds.size} contact(s)?`)) return;
     try {
+      const bulkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentStore?.id) bulkHeaders['x-store-id'] = currentStore.id;
       const res = await fetch('/api/contacts/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: bulkHeaders,
         body: JSON.stringify({ action: 'delete', contactIds: Array.from(selectedIds) }),
       });
       if (res.ok) {
@@ -185,9 +204,12 @@ export default function ContactsPage() {
 
   const handleBulkOptOut = async () => {
     try {
+      const bulkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentStore?.id) bulkHeaders['x-store-id'] = currentStore.id;
       const res = await fetch('/api/contacts/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: bulkHeaders,
         body: JSON.stringify({ action: 'optOut', contactIds: Array.from(selectedIds) }),
       });
       if (res.ok) {
@@ -203,9 +225,12 @@ export default function ContactsPage() {
     const tag = prompt('Enter tag name to apply:');
     if (!tag?.trim()) return;
     try {
+      const bulkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentStore?.id) bulkHeaders['x-store-id'] = currentStore.id;
       const res = await fetch('/api/contacts/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: bulkHeaders,
         body: JSON.stringify({ action: 'tag', contactIds: Array.from(selectedIds), tag: tag.trim() }),
       });
       if (res.ok) {
