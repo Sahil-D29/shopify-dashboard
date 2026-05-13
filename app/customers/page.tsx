@@ -13,6 +13,7 @@ import { Users, RefreshCw } from 'lucide-react';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 function formatCurrency(value: number | string | null | undefined) {
   const numeric =
@@ -59,6 +60,7 @@ interface ApiCustomer {
 }
 
 export default function CustomersClientPage() {
+  const { currentStore } = useTenant();
   const [customers, setCustomers] = useState<ApiCustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -95,9 +97,15 @@ export default function CustomersClientPage() {
       const refreshParam = forceRefresh ? '&refresh=true' : '';
       const url = `${baseUrl}/api/customers?limit=250${refreshParam}`;
 
+      const headers: Record<string, string> = {};
+      if (currentStore?.id) {
+        headers['x-store-id'] = currentStore.id;
+      }
+
       const res = await fetch(url, {
         cache: 'no-store',
         credentials: 'include',
+        headers,
       });
 
       if (!res.ok) {
@@ -124,7 +132,7 @@ export default function CustomersClientPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isMounted]);
+  }, [isMounted, currentStore?.id]);
 
   useEffect(() => {
     setIsMounted(true);

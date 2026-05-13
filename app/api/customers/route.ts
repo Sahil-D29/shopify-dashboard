@@ -184,19 +184,17 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ customers, lastSynced, cached: false });
   } catch (error) {
-    console.error('Error in GET /api/customers:', getErrorMessage(error));
-    
-    // Return more detailed error information
     const errorMessage = getErrorMessage(error);
-    const statusCode = error instanceof Error && 'status' in error 
+    console.error('Error in GET /api/customers:', errorMessage);
+
+    const statusCode = error instanceof Error && 'status' in error
       ? (error as { status?: number }).status || 500
       : 500;
-    
+
     return NextResponse.json(
-      { 
-        error: 'Failed to fetch customers', 
+      {
+        error: `Failed to fetch customers: ${errorMessage}`,
         message: errorMessage,
-        details: errorMessage,
         customers: [], // Return empty array so frontend doesn't crash
         lastSynced: Date.now(),
       },

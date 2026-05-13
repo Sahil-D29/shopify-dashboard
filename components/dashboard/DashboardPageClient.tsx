@@ -785,28 +785,23 @@ function DashboardContent() {
         const baseUrl = getBaseUrl();
         const refreshParam = isRefresh ? '&refresh=true' : '';
 
+        // Build headers with store ID for multi-tenant resolution
+        const fetchHeaders: Record<string, string> = {};
+        if (currentStore?.id) {
+          fetchHeaders['x-store-id'] = currentStore.id;
+        }
+        const fetchOpts = { cache: 'no-store' as const, credentials: 'include' as const, headers: fetchHeaders };
+
         // Fetch all data with proper error handling
         const [analyticsRes, ordersRes, productsRes, customersRes, locationsRes, checkoutsRes, campaignAnalyticsRes] =
           await Promise.allSettled([
-            fetch(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/shopify/orders?limit=10${refreshParam}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/shopify/products?limit=10${refreshParam}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/shopify/customers?limit=10${refreshParam}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/shopify/locations?limit=10${refreshParam}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, {
-              cache: 'no-store',
-            }),
-            fetch(`${baseUrl}/api/campaigns/analytics`, { cache: 'no-store' }),
+            fetch(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, fetchOpts),
+            fetch(`${baseUrl}/api/shopify/orders?limit=10${refreshParam}`, fetchOpts),
+            fetch(`${baseUrl}/api/shopify/products?limit=10${refreshParam}`, fetchOpts),
+            fetch(`${baseUrl}/api/shopify/customers?limit=10${refreshParam}`, fetchOpts),
+            fetch(`${baseUrl}/api/shopify/locations?limit=10${refreshParam}`, fetchOpts),
+            fetch(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, fetchOpts),
+            fetch(`${baseUrl}/api/campaigns/analytics`, fetchOpts),
           ]);
 
         // Helper: get Response from Promise.allSettled; return null if failed/rejected so we can use fallback without throwing
@@ -960,7 +955,7 @@ function DashboardContent() {
         setRefreshing(false);
       }
     },
-    [isMounted, router]
+    [isMounted, router, currentStore?.id]
   );
 
   useEffect(() => {
@@ -1004,7 +999,14 @@ function DashboardContent() {
   useEffect(() => {
     const checkSettingsStatus = async () => {
       try {
-        const response = await fetch('/api/settings/status');
+        const settingsHeaders: Record<string, string> = {};
+        if (currentStore?.id) {
+          settingsHeaders['x-store-id'] = currentStore.id;
+        }
+        const response = await fetch('/api/settings/status', {
+          credentials: 'include',
+          headers: settingsHeaders,
+        });
         const data = await response.json();
         if (data.success) {
           setSettingsStatus(data.status);
