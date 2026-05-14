@@ -12,7 +12,7 @@ redirect_urls = [
 ]
 
 [access_scopes]
-scopes = "read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_checkouts,write_checkouts,read_analytics,read_inventory,read_discounts,read_channels,read_markets"
+scopes = "read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_checkouts,read_analytics,read_inventory,read_discounts,read_channels,read_markets"
 use_legacy_install_flow = true
 
 [webhooks]

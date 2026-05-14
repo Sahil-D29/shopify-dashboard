@@ -19,8 +19,11 @@ const SHOPIFY_SCOPES = [
   'read_customers',
   'write_customers',
   'read_checkouts',
-  'write_checkouts',
-  'write_script_tags',
+  'read_analytics',
+  'read_inventory',
+  'read_discounts',
+  'read_channels',
+  'read_markets',
 ].join(',');
 
 /**
