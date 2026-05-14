@@ -1,0 +1,24 @@
+# Shopify App Configuration
+# Docs: https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "Whatsapp Marketing Dorec"
+client_id = "222403c7426d6d5b68b4d4b8ec06e965"
+application_url = "https://app.dorza.io/api/auth/install"
+embedded = false
+
+[auth]
+redirect_urls = [
+  "https://app.dorza.io/api/auth/shopify/callback"
+]
+
+[access_scopes]
+scopes = "read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_checkouts,write_checkouts,read_analytics,read_inventory,read_discounts,read_channels,read_markets"
+use_legacy_install_flow = true
+
+[webhooks]
+api_version = "2024-10"
+
+  [webhooks.privacy_compliance]
+  customer_deletion_url = "https://app.dorza.io/api/webhooks/shopify/compliance"
+  customer_data_request_url = "https://app.dorza.io/api/webhooks/shopify/compliance"
+  shop_deletion_url = "https://app.dorza.io/api/webhooks/shopify/compliance"
