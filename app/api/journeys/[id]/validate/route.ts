@@ -20,7 +20,7 @@ export async function GET(
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
 
-    const validation = validateJourney(journey);
+    const validation = await validateJourney(journey, journey.storeId);
 
     return NextResponse.json(validation);
   } catch (error) {

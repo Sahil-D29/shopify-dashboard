@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import type { WhatsAppTemplateComponent } from '@/lib/types/whatsapp-config';
 
 export const runtime = 'nodejs';
@@ -28,9 +29,10 @@ interface WhatsAppTemplateResponse {
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Failed to fetch templates';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const validation = validateWhatsAppConfig();
+    const storeId = await getCurrentStoreId(request);
+    const validation = await resolveWhatsAppConfig(storeId);
     if (!validation.valid) {
       return NextResponse.json(
         { error: 'WhatsApp not configured', details: validation.error },
@@ -38,16 +40,10 @@ export async function GET() {
       );
     }
 
-    const { config } = validation;
-    if (!config.wabaId || !config.accessToken) {
-      return NextResponse.json(
-        { error: 'WhatsApp credentials are incomplete' },
-        { status: 400 },
-      );
-    }
+    const config = validation.config;
 
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${config.wabaId}/message_templates`,
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.wabaId}/message_templates`,
       {
         method: 'GET',
         headers: {

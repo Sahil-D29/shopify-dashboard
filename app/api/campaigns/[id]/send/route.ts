@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { prisma } from '@/lib/prisma';
 import { transformCampaign } from '@/lib/utils/db-transformers';
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import { auth } from '@/lib/auth';
@@ -59,8 +59,16 @@ export async function POST(
 
     const campaign = transformCampaign(dbCampaign);
 
+    // Prevent double-sends
+    if (dbCampaign.status === 'RUNNING' || dbCampaign.status === 'COMPLETED') {
+      return NextResponse.json(
+        { error: `Campaign already ${dbCampaign.status.toLowerCase()}` },
+        { status: 409 },
+      );
+    }
+
     // Validate WhatsApp config
-    const whatsappValidation = validateWhatsAppConfig();
+    const whatsappValidation = await resolveWhatsAppConfig(storeId);
     if (!whatsappValidation.valid) {
       return NextResponse.json(
         { error: 'WhatsApp not configured', details: whatsappValidation.error },
@@ -101,11 +109,14 @@ export async function POST(
     let sentCount = 0;
     let failedCount = 0;
 
-    for (const customer of matchingCustomers) {
+    for (let i = 0; i < matchingCustomers.length; i++) {
+      const customer = matchingCustomers[i];
       const phone = sanitizePhoneNumber(
         customer.phone ?? customer.default_address?.phone ?? null,
       );
       if (!phone) continue;
+
+      if (i > 0) await new Promise(r => setTimeout(r, 100));
 
       try {
         const messageBody = personalizeMessageBody(
@@ -119,7 +130,7 @@ export async function POST(
           text: { body: messageBody },
         };
 
-        const apiUrl = `https://graph.facebook.com/v18.0/${whatsappConfig.phoneNumberId}/messages`;
+        const apiUrl = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${whatsappConfig.phoneNumberId}/messages`;
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {

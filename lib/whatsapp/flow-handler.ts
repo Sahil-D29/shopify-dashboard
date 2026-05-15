@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 export async function handleFlowResponse(params: {
   flowId: string;
@@ -51,7 +52,7 @@ export async function sendFlowMessage(params: {
   if (!flow || flow.status !== 'PUBLISHED') throw new Error('Flow is not published');
 
   const response = await fetch(
-    `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
+    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
     {
       method: 'POST',
       headers: {

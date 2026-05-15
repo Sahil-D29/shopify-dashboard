@@ -10,7 +10,7 @@ import { sendEmail } from '@/lib/email';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { SegmentGroup } from '@/lib/types/segment';
-import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 const currentPeriod = (): string => {
   const now = new Date();
@@ -43,16 +43,18 @@ function sanitizePhone(value: string | null | undefined): string | null {
   return digits;
 }
 
-async function sendWhatsAppText(phone: string, body: string): Promise<{ success: boolean; error?: string }> {
-  const config = getWhatsAppConfig();
-  if (!config.phoneNumberId || !config.accessToken) {
+async function sendWhatsAppText(phone: string, body: string, storeId: string): Promise<{ success: boolean; error?: string }> {
+  const config = await prisma.whatsAppConfig.findUnique({
+    where: { storeId },
+  });
+  if (!config?.phoneNumberId || !config?.accessToken) {
     return { success: false, error: 'WhatsApp not configured' };
   }
   const formatted = phone.replace(/[\s\-+()]/g, '');
   if (!formatted) return { success: false, error: 'Invalid phone' };
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
@@ -230,7 +232,7 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
           failed++;
           continue;
         }
-        const result = await sendWhatsAppText(phone, personalizedBody);
+        const result = await sendWhatsAppText(phone, personalizedBody, storeId);
         if (result.success) {
           await logSuccess();
           sent++;

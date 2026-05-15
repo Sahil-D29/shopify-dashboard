@@ -3,7 +3,7 @@ import type { CustomerSegment } from '@/lib/types/segment';
 import type { JourneyDefinition, JourneyEnrollment, JourneyNode } from '@/lib/types/journey';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { ShopifyClient, type ShopifyOrder, type ShopifyOrderListResponse } from '@/lib/shopify/client';
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 /**
  * Journey Execution Engine
@@ -159,7 +159,7 @@ export async function executeAction(
   }
 
   // Validate WhatsApp config
-  const validation = validateWhatsAppConfig();
+  const validation = await resolveWhatsAppConfig(context.journey.storeId);
   if (!validation.valid) {
     return { success: false, error: 'WhatsApp not configured' };
   }
@@ -214,7 +214,7 @@ export async function executeAction(
   };
 
   try {
-    const apiUrl = `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`;
+    const apiUrl = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`;
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {

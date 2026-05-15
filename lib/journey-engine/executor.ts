@@ -238,7 +238,11 @@ async function executeActionNode(
         template: config.templateName || 'default_template',
         language: config.templateLanguage || 'en',
         components: config.components || [],
+        storeId: journey.storeId,
       });
+      if (!messageResult.success) {
+        throw new Error(`WhatsApp send failed: ${messageResult.error || 'Unknown error'}`);
+      }
       await logJourneyActivity(enrollment.id, 'whatsapp_sent', {
         nodeId: node.id,
         template: config.templateName,

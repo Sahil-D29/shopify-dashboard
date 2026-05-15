@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 interface SendTextRequestBody {
   phoneNumber?: string | number;
@@ -35,13 +36,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    const validation = validateWhatsAppConfig();
+    const storeId = await getCurrentStoreId(request);
+    const validation = await resolveWhatsAppConfig(storeId);
     if (!validation.valid) {
       return NextResponse.json(
         {
           error: 'WhatsApp credentials not configured',
           details: validation.error,
-          missing: validation.missing,
         },
         { status: 500 },
       );
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     };
 
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${validation.config.phoneNumberId}/messages`,
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${validation.config.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {

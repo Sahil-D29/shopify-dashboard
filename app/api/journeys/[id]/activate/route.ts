@@ -28,7 +28,7 @@ export async function POST(
     const journey = journeys[idx];
 
     if (status === 'ACTIVE') {
-      const validation = validateJourney(journey);
+      const validation = await validateJourney(journey, journey.storeId);
       if (validation.errors.length > 0) {
         return NextResponse.json(
           {

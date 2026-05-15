@@ -7,6 +7,7 @@
  */
 import { prisma } from '@/lib/prisma';
 import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 export interface SmartSendResult {
   success: boolean;
@@ -102,7 +103,7 @@ export async function sendWithSmartWindow(params: {
     // ─── Send FREE-FORM text (no template cost!) ────────
     try {
       const res = await fetch(
-        `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
+        `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
         {
           method: 'POST',
           headers: {
@@ -149,7 +150,7 @@ export async function sendWithSmartWindow(params: {
       };
 
       const res = await fetch(
-        `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
+        `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
         {
           method: 'POST',
           headers: {

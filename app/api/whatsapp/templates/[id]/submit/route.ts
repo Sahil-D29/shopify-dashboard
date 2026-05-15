@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { TemplateValidator } from '@/lib/utils/template-validator';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
@@ -342,7 +343,7 @@ export async function POST(
 
     const metaPayload = buildMetaPayload(template);
 
-    const response = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates`, {
+    const response = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

@@ -5,7 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { normalizePhone } from './normalize-phone';
 export type SendMessageType = 'text' | 'template' | 'image' | 'video' | 'document' | 'audio';
 
@@ -40,12 +40,12 @@ export interface SendMessageResult {
  * Send a WhatsApp message and record it in the database.
  */
 export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
-  const validation = validateWhatsAppConfig();
+  const validation = await resolveWhatsAppConfig(opts.storeId);
   if (!validation.valid) {
     return { success: false, error: validation.error };
   }
 
-  const { config } = validation;
+  const config = validation.config;
   const formattedPhone = normalizePhone(opts.phone);
 
   if (!formattedPhone) {
@@ -58,7 +58,7 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
 
     // Send via Meta Graph API
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {

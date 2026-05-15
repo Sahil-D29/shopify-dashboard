@@ -1,50 +1,35 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { getWhatsAppConfig, validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { NextRequest, NextResponse } from 'next/server';
+import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
-interface DebugResponse {
-  timestamp: string;
-  nodeEnv: string | undefined;
-  validation: {
-    isValid: boolean;
-    error?: string;
-    missing?: string[];
-  };
-  variables: Record<string, string>;
-  hints: string[];
-}
+export async function GET(request: NextRequest) {
+  const storeId = await getCurrentStoreId(request);
+  const resolved = await resolveWhatsAppConfig(storeId);
+  const envConfig = getWhatsAppConfig();
 
-export async function GET() {
-  const validation = validateWhatsAppConfig();
-  const config = getWhatsAppConfig();
-
-  const response: DebugResponse = {
+  return NextResponse.json({
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
-    validation: validation.valid
-      ? { isValid: true }
-      : { isValid: false, error: validation.error, missing: validation.missing },
-    variables: {
-      WHATSAPP_PHONE_NUMBER_ID: config.phoneNumberId ? '✅ Set' : '❌ Missing',
-      WHATSAPP_BUSINESS_ACCOUNT_ID: config.wabaId ? '✅ Set' : '❌ Missing',
-      WHATSAPP_ACCESS_TOKEN: config.accessToken ? `✅ Set (${config.accessToken.substring(0, 20)}...)` : '❌ Missing',
-      META_APP_ID: config.appId ? '✅ Set' : '❌ Missing',
-      META_APP_SECRET: config.appSecret ? '✅ Set' : '❌ Missing',
+    resolved: resolved.valid
+      ? { isValid: true, source: resolved.config.source }
+      : { isValid: false, error: resolved.error },
+    envVariables: {
+      WHATSAPP_PHONE_NUMBER_ID: envConfig.phoneNumberId ? 'Set' : 'Missing',
+      WHATSAPP_BUSINESS_ACCOUNT_ID: envConfig.wabaId ? 'Set' : 'Missing',
+      WHATSAPP_ACCESS_TOKEN: envConfig.accessToken ? 'Set' : 'Missing',
+      META_APP_ID: envConfig.appId ? 'Set' : 'Missing',
+      META_APP_SECRET: envConfig.appSecret ? 'Set' : 'Missing',
     },
-    hints: [],
-  };
-
-  if (!validation.valid) {
-    response.hints.push(
-      '1. Ensure .env.local exists at project root (same level as package.json)',
-      '2. Variable names must match exactly (case-sensitive)',
-      '3. No spaces around = in .env.local',
-      '4. No quotes around values in .env.local',
-      '5. Restart dev server after changes',
-    );
-  }
-
-  return NextResponse.json(response);
+    dbConfigStoreId: storeId || null,
+    hints: !resolved.valid
+      ? [
+          'Option A: Connect via Settings > WhatsApp (Embedded Signup)',
+          'Option B: Set env vars in .env.local and restart dev server',
+        ]
+      : [],
+  });
 }
 
 

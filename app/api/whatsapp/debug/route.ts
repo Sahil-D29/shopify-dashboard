@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { getTemplates } from '@/lib/whatsapp/templates-store';
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
@@ -74,7 +75,7 @@ export async function GET() {
     if (wabaId && accessToken) {
       try {
         const response = await fetch(
-          `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=10`,
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates?limit=10`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           },

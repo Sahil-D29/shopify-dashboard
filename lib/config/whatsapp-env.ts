@@ -9,13 +9,12 @@ export function getWhatsAppConfig() {
     appSecret: process.env.META_APP_SECRET,
   } as const;
 
-  // Debug logging (safe)
-  console.log('🔍 Loading WhatsApp Config:');
-  console.log('- Phone Number ID:', config.phoneNumberId ? '✅ Set' : '❌ Missing');
-  console.log('- WABA ID:', config.wabaId ? '✅ Set' : '❌ Missing');
-  console.log('- Access Token:', config.accessToken ? `✅ Set (${String(config.accessToken).substring(0, 20)}...)` : '❌ Missing');
-  console.log('- App ID:', config.appId ? '✅ Set' : '❌ Missing');
-  console.log('- App Secret:', config.appSecret ? '✅ Set' : '❌ Missing');
+  // Debug logging (no secrets)
+  console.log('[whatsapp-env] Phone Number ID:', config.phoneNumberId ? 'Set' : 'Missing');
+  console.log('[whatsapp-env] WABA ID:', config.wabaId ? 'Set' : 'Missing');
+  console.log('[whatsapp-env] Access Token:', config.accessToken ? 'Set' : 'Missing');
+  console.log('[whatsapp-env] App ID:', config.appId ? 'Set' : 'Missing');
+  console.log('[whatsapp-env] App Secret:', config.appSecret ? 'Set' : 'Missing');
 
   return config;
 }

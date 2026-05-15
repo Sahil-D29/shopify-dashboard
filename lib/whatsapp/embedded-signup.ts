@@ -3,10 +3,10 @@
  * Allows clients to connect their own WhatsApp Business Account
  */
 import { prisma } from '@/lib/prisma';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 const META_APP_ID = process.env.META_APP_ID;
 const META_APP_SECRET = process.env.META_APP_SECRET;
-const META_GRAPH_VERSION = 'v18.0';
 
 /** Build Facebook Login URL for embedded signup */
 export function getEmbeddedSignupUrl(storeId: string, redirectUri: string): string {
@@ -24,7 +24,7 @@ export function getEmbeddedSignupUrl(storeId: string, redirectUri: string): stri
     state: storeId, // Pass storeId through state param
   });
 
-  return `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
+  return `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth?${params.toString()}`;
 }
 
 /** Exchange OAuth code for access token */
@@ -33,7 +33,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
   expiresIn?: number;
 }> {
   const response = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/oauth/access_token?` +
+    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/oauth/access_token?` +
     new URLSearchParams({
       client_id: META_APP_ID || '',
       client_secret: META_APP_SECRET || '',
@@ -64,13 +64,13 @@ export async function fetchWABAInfo(accessToken: string): Promise<{
 }> {
   // First get shared WABAs (from embedded signup flow)
   const sharedWabaRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/debug_token?input_token=${accessToken}&access_token=${META_APP_ID}|${META_APP_SECRET}`
+    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/debug_token?input_token=${accessToken}&access_token=${META_APP_ID}|${META_APP_SECRET}`
   );
   const debugData = await sharedWabaRes.json();
 
   // Get the user's WABA through the business management API
   const businessRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/me/businesses?access_token=${accessToken}`
+    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/me/businesses?access_token=${accessToken}`
   );
   const businessData = await businessRes.json();
 
@@ -80,14 +80,14 @@ export async function fetchWABAInfo(accessToken: string): Promise<{
     for (const biz of businessData.data) {
       // Get WABAs for each business
       const wabaRes = await fetch(
-        `https://graph.facebook.com/${META_GRAPH_VERSION}/${biz.id}/owned_whatsapp_business_accounts?access_token=${accessToken}`
+        `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${biz.id}/owned_whatsapp_business_accounts?access_token=${accessToken}`
       );
       const wabaData = await wabaRes.json();
 
       for (const waba of wabaData.data || []) {
         // Get phone numbers for each WABA
         const phoneRes = await fetch(
-          `https://graph.facebook.com/${META_GRAPH_VERSION}/${waba.id}/phone_numbers?access_token=${accessToken}`
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${waba.id}/phone_numbers?access_token=${accessToken}`
         );
         const phoneData = await phoneRes.json();
 
@@ -116,22 +116,31 @@ export async function saveWhatsAppConfig(
   accessToken: string,
   businessName?: string
 ): Promise<void> {
+  let encryptedToken = accessToken;
+  try {
+    const { encrypt } = await import('@/lib/encryption');
+    encryptedToken = encrypt(accessToken);
+  } catch {
+    console.warn('[embedded-signup] Encryption unavailable, storing token as-is');
+  }
+
+  const settings = { businessName, connectedVia: 'embedded_signup', connectedAt: new Date().toISOString() };
   await prisma.whatsAppConfig.upsert({
     where: { storeId },
     create: {
       storeId,
       businessAccountId: wabaId,
       phoneNumberId,
-      accessToken, // Should be encrypted in production
+      accessToken: encryptedToken,
       isConfigured: true,
-      settings: { businessName, connectedVia: 'embedded_signup', connectedAt: new Date().toISOString() },
+      settings,
     },
     update: {
       businessAccountId: wabaId,
       phoneNumberId,
-      accessToken,
+      accessToken: encryptedToken,
       isConfigured: true,
-      settings: { businessName, connectedVia: 'embedded_signup', connectedAt: new Date().toISOString() },
+      settings,
     },
   });
 }

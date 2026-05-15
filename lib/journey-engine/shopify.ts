@@ -1,5 +1,3 @@
-import crypto from 'crypto';
-
 import { shopifyClient, type ShopifyCustomerResponse, type ShopifyOrderListResponse } from '@/lib/shopify/client';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
@@ -70,6 +68,7 @@ export interface SendWhatsAppPayload {
   template: string;
   language: string;
   components?: WhatsAppTemplateComponent[];
+  storeId?: string;
 }
 
 export interface SendWhatsAppResult {
@@ -85,33 +84,44 @@ export interface SendWhatsAppResult {
 
 export async function sendWhatsAppMessage(payload: SendWhatsAppPayload): Promise<SendWhatsAppResult> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
-    if (!baseUrl) {
-      console.warn('[journey-engine] APP base URL not configured. Skipping WhatsApp send and returning stub response.');
-      return {
-        success: true,
-        messageId: `stub_${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
-        stub: true,
-      };
+    const { resolveWhatsAppConfig, META_GRAPH_API_VERSION } = await import('@/lib/config/whatsapp-config-resolver');
+    const validation = await resolveWhatsAppConfig(payload.storeId);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
     }
 
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/whatsapp/send-template`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        templateName: payload.template,
-        phoneNumber: payload.to,
-        language: payload.language,
-        components: payload.components,
-        variables: {},
-      }),
-    });
+    const config = validation.config;
+    const messagePayload = {
+      messaging_product: 'whatsapp',
+      to: payload.to,
+      type: 'template',
+      template: {
+        name: payload.template,
+        language: { code: payload.language },
+        components: payload.components?.length ? payload.components : undefined,
+      },
+    };
 
-    const data = (await response.json()) as SendWhatsAppResult & { error?: string };
+    const response = await fetch(
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messagePayload),
+      },
+    );
+
+    const data = await response.json();
     if (!response.ok) {
-      throw new Error(data?.error || 'Failed to send WhatsApp message');
+      const errorMsg = data?.error?.message || 'Failed to send WhatsApp message';
+      return { success: false, error: errorMsg };
     }
-    return data;
+
+    const messageId = data?.messages?.[0]?.id;
+    return { success: true, messageId, wabaMessageId: messageId, phoneNumber: payload.to };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[journey-engine] Failed to send WhatsApp message:', message);

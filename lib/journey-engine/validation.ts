@@ -1,4 +1,4 @@
-import { validateWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 
 export type JourneyValidationSeverity = 'error' | 'warning';
@@ -338,7 +338,7 @@ function validateGoal(node: JourneyNode): JourneyValidationIssue[] {
   return [];
 }
 
-export function validateJourney(journey: JourneyDefinition): JourneyValidationResult {
+export async function validateJourney(journey: JourneyDefinition, storeId?: string | null): Promise<JourneyValidationResult> {
   const errors: JourneyValidationIssue[] = [];
   const warnings: JourneyValidationIssue[] = [];
 
@@ -438,15 +438,15 @@ export function validateJourney(journey: JourneyDefinition): JourneyValidationRe
 
   if (actions.length > 0) {
     try {
-      const whatsappValidation = validateWhatsAppConfig();
+      const whatsappValidation = await resolveWhatsAppConfig(storeId);
       if (!whatsappValidation.valid) {
         warnings.push({
           id: 'whatsapp-misconfigured',
           severity: 'warning',
           title: 'WhatsApp credentials missing',
           description:
-            'WhatsApp actions are present but environment variables are not configured. Messages will fail to send.',
-          suggestion: `Set ${whatsappValidation.missing.join(', ')} in your environment configuration.`,
+            'WhatsApp actions are present but credentials are not configured. Connect via Settings > WhatsApp or set environment variables.',
+          suggestion: whatsappValidation.error,
         });
       }
     } catch (error) {

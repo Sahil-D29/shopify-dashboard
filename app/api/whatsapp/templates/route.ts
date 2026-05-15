@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 import type { TemplateButton, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
@@ -176,7 +177,7 @@ function toWhatsAppTemplate(metaTemplate: MetaTemplate): WhatsAppTemplate {
 
 async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): Promise<WhatsAppTemplate[]> {
   let allMetaTemplates: MetaTemplate[] = [];
-  let nextPageUrl: string | null = `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=100`;
+  let nextPageUrl: string | null = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates?limit=100`;
 
   while (nextPageUrl) {
     const response = await fetch(nextPageUrl, {

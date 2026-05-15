@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 interface TestConnectionRequestBody {
   wabaId?: string;
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}`, {
+    const response = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
