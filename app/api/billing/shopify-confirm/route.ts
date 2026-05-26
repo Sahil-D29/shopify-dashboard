@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 import { getShopifySubscriptionStatus } from '@/lib/shopify-billing';
+import { decrypt, isEncrypted } from '@/lib/encryption';
 
 /**
  * GET /api/billing/shopify-confirm
@@ -53,6 +54,17 @@ export async function GET(request: NextRequest) {
 
     const shop = shopDomain || store.shopifyDomain || '';
 
+    // Decrypt the access token from DB
+    let decryptedToken = store.accessToken;
+    try {
+      if (isEncrypted(decryptedToken)) {
+        decryptedToken = decrypt(decryptedToken);
+      }
+    } catch (err) {
+      console.error('[Shopify Billing] Failed to decrypt access token:', err);
+      return NextResponse.redirect(`${baseUrl}/billing?error=token_decrypt_failed`);
+    }
+
     // Check the subscription status on Shopify
     console.log('[Shopify Billing] Verifying charge:', { chargeId, shop });
 
@@ -60,7 +72,7 @@ export async function GET(request: NextRequest) {
     try {
       subscriptionStatus = await getShopifySubscriptionStatus(
         shop,
-        store.accessToken,
+        decryptedToken,
         chargeId,
       );
     } catch (err) {

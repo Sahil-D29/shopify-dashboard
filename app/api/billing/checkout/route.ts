@@ -5,6 +5,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
 import { isShopifyBilledStore, createShopifySubscription } from '@/lib/shopify-billing';
+import { decrypt, isEncrypted } from '@/lib/encryption';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 
 export const dynamic = 'force-dynamic';
@@ -131,6 +132,21 @@ export async function POST(request: NextRequest) {
 
     if (store && isShopifyBilledStore(store)) {
       step = 'shopify-billing';
+
+      // Decrypt the access token from DB (stored encrypted)
+      let decryptedToken = store.accessToken!;
+      try {
+        if (isEncrypted(decryptedToken)) {
+          decryptedToken = decrypt(decryptedToken);
+        }
+      } catch (err) {
+        console.error('Failed to decrypt store access token:', err);
+        return NextResponse.json(
+          { error: 'Failed to decrypt store credentials. Please reconnect your Shopify store.' },
+          { status: 500 }
+        );
+      }
+
       const priceUSD = Number(plan.price) || 0;
       const discountedPrice = Math.max(0, priceUSD - discountAmount);
 
@@ -179,7 +195,7 @@ export async function POST(request: NextRequest) {
 
       const result = await createShopifySubscription({
         shop: store.shopifyDomain!,
-        accessToken: store.accessToken!,
+        accessToken: decryptedToken,
         planName: plan.name,
         priceUSD: discountedPrice,
         returnUrl,

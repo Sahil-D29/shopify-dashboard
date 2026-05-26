@@ -5,6 +5,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { cancelRazorpaySubscription } from '@/lib/razorpay';
 import { cancelStripeSubscription } from '@/lib/stripe';
 import { cancelShopifySubscription } from '@/lib/shopify-billing';
+import { decrypt, isEncrypted } from '@/lib/encryption';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -137,9 +138,13 @@ export async function DELETE(request: NextRequest) {
         });
 
         if (store?.shopifyDomain && store?.accessToken) {
+          let token = store.accessToken;
+          try {
+            if (isEncrypted(token)) token = decrypt(token);
+          } catch { /* fall through with raw token */ }
           await cancelShopifySubscription(
             store.shopifyDomain,
-            store.accessToken,
+            token,
             subscription.shopifyChargeId,
           );
         }

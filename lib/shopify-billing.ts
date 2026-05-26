@@ -137,7 +137,7 @@ export async function createShopifySubscription(params: {
     ],
   };
 
-  const data = await callShopifyGraphQL(shop, APP_SUBSCRIPTION_CREATE, variables);
+  const data = await callShopifyGraphQL(shop, APP_SUBSCRIPTION_CREATE, variables, accessToken);
   const result = data.appSubscriptionCreate;
 
   if (result.userErrors?.length > 0) {
@@ -170,7 +170,7 @@ export async function getShopifySubscriptionStatus(
 }> {
   const data = await callShopifyGraphQL(shop, SUBSCRIPTION_STATUS_QUERY, {
     id: subscriptionId,
-  });
+  }, accessToken);
 
   if (!data.node) {
     throw new Error(`Subscription ${subscriptionId} not found`);
@@ -189,7 +189,7 @@ export async function cancelShopifySubscription(
 ): Promise<void> {
   const data = await callShopifyGraphQL(shop, APP_SUBSCRIPTION_CANCEL, {
     id: subscriptionId,
-  });
+  }, accessToken);
 
   const result = data.appSubscriptionCancel;
   if (result.userErrors?.length > 0) {
@@ -205,7 +205,7 @@ export async function getActiveShopifySubscription(
   shop: string,
   accessToken: string,
 ): Promise<any | null> {
-  const data = await callShopifyGraphQL(shop, ACTIVE_SUBSCRIPTIONS_QUERY);
+  const data = await callShopifyGraphQL(shop, ACTIVE_SUBSCRIPTIONS_QUERY, undefined, accessToken);
 
   const subs = data.currentAppInstallation?.activeSubscriptions || [];
   return subs.length > 0 ? subs[0] : null;

@@ -17,10 +17,11 @@ export class ShopifyAPIError extends Error {
 export async function callShopifyAPI(
   shop: string,
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  accessToken?: string
 ): Promise<Response> {
-  let token = await getShopToken(shop);
-  
+  let token = accessToken || await getShopToken(shop);
+
   if (!token) {
     throw new ShopifyAPIError('No access token found for shop', 404);
   }
@@ -77,12 +78,13 @@ export async function callShopifyAPI(
 export async function callShopifyGraphQL(
   shop: string,
   query: string,
-  variables?: Record<string, any>
+  variables?: Record<string, any>,
+  accessToken?: string
 ): Promise<any> {
   const response = await callShopifyAPI(shop, '/graphql.json', {
     method: 'POST',
     body: JSON.stringify({ query, variables }),
-  });
+  }, accessToken);
   
   if (!response.ok) {
     const errorText = await response.text();
