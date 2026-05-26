@@ -574,6 +574,8 @@ model Subscription {
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
   cancelAtPeriodEnd    Boolean            @default(false)
+  billingProvider      String?            // "shopify" | "razorpay" | "stripe" | "free"
+  shopifyChargeId      String?            // Shopify AppSubscription GID
   stripeCustomerId     String?
   stripeSubscriptionId String?
   lastReminderSentAt   DateTime?          // Track when last expiry reminder was sent

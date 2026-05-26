@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { cancelRazorpaySubscription } from '@/lib/razorpay';
 import { cancelStripeSubscription } from '@/lib/stripe';
+import { cancelShopifySubscription } from '@/lib/shopify-billing';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -24,13 +25,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ subscription: null, usage: null });
     }
 
+    // Check if this is a Shopify-billed store
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { shopifyDomain: true, accessToken: true },
+    });
+
     const subscription = await prisma.subscription.findUnique({
       where: { storeId },
     });
 
     if (!subscription) {
       // No subscription yet — normal for new users
-      return NextResponse.json({ subscription: null, usage: null });
+      return NextResponse.json({ subscription: null, usage: null, isShopifyStore: false });
     }
 
     // Get plan features
@@ -49,12 +56,20 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const isShopifyStore = !!(
+      store?.shopifyDomain?.endsWith('.myshopify.com') &&
+      !store?.shopifyDomain?.startsWith('default-') &&
+      store?.accessToken
+    );
+
     return NextResponse.json({
+      isShopifyStore,
       subscription: {
         id: subscription.id,
         status: subscription.status,
         planId: subscription.planId,
         planName: subscription.planName,
+        billingProvider: subscription.billingProvider,
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
@@ -112,27 +127,40 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (!subscription.stripeSubscriptionId) {
-      return NextResponse.json(
-        { error: 'No active subscription to cancel' },
-        { status: 400 }
-      );
-    }
+    // Determine billing provider and cancel accordingly
+    if (subscription.billingProvider === 'shopify') {
+      // Cancel via Shopify Billing API
+      if (subscription.shopifyChargeId) {
+        const store = await prisma.store.findUnique({
+          where: { id: storeId },
+          select: { shopifyDomain: true, accessToken: true },
+        });
 
-    // Determine gateway by checking latest payment currency
-    let gateway: 'razorpay' | 'stripe' = 'stripe';
-    if (subscription.payments.length > 0) {
-      const latestPayment = subscription.payments[0];
-      if (latestPayment.currency === 'INR') {
-        gateway = 'razorpay';
+        if (store?.shopifyDomain && store?.accessToken) {
+          await cancelShopifySubscription(
+            store.shopifyDomain,
+            store.accessToken,
+            subscription.shopifyChargeId,
+          );
+        }
       }
-    }
+    } else if (subscription.billingProvider === 'free') {
+      // Free plan — just update status, no gateway call
+    } else if (subscription.stripeSubscriptionId) {
+      // Legacy: determine gateway by checking latest payment currency
+      let gateway: 'razorpay' | 'stripe' = 'stripe';
+      if (subscription.payments.length > 0) {
+        const latestPayment = subscription.payments[0];
+        if (latestPayment.currency === 'INR') {
+          gateway = 'razorpay';
+        }
+      }
 
-    // Cancel subscription with appropriate gateway
-    if (gateway === 'razorpay') {
-      await cancelRazorpaySubscription(subscription.stripeSubscriptionId);
-    } else {
-      await cancelStripeSubscription(subscription.stripeSubscriptionId);
+      if (gateway === 'razorpay') {
+        await cancelRazorpaySubscription(subscription.stripeSubscriptionId);
+      } else {
+        await cancelStripeSubscription(subscription.stripeSubscriptionId);
+      }
     }
 
     // Update subscription status

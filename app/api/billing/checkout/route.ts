@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
+import { isShopifyBilledStore, createShopifySubscription } from '@/lib/shopify-billing';
+import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -118,6 +120,98 @@ export async function POST(request: NextRequest) {
 
         appliedCouponId = coupon.id;
       }
+    }
+
+    // ─── Shopify Billing API (for App Store merchants) ─────────
+    step = 'check-shopify-billing';
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { id: true, shopifyDomain: true, accessToken: true },
+    });
+
+    if (store && isShopifyBilledStore(store)) {
+      step = 'shopify-billing';
+      const priceUSD = Number(plan.price) || 0;
+      const discountedPrice = Math.max(0, priceUSD - discountAmount);
+
+      if (discountedPrice <= 0) {
+        // Fully discounted — activate free plan
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        await prisma.subscription.upsert({
+          where: { storeId },
+          create: {
+            storeId,
+            planId: plan.planId,
+            planName: plan.name,
+            status: 'ACTIVE',
+            billingProvider: 'free',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+          update: {
+            planId: plan.planId,
+            planName: plan.name,
+            status: 'ACTIVE',
+            billingProvider: 'free',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+        });
+
+        if (appliedCouponId) {
+          await prisma.coupon.update({
+            where: { id: appliedCouponId },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        return NextResponse.json({
+          gateway: 'free',
+          message: 'Coupon applied! Plan activated for free.',
+        });
+      }
+
+      const baseUrl = getBaseUrl();
+      const returnUrl = `${baseUrl}/api/billing/shopify-confirm?shop=${encodeURIComponent(store.shopifyDomain!)}`;
+
+      const result = await createShopifySubscription({
+        shop: store.shopifyDomain!,
+        accessToken: store.accessToken!,
+        planName: plan.name,
+        priceUSD: discountedPrice,
+        returnUrl,
+      });
+
+      // Increment coupon usage
+      if (appliedCouponId) {
+        await prisma.coupon.update({
+          where: { id: appliedCouponId },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+
+      const response = NextResponse.json({
+        gateway: 'shopify',
+        confirmationUrl: result.confirmationUrl,
+        subscriptionId: result.subscriptionId,
+        planName: plan.name,
+        planId: plan.planId,
+      });
+
+      // Store plan info in cookie so the confirmation callback knows which plan
+      response.cookies.set('shopify_billing_plan', JSON.stringify({
+        planId: plan.planId,
+        planName: plan.name,
+      }), {
+        httpOnly: true,
+        maxAge: 600, // 10 minutes
+        sameSite: 'lax',
+      });
+
+      return response;
     }
 
     if (currency === 'INR') {

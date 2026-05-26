@@ -47,7 +47,7 @@ interface Subscription {
 }
 
 interface CheckoutResponse {
-  gateway: 'razorpay' | 'stripe' | 'free';
+  gateway: 'razorpay' | 'stripe' | 'free' | 'shopify';
   razorpayOrderId?: string;
   razorpayKeyId?: string;
   amount?: number;
@@ -56,6 +56,7 @@ interface CheckoutResponse {
   planId?: string;
   storeId?: string;
   sessionUrl?: string;
+  confirmationUrl?: string;
   message?: string;
 }
 
@@ -72,6 +73,7 @@ export default function BillingPage() {
   const [discount, setDiscount] = useState<{ discountType: string; value: number; code: string } | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isShopifyStore, setIsShopifyStore] = useState(false);
 
   // Calculate days until expiry
   const daysUntilExpiry = currentSubscription?.currentPeriodEnd
@@ -81,6 +83,23 @@ export default function BillingPage() {
     : null;
   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0;
+
+  // Handle Shopify billing success/error from redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get('success');
+    const errorParam = params.get('error');
+
+    if (success === 'shopify_activated') {
+      setError(null);
+      alert('Shopify subscription activated successfully!');
+      // Clean URL
+      window.history.replaceState({}, '', '/billing');
+    } else if (errorParam?.startsWith('charge_')) {
+      setError(`Shopify charge was ${errorParam.replace('charge_', '')}. Please try again.`);
+      window.history.replaceState({}, '', '/billing');
+    }
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -102,6 +121,10 @@ export default function BillingPage() {
             const subData = await subRes.json();
             if (subData.subscription) {
               setCurrentSubscription(subData.subscription);
+            }
+            if (subData.isShopifyStore) {
+              setIsShopifyStore(true);
+              setCurrency('USD'); // Shopify billing is always USD
             }
           }
         }
@@ -177,6 +200,12 @@ export default function BillingPage() {
 
       if (data?.gateway === 'stripe' && data.sessionUrl) {
         window.location.href = data.sessionUrl;
+        return;
+      }
+
+      if (data?.gateway === 'shopify' && data.confirmationUrl) {
+        // Redirect to Shopify to approve the charge
+        window.location.href = data.confirmationUrl;
         return;
       }
 

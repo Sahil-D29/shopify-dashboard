@@ -10,6 +10,7 @@ const REQUIRED_WEBHOOKS = [
   'customers/create',
   'customers/update',
   'app/uninstalled',
+  'app_subscriptions/update',
   'customers/data_request',
   'customers/redact',
   'shop/redact',

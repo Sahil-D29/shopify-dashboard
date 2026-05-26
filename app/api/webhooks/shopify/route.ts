@@ -27,6 +27,7 @@ const SUPPORTED_TOPICS = new Set([
   'customers/create',
   'customers/update',
   'app/uninstalled',
+  'app_subscriptions/update',
 ]);
 
 const isRecord = (value: unknown): value is JsonRecord =>
@@ -132,6 +133,31 @@ export async function POST(request: NextRequest) {
       console.log(`[webhooks][shopify] app/uninstalled: deactivated store ${shopHeader}`);
     } catch (err) {
       console.error('[webhooks][shopify] app/uninstalled handler failed:', err);
+    }
+  }
+
+  // ─── Handle app_subscriptions/update (Shopify Billing) ──────
+  if (topic === 'app_subscriptions/update') {
+    try {
+      const appSubscription = payload.app_subscription as JsonRecord | undefined;
+      if (appSubscription) {
+        const gid = appSubscription.admin_graphql_api_id as string;
+        const status = (appSubscription.status as string || '').toUpperCase();
+
+        if (gid) {
+          const { mapShopifyStatus } = await import('@/lib/shopify-billing');
+          const mappedStatus = mapShopifyStatus(status);
+
+          const updated = await prisma.subscription.updateMany({
+            where: { shopifyChargeId: gid },
+            data: { status: mappedStatus },
+          });
+
+          console.log(`[webhooks][shopify] app_subscriptions/update: ${gid} → ${mappedStatus} (${updated.count} records)`);
+        }
+      }
+    } catch (err) {
+      console.error('[webhooks][shopify] app_subscriptions/update handler failed:', err);
     }
   }
 
