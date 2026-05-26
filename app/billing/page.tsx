@@ -256,8 +256,41 @@ export default function BillingPage() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-        <Badge variant="outline" className="text-sm px-3 py-1">₹ INR</Badge>
+        <div className="flex items-center gap-2">
+          {isShopifyStore ? (
+            <Badge variant="outline" className="text-sm px-3 py-1 bg-green-50 border-green-300 text-green-700">
+              Shopify Billing (USD)
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-1 rounded-lg border p-1">
+              <button
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  currency === 'INR' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setCurrency('INR')}
+              >
+                ₹ INR
+              </button>
+              <button
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  currency === 'USD' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setCurrency('USD')}
+              >
+                $ USD
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Shopify billing notice */}
+      {isShopifyStore && (
+        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+          <strong>Shopify Billing:</strong> Your subscription is managed through Shopify.
+          When you subscribe, you&apos;ll be redirected to Shopify to approve the charge.
+        </div>
+      )}
 
       {/* Expiry Warning Banners */}
       {isExpired && currentSubscription && (
@@ -470,6 +503,8 @@ export default function BillingPage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
                 </>
+              ) : isShopifyStore ? (
+                `Subscribe via Shopify — ${currSymbol}${(discount ? finalPrice : originalPrice).toFixed(2)}`
               ) : (
                 `Pay ${currSymbol}${(discount ? finalPrice : originalPrice).toFixed(2)}`
               )}
