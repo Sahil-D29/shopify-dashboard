@@ -28,8 +28,8 @@ interface PlanCardProps {
 }
 
 export default function PlanCard({ plan, isCurrentPlan, currency, onSubscribe }: PlanCardProps) {
-  const displayPrice = plan.priceINR || plan.price;
-  const currencySymbol = '₹';
+  const displayPrice = currency === 'INR' ? (plan.priceINR || plan.price) : (plan.price || plan.priceINR);
+  const currencySymbol = currency === 'INR' ? '₹' : '$';
 
   const features = [
     { label: `${plan.messagesPerMonth.toLocaleString()} messages/month`, included: true },

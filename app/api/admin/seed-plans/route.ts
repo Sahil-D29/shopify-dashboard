@@ -46,6 +46,18 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin(request);
 
+    // Deactivate all existing plans first
+    const deactivated = await prisma.planFeature.updateMany({
+      where: {
+        planId: { notIn: PLANS.map(p => p.planId) },
+      },
+      data: {
+        isActive: false,
+        isVisible: false,
+      },
+    });
+
+    // Upsert the canonical plans
     const results = [];
     for (const plan of PLANS) {
       const result = await prisma.planFeature.upsert({
@@ -56,7 +68,7 @@ export async function POST(request: NextRequest) {
       results.push({ planId: result.planId, name: result.name, price: result.price, priceINR: result.priceINR });
     }
 
-    return NextResponse.json({ success: true, plans: results });
+    return NextResponse.json({ success: true, plans: results, deactivatedCount: deactivated.count });
   } catch (error: any) {
     if (error.message === 'Admin authentication required') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
