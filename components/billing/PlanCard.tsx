@@ -32,8 +32,8 @@ export default function PlanCard({ plan, isCurrentPlan, currency, onSubscribe }:
   const currencySymbol = currency === 'INR' ? '₹' : '$';
 
   const features = [
-    { label: `${plan.messagesPerMonth.toLocaleString()} messages/month`, included: true },
-    { label: `${plan.campaignsPerMonth} campaigns/month`, included: true },
+    { label: `${plan.messagesPerMonth === -1 ? 'Unlimited' : plan.messagesPerMonth.toLocaleString()} messages/month`, included: true },
+    { label: `${plan.campaignsPerMonth === -1 ? 'Unlimited' : plan.campaignsPerMonth} campaigns/month`, included: true },
     { label: 'Analytics', included: plan.analytics },
     { label: `${plan.support} support`, included: true },
     { label: 'WhatsApp Automation', included: plan.whatsappAutomation },
