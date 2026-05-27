@@ -18,9 +18,11 @@ use_legacy_install_flow = true
 [webhooks]
 api_version = "2024-10"
 
-  [[webhooks.subscriptions]]
-  topics = ["app_subscriptions/update"]
-  uri = "https://app.dorza.io/api/webhooks/shopify"
+  # Note: app-specific webhook subscriptions (e.g. app_subscriptions/update) are
+  # incompatible with use_legacy_install_flow = true. Register billing webhooks
+  # per-shop via REST API in the OAuth callback if needed. For now, billing
+  # status is verified via the Shopify confirmation callback at
+  # /api/billing/shopify-confirm.
 
   [webhooks.privacy_compliance]
   customer_deletion_url = "https://app.dorza.io/api/webhooks/shopify/compliance"
