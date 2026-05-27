@@ -32,13 +32,20 @@ export async function GET(request: NextRequest) {
       select: { shopifyDomain: true, accessToken: true },
     });
 
+    // Compute isShopifyStore early so we can return it even when there's no subscription yet
+    const isShopifyStore = !!(
+      store?.shopifyDomain?.endsWith('.myshopify.com') &&
+      !store?.shopifyDomain?.startsWith('default-') &&
+      store?.accessToken
+    );
+
     const subscription = await prisma.subscription.findUnique({
       where: { storeId },
     });
 
     if (!subscription) {
-      // No subscription yet — normal for new users
-      return NextResponse.json({ subscription: null, usage: null, isShopifyStore: false });
+      // No subscription yet — normal for new users, but still return correct isShopifyStore
+      return NextResponse.json({ subscription: null, usage: null, isShopifyStore });
     }
 
     // Get plan features
@@ -56,12 +63,6 @@ export async function GET(request: NextRequest) {
         period,
       },
     });
-
-    const isShopifyStore = !!(
-      store?.shopifyDomain?.endsWith('.myshopify.com') &&
-      !store?.shopifyDomain?.startsWith('default-') &&
-      store?.accessToken
-    );
 
     return NextResponse.json({
       isShopifyStore,
