@@ -6,18 +6,27 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
-import { getShopifySubscriptionStatus } from '@/lib/shopify-billing';
+import {
+  getShopifySubscriptionStatus,
+  getActiveShopifySubscription,
+  mapShopifyStatus,
+} from '@/lib/shopify-billing';
 import { decrypt, isEncrypted } from '@/lib/encryption';
 
 /**
  * GET /api/billing/shopify-confirm
  *
- * Shopify redirects here after the merchant approves or declines a charge.
- * Query params: ?charge_id=gid://shopify/AppSubscription/12345
+ * Shopify redirects here after the merchant picks a plan and approves a charge.
  *
- * 1. Verify the charge status via GraphQL
- * 2. If ACTIVE → create/update Subscription record
- * 3. Redirect to /billing with success or error
+ * Managed Pricing (current mode):
+ *   ?plan_handle=<handle>&shop=<domain>
+ *   The app is enrolled in Shopify App Pricing — the merchant selected a plan
+ *   on Shopify's hosted page. We confirm the active subscription via the Admin
+ *   API and sync it to our DB.
+ *
+ * Legacy Billing API (fallback, no longer used to create charges):
+ *   ?charge_id=gid://shopify/AppSubscription/12345
+ *   Verified directly by GID.
  */
 export async function GET(request: NextRequest) {
   const baseUrl = getBaseUrl();
@@ -30,11 +39,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl;
     const chargeId = searchParams.get('charge_id');
+    const planHandle = searchParams.get('plan_handle');
     const shopDomain = searchParams.get('shop');
 
-    if (!chargeId) {
-      console.error('[Shopify Billing] Missing charge_id in confirmation callback');
-      return NextResponse.redirect(`${baseUrl}/billing?error=missing_charge_id`);
+    if (!chargeId && !planHandle) {
+      console.error('[Shopify Billing] Missing plan_handle/charge_id in confirmation callback');
+      return NextResponse.redirect(`${baseUrl}/billing?error=missing_plan`);
     }
 
     // Resolve store
@@ -65,35 +75,115 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/billing?error=token_decrypt_failed`);
     }
 
-    // Check the subscription status on Shopify
-    console.log('[Shopify Billing] Verifying charge:', { chargeId, shop });
+    // ─── Managed Pricing path (plan_handle present) ──────────────
+    if (planHandle) {
+      console.log('[Shopify Billing] Managed pricing return:', { planHandle, shop });
+
+      // Confirm the active subscription on Shopify (also gives us the GID + period end)
+      let activeSub: {
+        id: string;
+        name?: string;
+        status?: string;
+        currentPeriodEnd?: string;
+      } | null = null;
+      try {
+        activeSub = await getActiveShopifySubscription(shop, decryptedToken);
+      } catch (err) {
+        console.error('[Shopify Billing] Failed to read active subscription:', err);
+        return NextResponse.redirect(`${baseUrl}/billing?error=verification_failed`);
+      }
+
+      if (!activeSub || mapShopifyStatus(activeSub.status || '') !== 'ACTIVE') {
+        console.log('[Shopify Billing] No active managed-pricing subscription found');
+        return NextResponse.redirect(`${baseUrl}/billing?error=charge_declined`);
+      }
+
+      // Plan handle maps directly to our planId (handles are 'starter' / 'growth')
+      const planId = planHandle;
+      const plan = await prisma.planFeature.findUnique({ where: { planId } });
+      if (!plan) {
+        console.error('[Shopify Billing] Unknown plan_handle:', planHandle);
+        return NextResponse.redirect(`${baseUrl}/billing?error=unknown_plan`);
+      }
+
+      const now = new Date();
+      const periodEnd = activeSub.currentPeriodEnd
+        ? new Date(activeSub.currentPeriodEnd)
+        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      await prisma.subscription.upsert({
+        where: { storeId: store.id },
+        create: {
+          storeId: store.id,
+          planId: plan.planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          billingProvider: 'shopify',
+          shopifyChargeId: activeSub.id,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+        },
+        update: {
+          planId: plan.planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          billingProvider: 'shopify',
+          shopifyChargeId: activeSub.id,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+        },
+      });
+
+      const subscription = await prisma.subscription.findUnique({
+        where: { storeId: store.id },
+      });
+      if (subscription) {
+        await prisma.payment.create({
+          data: {
+            subscriptionId: subscription.id,
+            amount: plan.price,
+            currency: 'USD',
+            status: 'SUCCEEDED',
+            stripePaymentId: activeSub.id, // Shopify AppSubscription GID as reference
+            paidAt: now,
+          },
+        });
+      }
+
+      console.log('[Shopify Billing] Managed pricing subscription synced:', {
+        storeId: store.id,
+        planId: plan.planId,
+        gid: activeSub.id,
+      });
+
+      return NextResponse.redirect(`${baseUrl}/billing?success=shopify_activated`);
+    }
+
+    // ─── Legacy Billing API path (charge_id present) ─────────────
+    console.log('[Shopify Billing] Verifying legacy charge:', { chargeId, shop });
 
     let subscriptionStatus;
     try {
       subscriptionStatus = await getShopifySubscriptionStatus(
         shop,
         decryptedToken,
-        chargeId,
+        chargeId!,
       );
     } catch (err) {
       console.error('[Shopify Billing] Failed to verify charge:', err);
       return NextResponse.redirect(`${baseUrl}/billing?error=verification_failed`);
     }
 
-    console.log('[Shopify Billing] Charge status:', subscriptionStatus.status);
-
     if (subscriptionStatus.status === 'ACTIVE') {
-      // Charge approved — create/update subscription
       const now = new Date();
       const periodEnd = subscriptionStatus.currentPeriodEnd
         ? new Date(subscriptionStatus.currentPeriodEnd)
-        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days fallback
+        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      // Extract plan info from the pending_charge cookie or charge name
       const planInfo = request.cookies.get('shopify_billing_plan')?.value;
       let planId = 'starter';
       let planName = subscriptionStatus.name || 'Starter';
-
       if (planInfo) {
         try {
           const parsed = JSON.parse(planInfo);
@@ -104,10 +194,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Look up actual plan features
-      const plan = await prisma.planFeature.findUnique({
-        where: { planId },
-      });
+      const plan = await prisma.planFeature.findUnique({ where: { planId } });
       if (plan) {
         planName = plan.name;
       }
@@ -136,11 +223,9 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      // Record a payment
       const subscription = await prisma.subscription.findUnique({
         where: { storeId: store.id },
       });
-
       if (subscription && plan) {
         await prisma.payment.create({
           data: {
@@ -148,21 +233,17 @@ export async function GET(request: NextRequest) {
             amount: plan.price,
             currency: 'USD',
             status: 'SUCCEEDED',
-            stripePaymentId: chargeId, // Store Shopify charge GID as reference
+            stripePaymentId: chargeId!,
             paidAt: now,
           },
         });
       }
 
-      console.log('[Shopify Billing] Subscription activated:', { storeId: store.id, planId, chargeId });
-
       const response = NextResponse.redirect(`${baseUrl}/billing?success=shopify_activated`);
-      // Clean up the billing plan cookie
       response.cookies.delete('shopify_billing_plan');
       return response;
     }
 
-    // Charge was declined or pending
     console.log('[Shopify Billing] Charge not active:', subscriptionStatus.status);
     return NextResponse.redirect(
       `${baseUrl}/billing?error=charge_${subscriptionStatus.status.toLowerCase()}`,

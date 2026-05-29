@@ -4,9 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
-import { isShopifyBilledStore, createShopifySubscription } from '@/lib/shopify-billing';
-import { decrypt, isEncrypted } from '@/lib/encryption';
-import { getBaseUrl } from '@/lib/utils/getBaseUrl';
+import { isShopifyBilledStore, buildManagedPricingUrl } from '@/lib/shopify-billing';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -131,27 +129,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (store && isShopifyBilledStore(store)) {
-      step = 'shopify-billing';
-
-      // Decrypt the access token from DB (stored encrypted)
-      let decryptedToken = store.accessToken!;
-      try {
-        if (isEncrypted(decryptedToken)) {
-          decryptedToken = decrypt(decryptedToken);
-        }
-      } catch (err) {
-        console.error('Failed to decrypt store access token:', err);
-        return NextResponse.json(
-          { error: 'Failed to decrypt store credentials. Please reconnect your Shopify store.' },
-          { status: 500 }
-        );
-      }
+      step = 'shopify-managed-pricing';
 
       const priceUSD = Number(plan.price) || 0;
       const discountedPrice = Math.max(0, priceUSD - discountAmount);
 
       if (discountedPrice <= 0) {
-        // Fully discounted — activate free plan
+        // Fully discounted — activate free plan locally (no Shopify charge needed)
         const now = new Date();
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
@@ -190,18 +174,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const baseUrl = getBaseUrl();
-      const returnUrl = `${baseUrl}/api/billing/shopify-confirm?shop=${encodeURIComponent(store.shopifyDomain!)}`;
+      // The app is enrolled in Shopify Managed Pricing (Shopify App Pricing),
+      // which is mutually exclusive with the Billing API. Instead of calling
+      // appSubscriptionCreate (which Shopify blocks), redirect the merchant to
+      // Shopify's hosted plan-selection page. Shopify handles the charge
+      // approval, then redirects back to /api/billing/shopify-confirm with
+      // ?plan_handle=<handle>&shop=<domain>.
+      const pricingUrl = buildManagedPricingUrl(store.shopifyDomain!);
 
-      const result = await createShopifySubscription({
-        shop: store.shopifyDomain!,
-        accessToken: decryptedToken,
-        planName: plan.name,
-        priceUSD: discountedPrice,
-        returnUrl,
-      });
-
-      // Increment coupon usage
+      // Increment coupon usage (best-effort; merchant still selects on Shopify)
       if (appliedCouponId) {
         await prisma.coupon.update({
           where: { id: appliedCouponId },
@@ -209,25 +190,12 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const response = NextResponse.json({
+      return NextResponse.json({
         gateway: 'shopify',
-        confirmationUrl: result.confirmationUrl,
-        subscriptionId: result.subscriptionId,
+        confirmationUrl: pricingUrl,
         planName: plan.name,
         planId: plan.planId,
       });
-
-      // Store plan info in cookie so the confirmation callback knows which plan
-      response.cookies.set('shopify_billing_plan', JSON.stringify({
-        planId: plan.planId,
-        planName: plan.name,
-      }), {
-        httpOnly: true,
-        maxAge: 600, // 10 minutes
-        sameSite: 'lax',
-      });
-
-      return response;
     }
 
     if (currency === 'INR') {

@@ -287,8 +287,9 @@ export default function BillingPage() {
       {/* Shopify billing notice */}
       {isShopifyStore && (
         <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-          <strong>Shopify Billing:</strong> Your subscription is managed through Shopify.
-          When you subscribe, you&apos;ll be redirected to Shopify to approve the charge.
+          <strong>Shopify Billing:</strong> Plans are managed through Shopify. Click
+          Subscribe to choose a plan on Shopify and approve the charge — your subscription
+          then activates automatically.
         </div>
       )}
 

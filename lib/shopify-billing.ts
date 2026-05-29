@@ -21,6 +21,28 @@ export function isShopifyBilledStore(store: {
   );
 }
 
+// ─── Managed Pricing (Shopify App Pricing) ─────────────────────
+
+/**
+ * Build the Shopify-hosted plan-selection URL for a Managed Pricing app.
+ *
+ * The app is enrolled in Shopify App Pricing (Managed Pricing), which is
+ * mutually exclusive with the Billing API. Merchants pick a plan and approve
+ * the charge on Shopify's hosted page, then Shopify redirects back to the
+ * per-plan configured redirect URL with `?plan_handle=<handle>&shop=<domain>`.
+ *
+ * URL format:
+ *   https://admin.shopify.com/store/{store_handle}/charges/{app_handle}/pricing_plans
+ *
+ * @param shopifyDomain e.g. "tsg-api.myshopify.com"
+ * @returns the absolute pricing-plans URL
+ */
+export function buildManagedPricingUrl(shopifyDomain: string): string {
+  const storeHandle = shopifyDomain.replace(/\.myshopify\.com$/, '');
+  const appHandle = process.env.SHOPIFY_APP_HANDLE || '';
+  return `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
+}
+
 // ─── GraphQL Mutations / Queries ────────────────────────────────
 
 const APP_SUBSCRIPTION_CREATE = `
@@ -104,6 +126,11 @@ const SUBSCRIPTION_STATUS_QUERY = `
 // ─── Functions ──────────────────────────────────────────────────
 
 /**
+ * @deprecated The app is enrolled in Shopify Managed Pricing, which forbids the
+ * Billing API ("Managed Pricing Apps cannot use the Billing API"). Use
+ * {@link buildManagedPricingUrl} to redirect merchants to Shopify's hosted
+ * pricing page instead. Kept for reference / potential future Billing-API mode.
+ *
  * Create a Shopify app subscription (recurring charge).
  * Returns the confirmation URL that the merchant must visit to approve.
  */

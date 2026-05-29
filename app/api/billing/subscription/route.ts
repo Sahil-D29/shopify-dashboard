@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { cancelRazorpaySubscription } from '@/lib/razorpay';
 import { cancelStripeSubscription } from '@/lib/stripe';
-import { cancelShopifySubscription } from '@/lib/shopify-billing';
-import { decrypt, isEncrypted } from '@/lib/encryption';
+import { buildManagedPricingUrl } from '@/lib/shopify-billing';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -131,25 +130,31 @@ export async function DELETE(request: NextRequest) {
 
     // Determine billing provider and cancel accordingly
     if (subscription.billingProvider === 'shopify') {
-      // Cancel via Shopify Billing API
-      if (subscription.shopifyChargeId) {
-        const store = await prisma.store.findUnique({
-          where: { id: storeId },
-          select: { shopifyDomain: true, accessToken: true },
-        });
+      // The app is enrolled in Shopify Managed Pricing. The merchant cancels or
+      // changes their plan from Shopify's hosted page — the Billing API cancel
+      // mutation is not used here (Managed Pricing apps can't use the Billing API).
+      // Mark the subscription to end locally and hand the merchant the Shopify
+      // plan-management URL so they can complete the cancellation on Shopify.
+      const store = await prisma.store.findUnique({
+        where: { id: storeId },
+        select: { shopifyDomain: true },
+      });
 
-        if (store?.shopifyDomain && store?.accessToken) {
-          let token = store.accessToken;
-          try {
-            if (isEncrypted(token)) token = decrypt(token);
-          } catch { /* fall through with raw token */ }
-          await cancelShopifySubscription(
-            store.shopifyDomain,
-            token,
-            subscription.shopifyChargeId,
-          );
-        }
-      }
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { cancelAtPeriodEnd: true },
+      });
+
+      const manageUrl = store?.shopifyDomain
+        ? buildManagedPricingUrl(store.shopifyDomain)
+        : null;
+
+      return NextResponse.json({
+        message:
+          'To finish cancelling, manage your plan on Shopify. Your access remains active until the end of the current billing period.',
+        manageUrl,
+        cancelAtPeriodEnd: true,
+      });
     } else if (subscription.billingProvider === 'free') {
       // Free plan — just update status, no gateway call
     } else if (subscription.stripeSubscriptionId) {
