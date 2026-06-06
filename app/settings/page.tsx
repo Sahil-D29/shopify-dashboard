@@ -14,6 +14,7 @@ import {
   CreditCard, Bell, Link as LinkIcon, Users, UserPlus, Mail, Activity,
   Search, MoreVertical, Edit, Trash2, Shield, Webhook, Key
 } from 'lucide-react';
+import { launchWhatsAppEmbeddedSignup } from '@/lib/whatsapp/embedded-signup-client';
 import { CustomEventsManager } from '@/components/settings/CustomEventsManager';
 import { ApiKeysManager } from '@/components/settings/ApiKeysManager';
 import { StoreConfigManager, ShopifyConfig } from '@/lib/store-config';
@@ -532,59 +533,85 @@ function SettingsContent() {
     }
   };
 
-  // Facebook Embedded Signup
+  // Facebook Embedded Signup — opens the Facebook popup via the JS SDK,
+  // captures the customer's WABA id + phone number id, then exchanges the
+  // returned code on the backend and persists the connection.
   const handleEmbeddedSignup = async () => {
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID;
+    if (!appId || !configId) {
+      setWaResult({
+        success: false,
+        message: 'WhatsApp signup is not configured yet. Missing Meta App ID / Configuration ID.',
+      });
+      return;
+    }
+
     setEmbeddedLoading(true);
+    setWaResult(null);
     try {
-      const res = await fetch('/api/whatsapp/embedded-signup');
+      const signup = await launchWhatsAppEmbeddedSignup({ appId, configId });
+
+      const res = await fetch('/api/whatsapp/embedded-signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
+        body: JSON.stringify(signup),
+      });
       const data = await res.json();
-      if (data.loginUrl) {
-        window.location.href = data.loginUrl;
+
+      if (data.success && data.configured) {
+        setEmbeddedConnected(true);
+        setWaResult({
+          success: true,
+          message: data.phoneNumber
+            ? `WhatsApp connected! Phone: ${data.phoneNumber}`
+            : 'WhatsApp Business Account connected successfully!',
+        });
+      } else if (data.success && data.businesses?.length) {
+        // Popup didn't return ids (rare) — auto-pick the first WABA/number.
+        const biz = data.businesses[0];
+        const phone = biz?.phoneNumbers?.[0];
+        if (data.signupToken && biz?.wabaId && phone?.id) {
+          const saveRes = await fetch('/api/whatsapp/embedded-signup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+            },
+            body: JSON.stringify({ signupToken: data.signupToken, wabaId: biz.wabaId, phoneNumberId: phone.id }),
+          });
+          const saveData = await saveRes.json();
+          if (saveData.success) {
+            setEmbeddedConnected(true);
+            setWaResult({ success: true, message: `WhatsApp connected! Phone: ${phone.displayPhoneNumber}` });
+          } else {
+            setWaResult({ success: false, message: saveData.error || 'Failed to finish connecting' });
+          }
+        } else {
+          setWaResult({ success: false, message: 'Could not determine your WhatsApp number. Please try again.' });
+        }
       } else {
-        setWaResult({ success: false, message: data.error || 'Failed to start signup' });
-        setEmbeddedLoading(false);
+        setWaResult({ success: false, message: data.error || 'Failed to complete signup' });
       }
     } catch (err) {
-      setWaResult({ success: false, message: getErrorMessage(err, 'Failed to start embedded signup') });
+      setWaResult({ success: false, message: getErrorMessage(err, 'Embedded signup failed') });
+    } finally {
       setEmbeddedLoading(false);
     }
   };
 
-  // Handle embedded signup OAuth callback
+  // Surface any error returned to the page and reflect an existing connection.
+  // (The Embedded Signup popup flow no longer round-trips through a redirect,
+  // so there is no `code` query param to process here.)
   useEffect(() => {
-    const code = searchParams.get('code');
     const oauthError = searchParams.get('error');
-
     if (oauthError) {
       setWaResult({ success: false, message: decodeURIComponent(oauthError) });
       setActiveSection('wa');
       return;
-    }
-
-    if (code) {
-      setActiveSection('wa');
-      setEmbeddedLoading(true);
-      (async () => {
-        try {
-          const res = await fetch('/api/whatsapp/embedded-signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            setEmbeddedConnected(true);
-            setWaResult({ success: true, message: 'WhatsApp Business Account connected successfully!' });
-            window.history.replaceState({}, '', '/settings');
-          } else {
-            setWaResult({ success: false, message: data.error || 'Failed to complete signup' });
-          }
-        } catch (err) {
-          setWaResult({ success: false, message: getErrorMessage(err, 'Callback processing failed') });
-        } finally {
-          setEmbeddedLoading(false);
-        }
-      })();
     }
 
     if (searchParams.get('connected') === 'true') {

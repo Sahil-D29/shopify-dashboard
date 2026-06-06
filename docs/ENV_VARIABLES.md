@@ -99,16 +99,24 @@ Add these when you enable subscriptions.
 
 | Variable | Required | What to put |
 |----------|----------|-------------|
-| **META_APP_ID** | If using WhatsApp | Meta App ID |
-| **META_APP_SECRET** | If using WhatsApp | Meta App Secret |
+| **META_APP_ID** | If using WhatsApp | Meta App ID (server-side) |
+| **META_APP_SECRET** | If using WhatsApp | Meta App Secret (server-side; used to exchange the Embedded Signup code) |
 | **META_ACCESS_TOKEN** | If using WhatsApp | Page/App access token |
-| **WHATSAPP_PHONE_NUMBER_ID** | If using WhatsApp | From Meta Business → WhatsApp → Phone numbers |
-| **WHATSAPP_BUSINESS_ACCOUNT_ID** | If using WhatsApp | WABA ID |
-| **WHATSAPP_ACCESS_TOKEN** | If using WhatsApp | Same as or separate from META_ACCESS_TOKEN |
+| **NEXT_PUBLIC_META_APP_ID** | For Embedded Signup | Meta App ID exposed to the browser so the Facebook JS SDK can `FB.init`. Same value as META_APP_ID. |
+| **NEXT_PUBLIC_META_CONFIG_ID** | For Embedded Signup | The Configuration ID created in **Facebook Login for Business → Configurations** (from the "WhatsApp Embedded Signup" template). Passed to `FB.login({ config_id })`. |
+| **WHATSAPP_PHONE_NUMBER_ID** | Fallback only | Numeric **Phone Number ID** from Meta → WhatsApp → API Setup. NOT a phone number or email. Used only when a store has no DB connection from Embedded Signup. |
+| **WHATSAPP_BUSINESS_ACCOUNT_ID** | Fallback only | WABA ID (env fallback) |
+| **WHATSAPP_ACCESS_TOKEN** | Fallback only | Access token (env fallback) |
 | **WHATSAPP_VERIFY_TOKEN** | For webhook | Token you choose; same value in Meta webhook config |
 | **WHATSAPP_WEBHOOK_SECRET** | No | If Meta provides one for signature verification |
 
-You already have the main Meta/WhatsApp vars; add verify/webhook vars when you set up the webhook.
+**Embedded Signup vs. env fallback:** Once a store connects through the in-app
+"Connect with Facebook" popup, its credentials are saved (encrypted) to the
+`WhatsAppConfig` table and `resolveWhatsAppConfig(storeId)` prefers them. The
+`WHATSAPP_*` env vars are only a single-tenant fallback for stores with no DB
+connection. For the popup to work you MUST set `NEXT_PUBLIC_META_APP_ID` and
+`NEXT_PUBLIC_META_CONFIG_ID`, and complete the Meta dashboard setup in
+`docs/WHATSAPP.md`.
 
 ---
 

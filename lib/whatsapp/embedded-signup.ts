@@ -27,19 +27,27 @@ export function getEmbeddedSignupUrl(storeId: string, redirectUri: string): stri
   return `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth?${params.toString()}`;
 }
 
-/** Exchange OAuth code for access token */
-export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<{
+/**
+ * Exchange OAuth code for access token.
+ *
+ * For the Embedded Signup popup flow (Facebook JS SDK `FB.login` with a
+ * `config_id` and `response_type: 'code'`) NO redirect_uri is used — the code
+ * is exchanged directly. `redirectUri` is therefore optional and only included
+ * when present (legacy server-redirect flow).
+ */
+export async function exchangeCodeForToken(code: string, redirectUri?: string): Promise<{
   accessToken: string;
   expiresIn?: number;
 }> {
+  const params = new URLSearchParams({
+    client_id: META_APP_ID || '',
+    client_secret: META_APP_SECRET || '',
+    code,
+  });
+  if (redirectUri) params.set('redirect_uri', redirectUri);
+
   const response = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/oauth/access_token?` +
-    new URLSearchParams({
-      client_id: META_APP_ID || '',
-      client_secret: META_APP_SECRET || '',
-      code,
-      redirect_uri: redirectUri,
-    }).toString()
+    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/oauth/access_token?${params.toString()}`
   );
 
   const data = await response.json();

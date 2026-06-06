@@ -66,12 +66,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authorization code required' }, { status: 400 });
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
-    const redirectUri = `${baseUrl}/api/whatsapp/embedded-signup/callback`;
+    // Embedded Signup (FB JS SDK popup) exchanges the code WITHOUT a redirect_uri.
+    const { accessToken } = await exchangeCodeForToken(code);
 
-    // Exchange code for token
-    const { accessToken } = await exchangeCodeForToken(code, redirectUri);
-
+    // Happy path: the popup's session-info listener already returned the
+    // business' WABA id + phone number id, so save immediately.
     if (wabaId && phoneNumberId) {
       await saveWhatsAppConfig(storeId, wabaId, phoneNumberId, accessToken);
       return NextResponse.json({ success: true, configured: true });

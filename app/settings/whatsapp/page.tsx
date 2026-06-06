@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff, Loader2, Phone, ShieldCheck, RefreshCcw, CheckCircle, ExternalLink } from 'lucide-react';
 import { WhatsAppConfig, WhatsAppConfigManager } from '@/lib/whatsapp-config';
+import { launchWhatsAppEmbeddedSignup } from '@/lib/whatsapp/embedded-signup-client';
 import { useSearchParams } from 'next/navigation';
 
 interface TestConnectionResponse {
@@ -43,79 +44,72 @@ export default function WhatsAppSettingsPage() {
     if (existing) setConfig(existing);
   }, []);
 
-  // Handle Facebook OAuth callback redirect
+  // Reflect any error / existing connection from query params. The Embedded
+  // Signup popup flow no longer round-trips through a redirect.
   useEffect(() => {
-    const code = searchParams.get('code');
     const error = searchParams.get('error');
-
     if (error) {
       setTestResult({ success: false, message: decodeURIComponent(error) });
       return;
     }
-
-    if (code) {
-      handleEmbeddedCallback(code);
-    }
-
     if (searchParams.get('connected') === 'true') {
       setEmbeddedConnected(true);
     }
   }, [searchParams]);
 
+  // Open the Facebook popup, capture WABA + phone ids, exchange + save.
   const handleEmbeddedSignup = async () => {
-    setEmbeddedLoading(true);
-    try {
-      const res = await fetch('/api/whatsapp/embedded-signup');
-      const data = await res.json();
-      if (data.loginUrl) {
-        window.location.href = data.loginUrl;
-      } else {
-        setTestResult({ success: false, message: data.error || 'Failed to start signup' });
-        setEmbeddedLoading(false);
-      }
-    } catch (err) {
-      setTestResult({ success: false, message: getErrorMessage(err, 'Failed to start embedded signup') });
-      setEmbeddedLoading(false);
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID;
+    if (!appId || !configId) {
+      setTestResult({
+        success: false,
+        message: 'WhatsApp signup is not configured yet. Missing Meta App ID / Configuration ID.',
+      });
+      return;
     }
-  };
 
-  const handleEmbeddedCallback = async (code: string) => {
     setEmbeddedLoading(true);
+    setTestResult(null);
     try {
+      const signup = await launchWhatsAppEmbeddedSignup({ appId, configId });
+
       const res = await fetch('/api/whatsapp/embedded-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify(signup),
       });
       const data = await res.json();
+
       if (data.success && data.configured) {
         setEmbeddedConnected(true);
         setConnectedInfo({ businessName: data.businessName, phoneNumber: data.phoneNumber });
         setTestResult({ success: true, message: 'WhatsApp Business Account connected successfully!' });
-        // Clean URL
-        window.history.replaceState({}, '', '/settings/whatsapp');
-      } else if (data.success && !data.configured && data.businesses) {
-        // Multiple WABAs — auto-select first for now
+      } else if (data.success && data.businesses?.length) {
         const biz = data.businesses[0];
-        if (biz?.wabaId && biz?.phoneNumbers?.[0]) {
+        const phone = biz?.phoneNumbers?.[0];
+        if (data.signupToken && biz?.wabaId && phone?.id) {
           const saveRes = await fetch('/api/whatsapp/embedded-signup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, wabaId: biz.wabaId, phoneNumberId: biz.phoneNumbers[0].id }),
+            body: JSON.stringify({ signupToken: data.signupToken, wabaId: biz.wabaId, phoneNumberId: phone.id }),
           });
           const saveData = await saveRes.json();
           if (saveData.success) {
             setEmbeddedConnected(true);
-            setConnectedInfo({ businessName: biz.name, phoneNumber: biz.phoneNumbers[0].displayPhoneNumber });
+            setConnectedInfo({ businessName: biz.name, phoneNumber: phone.displayPhoneNumber });
             setTestResult({ success: true, message: 'WhatsApp Business Account connected!' });
+          } else {
+            setTestResult({ success: false, message: saveData.error || 'Failed to finish connecting' });
           }
+        } else {
+          setTestResult({ success: false, message: 'Could not determine your WhatsApp number. Please try again.' });
         }
-        window.history.replaceState({}, '', '/settings/whatsapp');
       } else {
         setTestResult({ success: false, message: data.error || 'Failed to complete signup' });
       }
     } catch (err) {
-      setTestResult({ success: false, message: getErrorMessage(err, 'Callback processing failed') });
+      setTestResult({ success: false, message: getErrorMessage(err, 'Embedded signup failed') });
     } finally {
       setEmbeddedLoading(false);
     }
