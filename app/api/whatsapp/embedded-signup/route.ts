@@ -4,11 +4,62 @@ export const runtime = 'nodejs';
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getEmbeddedSignupUrl, exchangeCodeForToken, fetchWABAInfo, saveWhatsAppConfig } from '@/lib/whatsapp/embedded-signup';
 
 const pendingSignups = new Map<string, { accessToken: string; storeId: string; expiresAt: number }>();
 const SIGNUP_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Resolve a storeId for the current user. Falls back to the user's first
+ * existing store if getCurrentStoreId fails (e.g. no Shopify connected yet),
+ * and auto-creates a default store if the user has none at all.
+ */
+async function resolveStoreId(request: NextRequest, userId: string): Promise<string> {
+  // 1. Try the standard resolution (header / cookie / query)
+  const fromRequest = await getCurrentStoreId(request);
+  if (fromRequest) return fromRequest;
+
+  // 2. Look up any store the user owns or is a member of
+  const existing = await prisma.store.findFirst({
+    where: {
+      OR: [
+        { ownerId: userId },
+        { members: { some: { userId, status: 'ACTIVE' } } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existing) return existing.id;
+
+  // 3. No store exists — auto-create a default one so WhatsApp can be connected
+  //    independently of Shopify
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  const storeName = user?.name ? `${user.name}'s Store` : 'My Store';
+
+  const store = await prisma.store.create({
+    data: {
+      shopifyDomain: `whatsapp-${Date.now()}.placeholder.io`,
+      shopifyStoreId: `wa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      storeName,
+      accessToken: 'none',
+      scope: '',
+      ownerId: userId,
+      isActive: true,
+    },
+  });
+
+  await prisma.storeMember.create({
+    data: { userId, storeId: store.id, role: 'OWNER', status: 'ACTIVE' },
+  });
+
+  return store.id;
+}
 
 // GET: Return Facebook OAuth URL
 export async function GET(request: NextRequest) {
@@ -18,10 +69,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const storeId = await getCurrentStoreId(request);
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store not found' }, { status: 400 });
-    }
+    const storeId = await resolveStoreId(request, session.user.id);
 
     const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
     const redirectUri = `${baseUrl}/api/whatsapp/embedded-signup/callback`;
@@ -42,10 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const storeId = await getCurrentStoreId(request);
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store not found' }, { status: 400 });
-    }
+    const storeId = await resolveStoreId(request, session.user.id);
 
     const body = await request.json();
     const { code, wabaId, phoneNumberId, signupToken } = body;
