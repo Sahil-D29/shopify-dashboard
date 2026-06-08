@@ -10,19 +10,33 @@ interface SettingsStatus {
   missingConfigs: string[];
 }
 
+// Tokens used for placeholder/WhatsApp-only stores that are NOT real Shopify connections.
+const PLACEHOLDER_TOKENS = ['none', 'placeholder_token', ''];
+
+function isRealShopifyStore(store: { accessToken: string | null; shopifyDomain: string | null } | null): boolean {
+  if (!store?.accessToken) return false;
+  if (PLACEHOLDER_TOKENS.includes(store.accessToken)) return false;
+  return !!store.shopifyDomain?.endsWith('.myshopify.com');
+}
+
 async function checkShopifyConfig(storeId?: string): Promise<boolean> {
   try {
     if (storeId) {
       // Check specific store
       const store = await prisma.store.findUnique({
-        where: { id: storeId }
+        where: { id: storeId },
+        select: { accessToken: true, shopifyDomain: true },
       });
-      return !!(store && store.accessToken);
+      return isRealShopifyStore(store);
     }
-    
-    // Check if any stores exist
+
+    // Check if any genuinely-connected Shopify store exists
     const storeCount = await prisma.store.count({
-      where: { isActive: true }
+      where: {
+        isActive: true,
+        shopifyDomain: { endsWith: '.myshopify.com' },
+        accessToken: { notIn: PLACEHOLDER_TOKENS },
+      },
     });
     return storeCount > 0;
   } catch (error) {

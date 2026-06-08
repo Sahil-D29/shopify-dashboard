@@ -26,12 +26,15 @@ export async function GET() {
       return NextResponse.json({ connected: false, store: null });
     }
 
-    // Find a store owned by this user that has a real Shopify domain
+    // Find a store owned by this user that is genuinely Shopify-connected:
+    // a real *.myshopify.com domain AND a real access token (not a placeholder
+    // created for WhatsApp-only onboarding).
     const store = await prisma.store.findFirst({
       where: {
         ownerId: user.id,
         isActive: true,
-        shopifyDomain: { not: { startsWith: 'default-' } },
+        shopifyDomain: { endsWith: '.myshopify.com' },
+        accessToken: { notIn: ['none', 'placeholder_token', ''] },
       },
       select: {
         id: true,
