@@ -39,6 +39,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<TemplateStatus | 'ALL'>('ALL');
   const [filterCategory, setFilterCategory] = useState<TemplateCategory | 'ALL'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'META' | 'CUSTOM'>('ALL');
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
@@ -85,7 +86,15 @@ export default function TemplatesPage() {
   }, [toast]);
 
   useEffect(() => {
-    setConfigured(Boolean(WhatsAppConfigManager.getConfig()));
+    // Connection may live in localStorage (manual) OR the DB (Embedded Signup).
+    if (WhatsAppConfigManager.getConfig()) {
+      setConfigured(true);
+    } else {
+      fetch('/api/settings/whatsapp')
+        .then(r => r.json())
+        .then(d => setConfigured(Boolean(d?.isConfigured || d?.config?.isConfigured)))
+        .catch(() => {});
+    }
     void load();
 
     if (typeof window !== 'undefined') {
@@ -165,13 +174,25 @@ export default function TemplatesPage() {
     return () => clearTimeout(timer);
   }, [lastSyncTime, syncing, loading, load]);
 
+  // A template is "from Meta" if it carries a Meta template id (synced from the
+  // WhatsApp Manager); otherwise it's a local/custom draft created here.
+  const isMetaTemplate = (t: WhatsAppTemplate): boolean =>
+    Boolean(t.metaTemplateId) || String(t.id).startsWith('meta_');
+
+  const metaCount = templates.filter(isMetaTemplate).length;
+  const customCount = templates.length - metaCount;
+
   const filteredTemplates = templates.filter(t => {
-    const matchesSearch = !searchQuery || 
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = !searchQuery ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.body.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || t.status === filterStatus;
     const matchesCategory = filterCategory === 'ALL' || t.category === filterCategory;
-    return matchesSearch && matchesStatus && matchesCategory;
+    const matchesTab =
+      activeTab === 'ALL' ||
+      (activeTab === 'META' && isMetaTemplate(t)) ||
+      (activeTab === 'CUSTOM' && !isMetaTemplate(t));
+    return matchesSearch && matchesStatus && matchesCategory && matchesTab;
   });
 
   const handleDelete = async () => {
@@ -312,6 +333,37 @@ export default function TemplatesPage() {
             Create Template
           </Button>
         </div>
+      </div>
+
+      {/* Tabs: All / Meta Templates / My Templates */}
+      <div className="flex items-center gap-1 border-b mb-4 overflow-x-auto">
+        {([
+          { key: 'ALL', label: 'All Templates', count: templates.length },
+          { key: 'META', label: 'Meta Templates', count: metaCount },
+          { key: 'CUSTOM', label: 'My Templates', count: customCount },
+        ] as const).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`relative px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
+              activeTab === tab.key
+                ? 'text-green-700'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {tab.label}
+            <span
+              className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs ${
+                activeTab === tab.key ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {tab.count}
+            </span>
+            {activeTab === tab.key && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-600 rounded-full" />
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Filters - Improved responsiveness */}
