@@ -132,7 +132,7 @@ export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: 
                 e.stopPropagation();
                 setShowMenu(!showMenu);
               }}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors opacity-70 group-hover:opacity-100 border border-gray-200"
               aria-label="Template actions"
             >
               <MoreVertical className="w-4 h-4 text-gray-600" />

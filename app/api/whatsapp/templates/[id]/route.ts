@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
-
-import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { getDraftById, updateDraft, deleteDraft, getDrafts } from '@/lib/whatsapp/template-drafts';
+import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 
 type Params = { id: string };
 
@@ -36,12 +38,13 @@ function normaliseStatus(status: string | undefined, fallback: WhatsAppTemplateS
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<Params> },
 ) {
   try {
     const { id } = await params;
-    const template = getTemplates().find(item => item.id === id);
+    const storeId = await getCurrentStoreId(request);
+    const template = await getDraftById(storeId, id);
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
@@ -60,24 +63,21 @@ export async function PATCH(
     const { id } = await params;
     const updates = (await request.json()) as PatchPayload;
 
-    const templates = getTemplates();
-    const index = templates.findIndex(item => item.id === id);
-    if (index === -1) {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'No store selected' }, { status: 400 });
+
+    const current = await getDraftById(storeId, id);
+    if (!current) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
-    const current = templates[index];
-    const nextTemplate: WhatsAppTemplate = {
-      ...current,
+    const next = await updateDraft(storeId, id, {
       ...updates,
       status: normaliseStatus(updates.status, current.status),
       updatedAt: new Date().toISOString(),
-    };
+    } as Partial<WhatsAppTemplate>);
 
-    templates[index] = nextTemplate;
-    setTemplates(templates);
-
-    return NextResponse.json({ template: nextTemplate });
+    return NextResponse.json({ template: next });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update template';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -85,14 +85,44 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<Params> },
 ) {
   try {
     const { id } = await params;
-    const templates = getTemplates();
-    const filteredTemplates = templates.filter(template => template.id !== id);
-    setTemplates(filteredTemplates);
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'No store selected' }, { status: 400 });
+
+    // Local draft → delete from DB.
+    const draft = await getDraftById(storeId, id);
+    if (draft) {
+      await deleteDraft(storeId, id);
+      return NextResponse.json({ success: true });
+    }
+
+    // Otherwise it's a Meta template — delete it on Meta by name (best effort).
+    const all = await getDrafts(storeId); // (drafts only; the meta one isn't here)
+    const byName = all.find(t => t.id === id)?.name;
+    const resolved = await resolveWhatsAppConfig(storeId);
+    if (resolved.valid) {
+      // The list route ids Meta templates as `meta_<id>`; the name is what Meta deletes by.
+      const name = byName || id.replace(/^meta_/, '');
+      const url = graphUrl(
+        `${META_GRAPH_API_VERSION}/${resolved.config.wabaId}/message_templates`,
+        resolved.config.accessToken,
+        { name },
+      );
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${resolved.config.accessToken}` },
+      });
+      if (res.ok) return NextResponse.json({ success: true });
+      const data = await res.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: data?.error?.message || 'Failed to delete template on Meta' },
+        { status: res.status },
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -100,4 +130,3 @@ export async function DELETE(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

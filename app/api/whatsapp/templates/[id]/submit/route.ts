@@ -4,7 +4,7 @@ import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/what
 import { graphUrl } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { TemplateValidator } from '@/lib/utils/template-validator';
-import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
+import { getDraftById, deleteDraft } from '@/lib/whatsapp/template-drafts';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
 interface SubmitRequestBody {
@@ -296,9 +296,10 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const templates = getTemplates();
-    const template = templates.find(item => item.id === id);
+    const requestBody = parseRequestBody(await request.json().catch(() => ({})));
+    const storeId = requestBody.storeId ?? (await getCurrentStoreId(request));
 
+    const template = await getDraftById(storeId, id);
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
@@ -332,12 +333,9 @@ export async function POST(
       );
     }
 
-    const requestBody = parseRequestBody(await request.json().catch(() => ({})));
-
     // Resolve credentials from the saved WhatsApp connection (Embedded Signup,
     // stored encrypted in the DB) for the current store, falling back to any
     // values passed in the request body.
-    const storeId = requestBody.storeId ?? (await getCurrentStoreId(request));
     const resolved = await resolveWhatsAppConfig(storeId);
 
     const wabaId = requestBody.wabaId ?? (resolved.valid ? resolved.config.wabaId : undefined);
@@ -390,9 +388,11 @@ export async function POST(
       updatedAt: new Date().toISOString(),
     };
 
-    const index = templates.findIndex(item => item.id === id);
-    templates[index] = nextTemplate;
-    setTemplates(templates);
+    // Once submitted, the template lives in Meta (and will appear via live sync
+    // as PENDING). Remove the local draft to avoid a duplicate.
+    if (storeId) {
+      await deleteDraft(storeId, id).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

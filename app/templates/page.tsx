@@ -14,6 +14,7 @@ import type { LibraryTemplate } from '@/lib/whatsapp/meta-template-library';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { useToast } from '@/lib/hooks/useToast';
 import { getWindowStorage } from '@/lib/window-storage';
+import { useTenant } from '@/lib/tenant/tenant-context';
 
 interface TemplateListResponse {
   templates?: WhatsAppTemplate[];
@@ -53,6 +54,7 @@ export default function TemplatesPage() {
   });
 
   const toast = useToast();
+  const { currentStore } = useTenant();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,6 +72,7 @@ export default function TemplatesPage() {
           accessToken: config.accessToken,
         });
       }
+      if (currentStore?.id) headers['x-store-id'] = currentStore.id;
 
       const res = await fetch('/api/whatsapp/templates', {
         cache: 'no-store',
@@ -86,7 +89,7 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, currentStore?.id]);
 
   useEffect(() => {
     // Connection may live in localStorage (manual) OR the DB (Embedded Signup).
@@ -208,6 +211,7 @@ export default function TemplatesPage() {
     try {
       const response = await fetch(`/api/whatsapp/templates/${deleteDialog.templateId}`, {
         method: 'DELETE',
+        headers: currentStore?.id ? { 'x-store-id': currentStore.id } : undefined,
       });
 
       const payload = (await response.json().catch(() => ({}))) as DeleteResponse;

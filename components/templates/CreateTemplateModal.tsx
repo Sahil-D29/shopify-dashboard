@@ -267,15 +267,18 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
         variables: extractVariables(formData.body),
       };
 
-      const url = editTemplate 
+      const url = editTemplate
         ? `/api/whatsapp/templates/${editTemplate.id}`
         : '/api/whatsapp/templates';
-      
-      const method = editTemplate ? 'PUT' : 'POST';
+
+      const method = editTemplate ? 'PATCH' : 'POST';
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
         body: JSON.stringify({ ...templateData, status: 'DRAFT' }),
       });
 
@@ -318,10 +321,13 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
         variables: extractVariables(formData.body),
       };
 
-      // Create template
+      // Create template (draft persisted per-store in the DB)
       const createResponse = await fetch('/api/whatsapp/templates', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
         body: JSON.stringify(templateData),
       });
       

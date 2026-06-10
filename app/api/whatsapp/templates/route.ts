@@ -5,7 +5,7 @@ import { graphUrl, getAppSecretProof } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 import type { TemplateButton, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
-import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
+import { getDrafts, addDraft } from '@/lib/whatsapp/template-drafts';
 
 function matchesStatus(template: WhatsAppTemplate, status: string | null): boolean {
   if (!status || status === 'ALL') return true;
@@ -225,7 +225,6 @@ async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): 
 
 export async function GET(request: NextRequest) {
   try {
-    // Try to get credentials from request body (for client-side config)
     let wabaId: string | undefined;
     let accessToken: string | undefined;
 
@@ -240,65 +239,42 @@ export async function GET(request: NextRequest) {
       // Ignore parse errors
     }
 
-    // Resolve from the saved per-store WhatsApp connection (Embedded Signup) —
-    // this is the primary source; env vars are only a fallback.
-    if (!wabaId || !accessToken) {
-      try {
-        const storeId = await getCurrentStoreId(request);
+    // Resolve the store + its saved WhatsApp connection (Embedded Signup).
+    let storeId: string | null = null;
+    try {
+      storeId = await getCurrentStoreId(request);
+      if (!wabaId || !accessToken) {
         const resolved = await resolveWhatsAppConfig(storeId);
         if (resolved.valid) {
           wabaId = wabaId ?? resolved.config.wabaId;
           accessToken = accessToken ?? resolved.config.accessToken;
         }
-      } catch {
-        // fall through to env
       }
+    } catch {
+      // fall through to env
     }
 
     // Fallback to environment variables
     wabaId = wabaId ?? process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
     accessToken = accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
 
-    // If credentials are available, fetch from WhatsApp API
+    // Local drafts (persisted per-store in the DB).
+    const drafts = await getDrafts(storeId);
+
+    // Live templates from Meta (approved/pending/rejected).
+    let metaTemplates: WhatsAppTemplate[] = [];
     if (wabaId && accessToken) {
       try {
-        console.log('📥 Fetching templates from WhatsApp Business API...');
-        const templates = await fetchTemplatesFromWhatsApp(wabaId, accessToken);
-        console.log(`✅ Fetched ${templates.length} templates from WhatsApp API`);
-
-        const searchParams = request.nextUrl.searchParams;
-        const status = searchParams.get('status');
-        const search = searchParams.get('search');
-        const pageParam = Number.parseInt(searchParams.get('page') ?? '1', 10);
-        const pageSizeParam = Number.parseInt(searchParams.get('pageSize') ?? '12', 10);
-
-        const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
-        const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? pageSizeParam : 12;
-
-        const filtered = templates.filter(
-          template => matchesStatus(template, status) && matchesSearch(template, search)
-        );
-
-        const total = filtered.length;
-        const start = (page - 1) * pageSize;
-        const end = start + pageSize;
-        const paginated = filtered.slice(start, end);
-
-        return NextResponse.json({
-          templates: paginated,
-          total,
-          page,
-          pageSize,
-        });
+        metaTemplates = await fetchTemplatesFromWhatsApp(wabaId, accessToken);
       } catch (apiError) {
         console.error('❌ Error fetching from WhatsApp API:', apiError);
-        // Fall through to return local templates as fallback
       }
     }
 
-    // Fallback to local templates if API fetch fails or credentials not available
-    console.log('📦 Using local templates (fallback)');
-    const list = getTemplates();
+    // Merge: drafts that haven't been submitted to Meta yet + Meta templates.
+    const metaNames = new Set(metaTemplates.map(t => t.name.toLowerCase()));
+    const localOnly = drafts.filter(d => !metaNames.has(d.name.toLowerCase()));
+    const all = [...localOnly, ...metaTemplates];
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status');
@@ -309,19 +285,12 @@ export async function GET(request: NextRequest) {
     const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
     const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? pageSizeParam : 12;
 
-    const filtered = list.filter(template => matchesStatus(template, status) && matchesSearch(template, search));
-
+    const filtered = all.filter(t => matchesStatus(t, status) && matchesSearch(t, search));
     const total = filtered.length;
     const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    const paginated = filtered.slice(start, end);
+    const paginated = filtered.slice(start, start + pageSize);
 
-    return NextResponse.json({
-      templates: paginated,
-      total,
-      page,
-      pageSize,
-    });
+    return NextResponse.json({ templates: paginated, total, page, pageSize });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch templates';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -368,8 +337,15 @@ export async function POST(request: NextRequest) {
       lastUsed: undefined,
     };
 
-    const nextTemplates = [...getTemplates(), newTemplate];
-    setTemplates(nextTemplates);
+    // Persist the draft in the DB, scoped to the current store.
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'No store selected. Connect a store before saving templates.' },
+        { status: 400 },
+      );
+    }
+    await addDraft(storeId, newTemplate);
 
     return NextResponse.json({ template: newTemplate });
   } catch (error) {
