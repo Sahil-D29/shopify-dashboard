@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input';
 import { RefreshCw, Plus, Search, CheckCircle } from 'lucide-react';
 import { WhatsAppConfigManager } from '@/lib/whatsapp-config';
 import { WhatsAppTemplate, TemplateStatus, TemplateCategory } from '@/lib/types/template';
-import CreateTemplateModal from '@/components/templates/CreateTemplateModal';
+import CreateTemplateModal, { type TemplatePrefill } from '@/components/templates/CreateTemplateModal';
+import MetaTemplateLibrary from '@/components/templates/MetaTemplateLibrary';
 import TemplateCard from '@/components/templates/TemplateCard';
+import type { LibraryTemplate } from '@/lib/whatsapp/meta-template-library';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { useToast } from '@/lib/hooks/useToast';
 import { getWindowStorage } from '@/lib/window-storage';
@@ -39,7 +41,8 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<TemplateStatus | 'ALL'>('ALL');
   const [filterCategory, setFilterCategory] = useState<TemplateCategory | 'ALL'>('ALL');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'META' | 'CUSTOM'>('ALL');
+  const [activeTab, setActiveTab] = useState<'MY' | 'LIBRARY'>('MY');
+  const [prefill, setPrefill] = useState<TemplatePrefill | null>(null);
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
@@ -174,26 +177,30 @@ export default function TemplatesPage() {
     return () => clearTimeout(timer);
   }, [lastSyncTime, syncing, loading, load]);
 
-  // A template is "from Meta" if it carries a Meta template id (synced from the
-  // WhatsApp Manager); otherwise it's a local/custom draft created here.
-  const isMetaTemplate = (t: WhatsAppTemplate): boolean =>
-    Boolean(t.metaTemplateId) || String(t.id).startsWith('meta_');
-
-  const metaCount = templates.filter(isMetaTemplate).length;
-  const customCount = templates.length - metaCount;
-
   const filteredTemplates = templates.filter(t => {
     const matchesSearch = !searchQuery ||
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.body.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || t.status === filterStatus;
     const matchesCategory = filterCategory === 'ALL' || t.category === filterCategory;
-    const matchesTab =
-      activeTab === 'ALL' ||
-      (activeTab === 'META' && isMetaTemplate(t)) ||
-      (activeTab === 'CUSTOM' && !isMetaTemplate(t));
-    return matchesSearch && matchesStatus && matchesCategory && matchesTab;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
+
+  // "Use this template" from the Meta Library → open the builder pre-filled as a NEW template.
+  const handleUseLibraryTemplate = (lib: LibraryTemplate) => {
+    setEditTemplate(null);
+    setPrefill({
+      name: lib.name,
+      category: lib.category,
+      language: lib.language,
+      body: lib.body,
+      header: lib.header,
+      footer: lib.footer,
+      buttons: lib.buttons,
+      sampleValues: lib.sampleValues,
+    });
+    setOpen(true);
+  };
 
   const handleDelete = async () => {
     if (!deleteDialog.templateId) return;
@@ -226,6 +233,7 @@ export default function TemplatesPage() {
   const handleModalClose = () => {
     setOpen(false);
     setEditTemplate(null);
+    setPrefill(null);
   };
 
   const handleModalSuccess = () => {
@@ -325,6 +333,7 @@ export default function TemplatesPage() {
           <Button
             onClick={() => {
               setEditTemplate(null);
+              setPrefill(null);
               setOpen(true);
             }}
             className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
@@ -335,30 +344,29 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      {/* Tabs: All / Meta Templates / My Templates */}
+      {/* Tabs: My Templates / Meta Library */}
       <div className="flex items-center gap-1 border-b mb-4 overflow-x-auto">
         {([
-          { key: 'ALL', label: 'All Templates', count: templates.length },
-          { key: 'META', label: 'Meta Templates', count: metaCount },
-          { key: 'CUSTOM', label: 'My Templates', count: customCount },
+          { key: 'MY', label: 'My Templates', count: templates.length },
+          { key: 'LIBRARY', label: 'Meta Library', count: undefined },
         ] as const).map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`relative px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
-              activeTab === tab.key
-                ? 'text-green-700'
-                : 'text-gray-500 hover:text-gray-800'
+              activeTab === tab.key ? 'text-green-700' : 'text-gray-500 hover:text-gray-800'
             }`}
           >
             {tab.label}
-            <span
-              className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs ${
-                activeTab === tab.key ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              {tab.count}
-            </span>
+            {typeof tab.count === 'number' && (
+              <span
+                className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs ${
+                  activeTab === tab.key ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {tab.count}
+              </span>
+            )}
             {activeTab === tab.key && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-600 rounded-full" />
             )}
@@ -366,6 +374,10 @@ export default function TemplatesPage() {
         ))}
       </div>
 
+      {activeTab === 'LIBRARY' ? (
+        <MetaTemplateLibrary onUse={handleUseLibraryTemplate} />
+      ) : (
+      <>
       {/* Filters - Improved responsiveness */}
       <div className="bg-white rounded-lg border p-4 mb-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -435,12 +447,15 @@ export default function TemplatesPage() {
           ))}
         </div>
       )}
+      </>
+      )}
 
-      <CreateTemplateModal 
-        open={open} 
-        onClose={handleModalClose} 
+      <CreateTemplateModal
+        open={open}
+        onClose={handleModalClose}
         onCreated={handleModalSuccess}
         editTemplate={editTemplate}
+        prefill={prefill}
       />
 
       {/* Delete Confirmation Dialog */}

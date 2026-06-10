@@ -12,14 +12,27 @@ import { useTenant } from '@/lib/tenant/tenant-context';
 import { X, Plus, Trash2, Eye, Bold, Italic, Code, Smile, Image as ImageIcon, Video, FileText } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 
+export interface TemplatePrefill {
+  name?: string;
+  category?: TemplateCategory;
+  language?: string;
+  body?: string;
+  header?: { type: HeaderType; content: string };
+  footer?: string;
+  buttons?: WhatsAppTemplate['buttons'];
+  sampleValues?: Record<string, string>;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
   editTemplate?: WhatsAppTemplate | null;
+  /** Pre-fill the builder for a NEW template (e.g. from the Meta Library). */
+  prefill?: TemplatePrefill | null;
 }
 
-export default function CreateTemplateModal({ open, onClose, onCreated, editTemplate }: Props) {
+export default function CreateTemplateModal({ open, onClose, onCreated, editTemplate, prefill }: Props) {
   const { currentStore } = useTenant();
   const [formData, setFormData] = useState<CreateTemplateRequest>({
     name: editTemplate?.name || '',
@@ -61,6 +74,19 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       setHeaderContent(editTemplate.header?.content || '');
       setFooter(editTemplate.footer || '');
       setButtons(editTemplate.buttons || []);
+    } else if (prefill) {
+      // New template pre-filled from the Meta Library
+      setFormData({
+        name: prefill.name || '',
+        category: prefill.category || 'UTILITY',
+        language: prefill.language || 'en',
+        body: prefill.body || '',
+        sampleValues: prefill.sampleValues || {},
+      });
+      setHeaderType(prefill.header?.type || 'NONE');
+      setHeaderContent(prefill.header?.content || '');
+      setFooter(prefill.footer || '');
+      setButtons(prefill.buttons || []);
     } else {
       setFormData({
         name: '',
@@ -74,7 +100,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       setFooter('');
       setButtons([]);
     }
-  }, [editTemplate, open]);
+  }, [editTemplate, prefill, open]);
 
   // Extract variables from body text
   const extractVariables = (text: string): string[] => {
