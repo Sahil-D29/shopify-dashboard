@@ -417,13 +417,11 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       if (res.ok && !data.error) {
         setTestResult({ success: true, message: '✅ Test message sent — check WhatsApp on that number.' });
       } else {
-        setTestResult({
-          success: false,
-          message:
-            data.userMessage ||
-            data.error ||
-            'Failed to send. Test sends work only to a number that messaged your WhatsApp in the last 24h.',
-        });
+        const raw = String(data.userMessage || data.error || '');
+        const message = /133010|not registered/i.test(raw)
+          ? 'Your WhatsApp number isn\'t registered for sending yet. Go to Settings → WhatsApp → "Register for sending", then try again.'
+          : raw || 'Failed to send. Test sends work only to a number that messaged your WhatsApp in the last 24h.';
+        setTestResult({ success: false, message });
       }
     } catch {
       setTestResult({ success: false, message: 'Failed to send test message.' });

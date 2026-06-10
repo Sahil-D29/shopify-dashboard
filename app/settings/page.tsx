@@ -124,6 +124,9 @@ function SettingsContent() {
   const [waResult, setWaResult] = useState<{ success: boolean; message: string } | null>(null);
   const [embeddedLoading, setEmbeddedLoading] = useState(false);
   const [embeddedConnected, setEmbeddedConnected] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registerPin, setRegisterPin] = useState('');
+  const [registerResult, setRegisterResult] = useState<{ success: boolean; message: string } | null>(null);
   const [settingsStatus, setSettingsStatus] = useState<{ shopifyConfigured: boolean; whatsappConfigured: boolean; settingsCompleted: boolean; missingConfigs: string[] } | null>(null);
 
   // Check access permissions
@@ -620,6 +623,32 @@ function SettingsContent() {
       setWaResult({ success: false, message: getErrorMessage(err, 'Embedded signup failed') });
     } finally {
       setEmbeddedLoading(false);
+    }
+  };
+
+  // Register the connected number for Cloud API sending (fixes #133010).
+  const handleRegisterNumber = async () => {
+    setRegistering(true);
+    setRegisterResult(null);
+    try {
+      const res = await fetch('/api/whatsapp/register-number', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
+        body: JSON.stringify({ storeId: currentStore?.id, pin: registerPin || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setRegisterResult({ success: true, message: '✅ Number registered — you can now send messages.' });
+      } else {
+        setRegisterResult({ success: false, message: data.error || 'Failed to register number.' });
+      }
+    } catch (err) {
+      setRegisterResult({ success: false, message: getErrorMessage(err, 'Failed to register number.') });
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -1262,6 +1291,46 @@ function SettingsContent() {
                     </button>
                   </div>
                 </div>
+
+                {/* Register number for sending (fixes #133010 Account not registered) */}
+                {embeddedConnected && (
+                  <div className="p-4 rounded-lg border border-amber-200 bg-amber-50">
+                    <h4 className="text-sm font-semibold text-gray-900">Register number for sending</h4>
+                    <p className="text-xs text-gray-600 mt-1 mb-3">
+                      A newly connected number must be registered once before it can send. If sending shows
+                      <span className="font-medium"> &quot;#133010 Account not registered&quot;</span>, click below.
+                      Only enter a PIN if your number already has two-step verification.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6-digit PIN (optional)"
+                        value={registerPin}
+                        onChange={e => setRegisterPin(e.target.value.replace(/\D/g, ''))}
+                        className="w-44"
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleRegisterNumber}
+                        disabled={registering}
+                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                      >
+                        {registering ? 'Registering…' : 'Register for sending'}
+                      </Button>
+                    </div>
+                    {registerResult && (
+                      <div
+                        className={`mt-2 text-xs rounded-md p-2 ${
+                          registerResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {registerResult.message}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">

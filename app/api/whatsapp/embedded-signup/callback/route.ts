@@ -3,6 +3,25 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeCodeForToken, fetchWABAInfo, saveWhatsAppConfig } from '@/lib/whatsapp/embedded-signup';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
+
+/**
+ * Register a freshly-connected number for Cloud API sending (best effort).
+ * Without this, sends fail with #133010 "Account not registered".
+ */
+async function tryRegisterNumber(phoneNumberId: string, accessToken: string): Promise<void> {
+  try {
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${phoneNumberId}/register`, accessToken), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+    });
+  } catch {
+    // Non-fatal — user can register manually from Settings if this fails.
+  }
+}
 
 /**
  * Facebook redirects here after the user grants access in the OAuth dialog.
@@ -74,6 +93,9 @@ export async function GET(request: NextRequest) {
       accessToken,
       biz.name
     );
+
+    // Register the number for Cloud API sending so messages work immediately.
+    await tryRegisterNumber(phone.id, accessToken);
 
     return NextResponse.redirect(`${settingsUrl}?connected=true`);
   } catch (err) {

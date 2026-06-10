@@ -7,9 +7,28 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getEmbeddedSignupUrl, exchangeCodeForToken, fetchWABAInfo, saveWhatsAppConfig } from '@/lib/whatsapp/embedded-signup';
+import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 
 const pendingSignups = new Map<string, { accessToken: string; storeId: string; expiresAt: number }>();
 const SIGNUP_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Register a freshly-connected number for Cloud API sending (best effort).
+ * Without this, sends fail with #133010 "Account not registered".
+ */
+async function tryRegisterNumber(phoneNumberId: string, accessToken: string): Promise<void> {
+  try {
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${phoneNumberId}/register`, accessToken), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+    });
+  } catch {
+    // Non-fatal — user can register manually from Settings.
+  }
+}
 
 /**
  * Resolve a storeId for the current user. Falls back to the user's first
@@ -104,6 +123,7 @@ export async function POST(request: NextRequest) {
       }
       pendingSignups.delete(signupToken);
       await saveWhatsAppConfig(storeId, wabaId, phoneNumberId, pending.accessToken);
+      await tryRegisterNumber(phoneNumberId, pending.accessToken);
       return NextResponse.json({ success: true, configured: true });
     }
 
@@ -124,6 +144,7 @@ export async function POST(request: NextRequest) {
     // business' WABA id + phone number id, so save immediately.
     if (wabaId && phoneNumberId) {
       await saveWhatsAppConfig(storeId, wabaId, phoneNumberId, accessToken);
+      await tryRegisterNumber(phoneNumberId, accessToken);
       return NextResponse.json({ success: true, configured: true });
     }
 
@@ -144,6 +165,7 @@ export async function POST(request: NextRequest) {
         accessToken,
         biz.name
       );
+      await tryRegisterNumber(biz.phoneNumbers[0].id, accessToken);
       return NextResponse.json({ success: true, configured: true, businessName: biz.name, phoneNumber: biz.phoneNumbers[0].displayPhoneNumber });
     }
 
