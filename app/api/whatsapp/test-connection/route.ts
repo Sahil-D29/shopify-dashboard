@@ -1,11 +1,12 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 
 interface TestConnectionRequestBody {
   wabaId?: string;
   phoneNumberId?: string;
   accessToken?: string;
+  storeId?: string;
 }
 
 interface PhoneNumberInfoResponse {
@@ -25,17 +26,34 @@ function parseRequestBody(body: unknown): TestConnectionRequestBody {
     wabaId: payload.wabaId,
     phoneNumberId: payload.phoneNumberId,
     accessToken: payload.accessToken,
+    storeId: payload.storeId,
   };
+}
+
+// A masked token from the GET endpoint (e.g. "••••••••abcd1234") is not usable.
+function isUsableToken(token?: string): boolean {
+  return !!token && !token.includes('•');
 }
 
 export async function POST(request: NextRequest) {
   try {
     const payload = parseRequestBody(await request.json().catch(() => ({})));
-    const { wabaId, phoneNumberId, accessToken } = payload;
+    let { phoneNumberId, accessToken } = payload;
 
-    if (!wabaId || !phoneNumberId || !accessToken) {
+    // If the client didn't supply usable credentials (e.g. connected via
+    // Embedded Signup — token lives encrypted in the DB), fall back to the
+    // stored/resolved config for this store.
+    if (!phoneNumberId || !isUsableToken(accessToken)) {
+      const resolved = await resolveWhatsAppConfig(payload.storeId);
+      if (resolved.valid) {
+        phoneNumberId = phoneNumberId || resolved.config.phoneNumberId;
+        accessToken = resolved.config.accessToken;
+      }
+    }
+
+    if (!phoneNumberId || !isUsableToken(accessToken)) {
       return NextResponse.json(
-        { success: false, error: 'Missing wabaId, phoneNumberId, or accessToken' },
+        { success: false, error: 'WhatsApp is not configured. Connect with Facebook or enter credentials manually.' },
         { status: 400 },
       );
     }

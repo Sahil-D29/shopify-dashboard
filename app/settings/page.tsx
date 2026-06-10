@@ -360,6 +360,16 @@ function SettingsContent() {
     checkSettingsStatus();
   }, [searchParams, refreshStores, hasAccess]);
 
+  // Reload the WhatsApp config (and "Connected" state) whenever the active
+  // store changes — the config is stored per-store, and on first mount
+  // currentStore may not be resolved yet.
+  useEffect(() => {
+    if (currentStore?.id) {
+      loadWhatsAppConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore?.id]);
+
   const checkSettingsStatus = async () => {
     try {
       const response = await fetch('/api/settings/status');
@@ -378,17 +388,27 @@ function SettingsContent() {
       const res = await fetch(`/api/settings/whatsapp${storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''}`);
       const data = await res.json();
       if (data.success && data.config) {
+        const cfg = data.config;
+        const settings = cfg.settings || {};
         setWhatsappConfig({
-          wabaId: data.config.wabaId || '',
-          phoneNumberId: data.config.phoneNumberId || '',
-          accessToken: '', // Don't show existing token
-          appId: data.config.appId || '',
+          // GET returns `businessAccountId` (not `wabaId`)
+          wabaId: cfg.businessAccountId || cfg.wabaId || '',
+          phoneNumberId: cfg.phoneNumberId || '',
+          accessToken: '', // Don't show existing token (stored encrypted server-side)
+          appId: cfg.appId || '',
           appSecret: '', // Don't show existing secret
-          webhookVerifyToken: data.config.webhookVerifyToken || '',
-          contactEmail: data.config.contactEmail || '',
-          connectedPhoneNumber: data.config.connectedPhoneNumber,
-          isVerified: data.config.isVerified || false,
+          webhookVerifyToken: cfg.webhookVerifyToken || '',
+          contactEmail: settings.contactEmail || cfg.contactEmail || '',
+          connectedPhoneNumber: settings.connectedPhoneNumber || cfg.connectedPhoneNumber,
+          isVerified: settings.isVerified || cfg.isVerified || false,
         });
+        // Reflect the saved connection so the "Connected" badge persists across
+        // tab switches / reloads (it lives in the DB, not just local state).
+        if (cfg.isConfigured || data.isConfigured) {
+          setEmbeddedConnected(true);
+        }
+      } else {
+        setEmbeddedConnected(false);
       }
     } catch (error) {
       console.error('Failed to load WhatsApp config:', error);
@@ -622,8 +642,12 @@ function SettingsContent() {
 
   // WhatsApp functions
   const handleWaTest = async () => {
-    if (!whatsappConfig.wabaId || !whatsappConfig.phoneNumberId || !whatsappConfig.accessToken) {
-      setWaResult({ success: false, message: 'Please fill in WABA ID, Phone Number ID, and Access Token' });
+    const hasManualCreds = !!(whatsappConfig.phoneNumberId && whatsappConfig.accessToken);
+    // Allow testing either with manually-entered credentials OR an existing
+    // saved connection (Embedded Signup — token lives encrypted in the DB and
+    // is resolved server-side).
+    if (!hasManualCreds && !embeddedConnected) {
+      setWaResult({ success: false, message: 'Connect with Facebook above, or fill in Phone Number ID and Access Token.' });
       return;
     }
     setWaTesting(true);
@@ -631,11 +655,15 @@ function SettingsContent() {
     try {
       const res = await fetch('/api/whatsapp/test-connection', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
         body: JSON.stringify({
           wabaId: whatsappConfig.wabaId,
           phoneNumberId: whatsappConfig.phoneNumberId,
           accessToken: whatsappConfig.accessToken,
+          storeId: currentStore?.id,
         }),
       });
       const data = await res.json();
