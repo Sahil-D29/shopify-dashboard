@@ -4,6 +4,7 @@ import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { prisma } from '@/lib/prisma';
 import { transformCampaign } from '@/lib/utils/db-transformers';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import { matchesGroups } from '@/lib/segments/evaluator';
 import { auth } from '@/lib/auth';
@@ -130,7 +131,7 @@ export async function POST(
           text: { body: messageBody },
         };
 
-        const apiUrl = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${whatsappConfig.phoneNumberId}/messages`;
+        const apiUrl = graphUrl(`${META_GRAPH_API_VERSION}/${whatsappConfig.phoneNumberId}/messages`, whatsappConfig.accessToken);
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from "@/lib/config/whatsapp-config-resolver";
+import { graphUrl } from "@/lib/whatsapp/graph";
 import { getCurrentStoreId } from "@/lib/tenant/api-helpers";
 import type {
   WhatsAppTemplate,
@@ -316,7 +317,7 @@ export async function POST(request: NextRequest) {
     };
 
     const response = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${validation.config.phoneNumberId}/messages`,
+      graphUrl(`${META_GRAPH_API_VERSION}/${validation.config.phoneNumberId}/messages`, validation.config.accessToken),
       {
         method: "POST",
         headers: {

@@ -4,6 +4,7 @@ import type { JourneyDefinition, JourneyEnrollment, JourneyNode } from '@/lib/ty
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { ShopifyClient, type ShopifyOrder, type ShopifyOrderListResponse } from '@/lib/shopify/client';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 
 /**
  * Journey Execution Engine
@@ -214,7 +215,7 @@ export async function executeAction(
   };
 
   try {
-    const apiUrl = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`;
+    const apiUrl = graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken);
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {

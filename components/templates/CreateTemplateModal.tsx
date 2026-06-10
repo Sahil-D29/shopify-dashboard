@@ -7,8 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import TemplatePreview from './TemplatePreview';
 import { CreateTemplateRequest, TemplateCategory, HeaderType, ButtonType, WhatsAppTemplate } from '@/lib/types/template';
-import { WhatsAppConfigManager } from '@/lib/whatsapp-config';
 import { TemplateValidator } from '@/lib/utils/template-validator';
+import { useTenant } from '@/lib/tenant/tenant-context';
 import { X, Plus, Trash2, Eye, Bold, Italic, Code, Smile, Image as ImageIcon, Video, FileText } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 
@@ -20,6 +20,7 @@ interface Props {
 }
 
 export default function CreateTemplateModal({ open, onClose, onCreated, editTemplate }: Props) {
+  const { currentStore } = useTenant();
   const [formData, setFormData] = useState<CreateTemplateRequest>({
     name: editTemplate?.name || '',
     category: editTemplate?.category || 'UTILITY',
@@ -301,20 +302,15 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       
       const { template } = await createResponse.json();
 
-      // Submit to Meta
-        const cfg = WhatsAppConfigManager.getConfig();
-        if (!cfg?.wabaId || !cfg?.accessToken) {
-        alert('WhatsApp not configured. Please configure in Settings → WhatsApp first.');
-          onCreated();
-          onClose();
-        setSubmitting(false);
-          return;
-        }
-
+      // Submit to Meta — credentials are resolved server-side from the saved
+      // WhatsApp connection (Embedded Signup) for the current store.
       const submitResponse = await fetch(`/api/whatsapp/templates/${template.id}/submit`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wabaId: cfg.wabaId, accessToken: cfg.accessToken }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+          },
+          body: JSON.stringify({ storeId: currentStore?.id }),
       });
 
       if (submitResponse.ok) {

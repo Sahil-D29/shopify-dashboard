@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl, getAppSecretProof } from '@/lib/whatsapp/graph';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 import type { TemplateButton, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
@@ -177,7 +179,13 @@ function toWhatsAppTemplate(metaTemplate: MetaTemplate): WhatsAppTemplate {
 
 async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): Promise<WhatsAppTemplate[]> {
   let allMetaTemplates: MetaTemplate[] = [];
-  let nextPageUrl: string | null = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates?limit=100`;
+  // First page built with appsecret_proof appended.
+  let nextPageUrl: string | null = graphUrl(
+    `${META_GRAPH_API_VERSION}/${wabaId}/message_templates`,
+    accessToken,
+    { limit: '100' },
+  );
+  const proof = getAppSecretProof(accessToken);
 
   while (nextPageUrl) {
     const response = await fetch(nextPageUrl, {
@@ -198,8 +206,12 @@ async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): 
     const metaTemplates = data.data ?? [];
     allMetaTemplates = [...allMetaTemplates, ...metaTemplates];
 
-    // Check for next page
-    nextPageUrl = data.paging?.next || null;
+    // Meta's paging.next carries the cursor + access_token but not the proof.
+    let next = data.paging?.next || null;
+    if (next && proof && !next.includes('appsecret_proof')) {
+      next += (next.includes('?') ? '&' : '?') + `appsecret_proof=${proof}`;
+    }
+    nextPageUrl = next;
   }
 
   return allMetaTemplates.map(template => {
@@ -226,6 +238,21 @@ export async function GET(request: NextRequest) {
       }
     } catch {
       // Ignore parse errors
+    }
+
+    // Resolve from the saved per-store WhatsApp connection (Embedded Signup) —
+    // this is the primary source; env vars are only a fallback.
+    if (!wabaId || !accessToken) {
+      try {
+        const storeId = await getCurrentStoreId(request);
+        const resolved = await resolveWhatsAppConfig(storeId);
+        if (resolved.valid) {
+          wabaId = wabaId ?? resolved.config.wabaId;
+          accessToken = accessToken ?? resolved.config.accessToken;
+        }
+      } catch {
+        // fall through to env
+      }
     }
 
     // Fallback to environment variables

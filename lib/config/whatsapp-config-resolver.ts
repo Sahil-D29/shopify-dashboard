@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { getAppSecretProof } from '@/lib/whatsapp/graph';
 
 export const META_GRAPH_API_VERSION = 'v21.0';
 
@@ -12,6 +13,8 @@ export interface ResolvedWhatsAppConfig {
   phoneNumberId: string;
   wabaId: string;
   accessToken: string;
+  /** HMAC-SHA256(accessToken) keyed with META_APP_SECRET — Meta requires this on server calls. Null if no app secret set. */
+  appSecretProof: string | null;
   source: 'db' | 'env';
 }
 
@@ -60,6 +63,7 @@ async function resolveFromDb(storeId: string): Promise<ResolvedWhatsAppConfig | 
       phoneNumberId: dbConfig.phoneNumberId,
       wabaId: dbConfig.businessAccountId,
       accessToken: token,
+      appSecretProof: getAppSecretProof(token),
       source: 'db',
     };
   } catch (error) {
@@ -75,5 +79,5 @@ function resolveFromEnv(): ResolvedWhatsAppConfig | null {
 
   if (!phoneNumberId || !wabaId || !accessToken) return null;
 
-  return { phoneNumberId, wabaId, accessToken, source: 'env' };
+  return { phoneNumberId, wabaId, accessToken, appSecretProof: getAppSecretProof(accessToken), source: 'env' };
 }

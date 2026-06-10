@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 
 interface TestConnectionRequestBody {
   wabaId?: string;
@@ -31,7 +32,7 @@ function parseRequestBody(body: unknown): TestConnectionRequestBody {
 }
 
 // A masked token from the GET endpoint (e.g. "••••••••abcd1234") is not usable.
-function isUsableToken(token?: string): boolean {
+function isUsableToken(token?: string): token is string {
   return !!token && !token.includes('•');
 }
 
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}`, {
+    const response = await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${phoneNumberId}`, accessToken), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

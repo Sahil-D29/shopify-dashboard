@@ -1,6 +1,17 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
+
+/** Decrypt a stored WhatsApp token (Embedded Signup tokens are encrypted at rest). */
+async function decryptToken(token: string): Promise<string> {
+  try {
+    const { isEncrypted, decrypt } = await import('@/lib/encryption');
+    return isEncrypted(token) ? decrypt(token) : token;
+  } catch {
+    return token;
+  }
+}
 
 export async function handleFlowResponse(params: {
   flowId: string;
@@ -51,12 +62,14 @@ export async function sendFlowMessage(params: {
 
   if (!flow || flow.status !== 'PUBLISHED') throw new Error('Flow is not published');
 
+  const accessToken = await decryptToken(config.accessToken || '');
+
   const response = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
+    graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, accessToken),
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.accessToken}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

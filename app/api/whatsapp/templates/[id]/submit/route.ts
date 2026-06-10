@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { TemplateValidator } from '@/lib/utils/template-validator';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
@@ -8,6 +10,7 @@ import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-conf
 interface SubmitRequestBody {
   wabaId?: string;
   accessToken?: string;
+  storeId?: string;
 }
 
 type MetaComponent =
@@ -266,6 +269,7 @@ function parseRequestBody(body: unknown): SubmitRequestBody {
   return {
     wabaId: payload.wabaId,
     accessToken: payload.accessToken,
+    storeId: payload.storeId,
   };
 }
 
@@ -329,13 +333,20 @@ export async function POST(
     }
 
     const requestBody = parseRequestBody(await request.json().catch(() => ({})));
-    const wabaId = requestBody.wabaId ?? process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-    const accessToken = requestBody.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
+
+    // Resolve credentials from the saved WhatsApp connection (Embedded Signup,
+    // stored encrypted in the DB) for the current store, falling back to any
+    // values passed in the request body.
+    const storeId = requestBody.storeId ?? (await getCurrentStoreId(request));
+    const resolved = await resolveWhatsAppConfig(storeId);
+
+    const wabaId = requestBody.wabaId ?? (resolved.valid ? resolved.config.wabaId : undefined);
+    const accessToken = requestBody.accessToken ?? (resolved.valid ? resolved.config.accessToken : undefined);
 
     if (!wabaId || !accessToken) {
       return NextResponse.json(
         {
-          error: 'WhatsApp credentials not configured. Provide wabaId and accessToken in request body or set env vars.',
+          error: 'WhatsApp not configured. Connect with Facebook in Settings → WhatsApp first.',
         },
         { status: 400 },
       );
@@ -343,7 +354,7 @@ export async function POST(
 
     const metaPayload = buildMetaPayload(template);
 
-    const response = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates`, {
+    const response = await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${wabaId}/message_templates`, accessToken), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

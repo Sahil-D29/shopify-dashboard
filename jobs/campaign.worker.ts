@@ -5,6 +5,7 @@
  */
 import { ShopifyClient } from '@/lib/shopify/client';
 import { prisma } from '@/lib/prisma';
+import { graphUrl } from '@/lib/whatsapp/graph';
 import { logError } from '@/lib/logger';
 import { sendEmail } from '@/lib/email';
 import { matchesGroups } from '@/lib/segments/evaluator';
@@ -52,13 +53,23 @@ async function sendWhatsAppText(phone: string, body: string, storeId: string): P
   }
   const formatted = phone.replace(/[\s\-+()]/g, '');
   if (!formatted) return { success: false, error: 'Invalid phone' };
+
+  // Embedded Signup tokens are stored encrypted — decrypt before use.
+  let accessToken = config.accessToken;
+  try {
+    const { isEncrypted, decrypt } = await import('@/lib/encryption');
+    if (isEncrypted(accessToken)) accessToken = decrypt(accessToken);
+  } catch {
+    // use as-is
+  }
+
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
+      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, accessToken),
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

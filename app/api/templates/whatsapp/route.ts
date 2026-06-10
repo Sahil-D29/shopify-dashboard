@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import type { WhatsAppTemplateComponent } from '@/lib/types/whatsapp-config';
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     const config = validation.config;
 
     const response = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.wabaId}/message_templates`,
+      graphUrl(`${META_GRAPH_API_VERSION}/${config.wabaId}/message_templates`, config.accessToken),
       {
         method: 'GET',
         headers: {

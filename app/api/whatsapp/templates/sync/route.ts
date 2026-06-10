@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl, getAppSecretProof } from '@/lib/whatsapp/graph';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 import fs from 'fs/promises';
@@ -183,6 +185,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 3b. Resolve from the saved per-store WhatsApp connection (Embedded Signup, DB)
+    if (!wabaId || !accessToken) {
+      try {
+        const storeId = await getCurrentStoreId(request);
+        const resolved = await resolveWhatsAppConfig(storeId);
+        if (resolved.valid) {
+          wabaId = wabaId ?? resolved.config.wabaId;
+          accessToken = accessToken ?? resolved.config.accessToken;
+        }
+      } catch {
+        // fall through to env
+      }
+    }
+
     // 4. Fallback to environment variables
     wabaId = wabaId ?? process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
     accessToken = accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
@@ -212,8 +228,13 @@ export async function POST(request: NextRequest) {
 
     // Fetch all templates with pagination
     let allMetaTemplates: MetaTemplate[] = [];
-    let nextPageUrl: string | null = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${wabaId}/message_templates?limit=100`;
-    
+    let nextPageUrl: string | null = graphUrl(
+      `${META_GRAPH_API_VERSION}/${wabaId}/message_templates`,
+      accessToken,
+      { limit: '100' },
+    );
+    const syncProof = getAppSecretProof(accessToken);
+
     while (nextPageUrl) {
       const response = await fetch(nextPageUrl, {
         method: 'GET',
@@ -238,8 +259,12 @@ export async function POST(request: NextRequest) {
       const metaTemplates = data.data ?? [];
       allMetaTemplates = [...allMetaTemplates, ...metaTemplates];
       
-      // Check for next page
-      nextPageUrl = data.paging?.next || null;
+      // Check for next page (append appsecret_proof — Meta's next URL omits it)
+      let next = data.paging?.next || null;
+      if (next && syncProof && !next.includes('appsecret_proof')) {
+        next += (next.includes('?') ? '&' : '?') + `appsecret_proof=${syncProof}`;
+      }
+      nextPageUrl = next;
     }
 
     console.log(`✅ [Template Sync] Fetched ${allMetaTemplates.length} templates from WhatsApp API`);

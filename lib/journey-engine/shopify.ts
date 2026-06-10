@@ -85,6 +85,7 @@ export interface SendWhatsAppResult {
 export async function sendWhatsAppMessage(payload: SendWhatsAppPayload): Promise<SendWhatsAppResult> {
   try {
     const { resolveWhatsAppConfig, META_GRAPH_API_VERSION } = await import('@/lib/config/whatsapp-config-resolver');
+    const { graphUrl } = await import('@/lib/whatsapp/graph');
     const validation = await resolveWhatsAppConfig(payload.storeId);
     if (!validation.valid) {
       return { success: false, error: validation.error };
@@ -103,7 +104,7 @@ export async function sendWhatsAppMessage(payload: SendWhatsAppPayload): Promise
     };
 
     const response = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
+      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken),
       {
         method: 'POST',
         headers: {

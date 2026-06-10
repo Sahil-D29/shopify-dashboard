@@ -6,6 +6,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { graphUrl } from './graph';
 import { normalizePhone } from './normalize-phone';
 export type SendMessageType = 'text' | 'template' | 'image' | 'video' | 'document' | 'audio';
 
@@ -56,9 +57,9 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
     // Build the message payload based on type
     const payload = buildMessagePayload(opts, formattedPhone);
 
-    // Send via Meta Graph API
+    // Send via Meta Graph API (appsecret_proof appended when app secret is set)
     const response = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`,
+      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken),
       {
         method: 'POST',
         headers: {
