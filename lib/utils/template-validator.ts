@@ -47,19 +47,21 @@ export class TemplateValidator {
     const bodyWords = this.countWords(template.body);
     const variableCount = template.variables.length;
 
+    // NOTE: these word-count heuristics are advisory only — Meta does NOT
+    // enforce a fixed 10-word minimum, and blocking submission on them rejected
+    // valid short templates. Surface them as warnings and let Meta be the final
+    // judge (the submit route already translates Meta's error_subcode 2388293).
     if (bodyWords < this.MIN_TOTAL_WORDS) {
-      errors.push(`Template body must contain at least ${this.MIN_TOTAL_WORDS} words. Current: ${bodyWords} words`);
+      warnings.push(`Short template body (${bodyWords} words). Very short templates with variables may be rejected by Meta.`);
     }
 
     if (variableCount > 0) {
       const wordsPerVariable = bodyWords / variableCount;
-      
+
       if (wordsPerVariable < this.MIN_WORDS_PER_VARIABLE) {
-        errors.push(
-          `Template has too many variables for its length. ` +
-          `You have ${variableCount} variable(s) in ${bodyWords} words. ` +
-          `Meta requires at least ${this.MIN_WORDS_PER_VARIABLE} words per variable. ` +
-          `Minimum required: ${variableCount * this.MIN_WORDS_PER_VARIABLE} words.`
+        warnings.push(
+          `This template has ${variableCount} variable(s) in ${bodyWords} words. ` +
+          `Meta may reject templates with too many variables relative to text — consider adding more context.`
         );
       }
 

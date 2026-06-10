@@ -319,7 +319,12 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
           onClose();
       } else {
         const error = await submitResponse.json();
-        alert(`❌ Failed to submit: ${error.error}`);
+        const lines = [
+          error.userMessage || error.error || 'Failed to submit',
+          ...(Array.isArray(error.validationErrors) ? error.validationErrors : []),
+          error.suggestion,
+        ].filter(Boolean);
+        alert(`❌ Failed to submit:\n• ${lines.join('\n• ')}`);
       }
     } catch (error) {
       alert('❌ Error submitting template');
