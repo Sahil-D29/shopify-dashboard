@@ -36,6 +36,9 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showHeaderEmojiPicker, setShowHeaderEmojiPicker] = useState(false);
   const [showFooterEmojiPicker, setShowFooterEmojiPicker] = useState(false);
@@ -353,11 +356,61 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
 
   if (!open) return null;
 
+  // Render the template body as plain text with sample values substituted,
+  // prepending a TEXT header and appending the footer — used for the test send.
+  const renderForTest = (): string => {
+    let text = '';
+    if (headerType === 'TEXT' && headerContent.trim()) text += `*${headerContent.trim()}*\n\n`;
+    text += formData.body.replace(/\{\{(\w+)\}\}/g, (_m, v: string) => formData.sampleValues?.[v] || `{{${v}}}`);
+    if (footer.trim()) text += `\n\n${footer.trim()}`;
+    return text.trim();
+  };
+
+  const handleSendTest = async () => {
+    const phone = testPhone.replace(/[\s\-()]/g, '');
+    if (!phone) {
+      setTestResult({ success: false, message: 'Enter a phone number with country code (e.g. 919876543210).' });
+      return;
+    }
+    if (!formData.body.trim()) {
+      setTestResult({ success: false, message: 'Add some body text first.' });
+      return;
+    }
+    setSendingTest(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/whatsapp/send-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
+        },
+        body: JSON.stringify({ phoneNumber: phone, message: renderForTest() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && !data.error) {
+        setTestResult({ success: true, message: '✅ Test message sent — check WhatsApp on that number.' });
+      } else {
+        setTestResult({
+          success: false,
+          message:
+            data.userMessage ||
+            data.error ||
+            'Failed to send. Test sends work only to a number that messaged your WhatsApp in the last 24h.',
+        });
+      }
+    } catch {
+      setTestResult({ success: false, message: 'Failed to send test message.' });
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] relative shadow-2xl flex overflow-hidden">
         {/* Form Section */}
-        <div className="overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-6">
           <div>
             {/* Header */}
             <div className="flex items-center justify-between mb-8 pb-6 border-b relative">
@@ -792,37 +845,67 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
             </div>
           </div>
 
-        {/* Preview Panel - Hidden for now, can be shown in a separate modal if needed */}
-        <div className="hidden w-[450px] bg-gradient-to-br from-gray-50 to-gray-100 border-l p-8 overflow-y-auto">
-          <div className="sticky top-0">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-semibold text-lg text-gray-900">Live Preview</h3>
+        {/* Preview Panel */}
+        <div className="hidden lg:block w-[420px] shrink-0 bg-gradient-to-br from-gray-50 to-gray-100 border-l p-6 overflow-y-auto">
+          <div className="flex items-center gap-2 mb-6">
+            <Eye className="w-5 h-5 text-gray-700" />
+            <h3 className="font-semibold text-lg text-gray-900">Live Preview</h3>
+          </div>
+
+          <TemplatePreview
+            header={headerType !== 'NONE' ? { type: headerType, content: headerContent } : undefined}
+            body={formData.body}
+            footer={footer}
+            buttons={buttons}
+            sampleValues={formData.sampleValues}
+          />
+
+          {/* Send Test Message */}
+          <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+            <h4 className="font-semibold mb-1 text-gray-900 flex items-center gap-2">
+              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.77.46 3.43 1.27 4.88L2 22l5.25-1.38A9.96 9.96 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2z"/></svg>
+              Send Test Message
+            </h4>
+            <p className="text-xs text-gray-500 mb-3">
+              Sends the rendered text to your number. Works for numbers that messaged your WhatsApp in the last 24h.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="tel"
+                placeholder="919876543210"
+                value={testPhone}
+                onChange={e => setTestPhone(e.target.value)}
+                className="flex-1"
+              />
               <Button
-                size="sm"
-                variant="ghost"
+                type="button"
+                onClick={handleSendTest}
+                disabled={sendingTest}
+                className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
               >
-                <Eye className="w-4 h-4" />
+                {sendingTest ? 'Sending…' : 'Send Test'}
               </Button>
             </div>
+            {testResult && (
+              <div
+                className={`mt-2 text-xs rounded-md p-2 ${
+                  testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'
+                }`}
+              >
+                {testResult.message}
+              </div>
+            )}
+          </div>
 
-            <TemplatePreview
-              header={headerType !== 'NONE' ? { type: headerType, content: headerContent } : undefined}
-              body={formData.body}
-              footer={footer}
-              buttons={buttons}
-              sampleValues={formData.sampleValues}
-            />
-
-            {/* Preview Tips */}
-            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200 text-sm">
-              <h4 className="font-semibold mb-2 text-gray-900">Preview Tips:</h4>
-              <ul className="space-y-1 text-gray-600">
-                <li>• Variables shown with sample values</li>
-                <li>• Formatting will render in WhatsApp</li>
-                <li>• Buttons appear at the bottom</li>
-                <li>• Actual message may vary slightly</li>
-              </ul>
-            </div>
+          {/* Preview Tips */}
+          <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200 text-sm">
+            <h4 className="font-semibold mb-2 text-gray-900">Preview Tips:</h4>
+            <ul className="space-y-1 text-gray-600">
+              <li>• Variables shown with sample values</li>
+              <li>• Formatting will render in WhatsApp</li>
+              <li>• Buttons appear at the bottom</li>
+              <li>• Test sends as plain text; approved templates send fully</li>
+            </ul>
           </div>
         </div>
       </div>
