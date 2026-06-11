@@ -345,9 +345,15 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    await addDraft(storeId, newTemplate);
+    try {
+      await addDraft(storeId, newTemplate);
+    } catch (persistError) {
+      const msg = persistError instanceof Error ? persistError.message : String(persistError);
+      console.error('[templates][POST] Failed to persist draft:', msg);
+      return NextResponse.json({ error: `Failed to save draft: ${msg}` }, { status: 500 });
+    }
 
-    return NextResponse.json({ template: newTemplate });
+    return NextResponse.json({ template: newTemplate, persisted: true, storeId });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create template';
     return NextResponse.json({ error: message }, { status: 500 });

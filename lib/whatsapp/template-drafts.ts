@@ -25,11 +25,14 @@ export async function getDrafts(storeId?: string | null): Promise<WhatsAppTempla
 }
 
 async function setDrafts(storeId: string, drafts: WhatsAppTemplate[]): Promise<void> {
+  // JSON round-trip strips `undefined` values, which Prisma's Json input rejects
+  // and which otherwise cause the write to silently not persist.
+  const clean = JSON.parse(JSON.stringify(drafts));
   // Upsert so drafts can be saved even before a full WhatsApp connection exists.
   await prisma.whatsAppConfig.upsert({
     where: { storeId },
-    create: { storeId, templates: drafts as unknown as object, isConfigured: false },
-    update: { templates: drafts as unknown as object },
+    create: { storeId, templates: clean, isConfigured: false },
+    update: { templates: clean },
   });
 }
 
