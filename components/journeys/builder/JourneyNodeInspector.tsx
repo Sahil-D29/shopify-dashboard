@@ -499,13 +499,38 @@ export function JourneyNodeInspector({
 
               {(meta.triggerType === 'event_trigger' || (!meta.triggerType && node.data.subtype === 'event_trigger')) ? (
                 <div className="space-y-2">
-                  <Label htmlFor="triggerEvent">Event Name</Label>
-                  <Input
+                  <Label htmlFor="triggerEvent">Shopify Event</Label>
+                  <select
                     id="triggerEvent"
-                    placeholder="e.g. order_created"
-                    value={String(meta.eventName ?? '')}
-                    onChange={event => handleMetaChange('eventName', event.target.value)}
-                  />
+                    className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139] focus:border-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]/20"
+                    value={String(meta.webhookEvent ?? '')}
+                    onChange={event => handleMetaChange('webhookEvent', event.target.value)}
+                  >
+                    <option value="">Select an event…</option>
+                    <optgroup label="Orders">
+                      <option value="orders/create">Order placed</option>
+                      <option value="orders/paid">Order paid</option>
+                      <option value="orders/fulfilled">Order fulfilled / shipped</option>
+                      <option value="orders/cancelled">Order cancelled</option>
+                      <option value="orders/updated">Order updated</option>
+                    </optgroup>
+                    <optgroup label="Shipping & refunds">
+                      <option value="fulfillments/create">Shipment created (tracking)</option>
+                      <option value="fulfillments/update">Shipment updated</option>
+                      <option value="refunds/create">Refund issued</option>
+                    </optgroup>
+                    <optgroup label="Checkout">
+                      <option value="checkouts/create">Checkout started</option>
+                      <option value="checkouts/update">Checkout updated</option>
+                    </optgroup>
+                    <optgroup label="Customers">
+                      <option value="customers/create">New customer</option>
+                      <option value="customers/update">Customer updated</option>
+                    </optgroup>
+                  </select>
+                  <p className="text-xs text-[#9B8E7E]">
+                    The journey enrolls the customer when this Shopify event fires.
+                  </p>
                 </div>
               ) : null}
 

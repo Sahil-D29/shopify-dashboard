@@ -21,9 +21,15 @@ interface ShopifyWebhookLogEntry {
 
 const SUPPORTED_TOPICS = new Set([
   'orders/create',
+  'orders/paid',
   'orders/fulfilled',
   'orders/cancelled',
+  'orders/updated',
+  'fulfillments/create',
+  'fulfillments/update',
+  'refunds/create',
   'checkouts/create',
+  'checkouts/update',
   'customers/create',
   'customers/update',
   'app/uninstalled',

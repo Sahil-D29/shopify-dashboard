@@ -4,11 +4,24 @@ const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
 
 /** Webhook topics we need for the app to function */
 const REQUIRED_WEBHOOKS = [
+  // Orders lifecycle
   'orders/create',
+  'orders/paid',
   'orders/fulfilled',
   'orders/cancelled',
+  'orders/updated',
+  // Fulfillment / shipping (tracking updates)
+  'fulfillments/create',
+  'fulfillments/update',
+  // Refunds
+  'refunds/create',
+  // Checkout / abandoned cart
+  'checkouts/create',
+  'checkouts/update',
+  // Customers
   'customers/create',
   'customers/update',
+  // App lifecycle + compliance
   'app/uninstalled',
   'app_subscriptions/update',
   'customers/data_request',
