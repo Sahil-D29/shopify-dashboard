@@ -31,8 +31,8 @@ interface PatchPayload {
 function normaliseStatus(status: string | undefined, fallback: WhatsAppTemplateStatus): WhatsAppTemplateStatus {
   if (!status) return fallback;
   const upper = status.toUpperCase();
-  if (upper === 'APPROVED' || upper === 'PENDING' || upper === 'REJECTED') {
-    return upper;
+  if (upper === 'APPROVED' || upper === 'PENDING' || upper === 'REJECTED' || upper === 'DRAFT') {
+    return upper as WhatsAppTemplateStatus;
   }
   return fallback;
 }

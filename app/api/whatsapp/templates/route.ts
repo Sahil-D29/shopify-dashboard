@@ -43,14 +43,12 @@ interface CreateTemplatePayload {
 }
 
 function normaliseStatus(status: WhatsAppTemplateStatus | string | undefined): WhatsAppTemplateStatus {
-  if (status === 'APPROVED' || status === 'PENDING' || status === 'REJECTED') {
-    return status;
-  }
   const upper = typeof status === 'string' ? status.toUpperCase() : '';
-  if (upper === 'APPROVED' || upper === 'PENDING' || upper === 'REJECTED') {
-    return upper;
+  if (upper === 'APPROVED' || upper === 'PENDING' || upper === 'REJECTED' || upper === 'DRAFT') {
+    return upper as WhatsAppTemplateStatus;
   }
-  return 'PENDING';
+  // New local templates default to DRAFT (not submitted to Meta yet).
+  return 'DRAFT';
 }
 
 function parseVariables(content: string): string[] {

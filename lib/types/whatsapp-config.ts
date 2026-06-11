@@ -1,4 +1,4 @@
-export type WhatsAppTemplateStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
+export type WhatsAppTemplateStatus = 'DRAFT' | 'APPROVED' | 'PENDING' | 'REJECTED';
 
 export type TemplateButtonType =
   | 'quick_reply'
