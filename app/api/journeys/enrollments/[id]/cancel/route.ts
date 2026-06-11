@@ -10,7 +10,7 @@ const getErrorMessage = (error: unknown): string => (error instanceof Error ? er
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const resolved = await params;
-    const enrollment = getEnrollment(resolved.id);
+    const enrollment = await getEnrollment(resolved.id);
     if (!enrollment) {
       return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 });
     }

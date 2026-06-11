@@ -43,7 +43,7 @@ export async function GET(
       segmentId: searchParams.get('segmentId') ?? undefined,
     };
 
-    const analytics = computeJourneyAnalytics(journeyId, filters);
+    const analytics = await computeJourneyAnalytics(journeyId, filters);
     if (!analytics) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }

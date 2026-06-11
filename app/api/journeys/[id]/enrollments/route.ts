@@ -20,7 +20,7 @@ export async function GET(
   const page = Number(searchParams.get('page') ?? '1');
   const pageSize = Number(searchParams.get('pageSize') ?? '50');
 
-  const all = getEnrollments().filter(enrollment => enrollment.journeyId === journeyId);
+  const all = (await getEnrollments()).filter(enrollment => enrollment.journeyId === journeyId);
 
   const filtered = all.filter(enrollment => {
     if (statusFilter && enrollment.status !== statusFilter) return false;

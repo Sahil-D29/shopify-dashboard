@@ -82,7 +82,7 @@ const parseTags = (tags: string | null | undefined): string[] =>
     : [];
 
 export async function matchAndExecuteJourneys(eventType: string, eventData: EventPayload) {
-  const journeys = getActiveJourneys();
+  const journeys = await getActiveJourneys();
   if (journeys.length === 0) return;
 
   for (const journey of journeys) {
@@ -282,13 +282,13 @@ async function canEnterJourney(journey: JourneyDefinition, customerId: string): 
   const allowReentry = typeof settings.allowReentry === 'boolean' ? settings.allowReentry : false;
   const cooldownDays = typeof settings.reentryCooldownDays === 'number' ? settings.reentryCooldownDays : typeof settings.reentryCooldown === 'number' ? settings.reentryCooldown : 0;
 
-  const prior = getCustomerEnrollments(journey.id, customerId);
+  const prior = await getCustomerEnrollments(journey.id, customerId);
   if (!allowReentry) {
     return prior.length === 0;
   }
 
   if (cooldownDays) {
-    const last = getLastEnrollment(journey.id, customerId);
+    const last = await getLastEnrollment(journey.id, customerId);
     if (last) {
       const cooldownEnd = new Date(last.enteredAt);
       cooldownEnd.setDate(cooldownEnd.getDate() + Number(cooldownDays));

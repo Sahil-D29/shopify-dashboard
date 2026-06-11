@@ -27,11 +27,13 @@ export async function GET(
     const sinceParam = searchParams.get('since');
     const sinceMs = sinceParam ? Date.parse(sinceParam) : undefined;
 
-    const enrollments = getEnrollments().filter(enrollment => enrollment.journeyId === resolved.id);
+    const allEnrollments = await getEnrollments();
+    const enrollments = allEnrollments.filter(enrollment => enrollment.journeyId === resolved.id);
     const enrollmentIds = new Set(enrollments.map(enrollment => enrollment.id));
     const enrollmentLookup = new Map(enrollments.map(enrollment => [enrollment.id, enrollment]));
 
-    const logs = getJourneyActivityLogs()
+    const allLogs = await getJourneyActivityLogs();
+    const logs = allLogs
       .filter(log => {
         if (log.data?.journeyId === resolved.id) return true;
         return Boolean(log.enrollmentId && enrollmentIds.has(log.enrollmentId));

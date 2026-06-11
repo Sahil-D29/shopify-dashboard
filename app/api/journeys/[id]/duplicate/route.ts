@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
 
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
 import type { JourneyDefinition } from '@/lib/types/journey';
 
 export const runtime = 'nodejs';
@@ -17,9 +17,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
     const { id } = await params;
-    const source = journeys.find(journey => journey.id === id);
+    const source = await getJourneyById(id);
     if (!source) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
@@ -35,8 +34,7 @@ export async function POST(
       updatedAt: now,
     };
 
-    journeys.push(clone);
-    writeJsonFile('journeys.json', journeys);
+    await updateJourney(clone);
 
     return NextResponse.json({ journeyId: cloneId, journey: clone });
   } catch (error) {

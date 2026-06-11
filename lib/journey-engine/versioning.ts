@@ -6,7 +6,7 @@ import type { JourneyDefinition } from '@/lib/types/journey';
 import type { JourneyVersion, JourneyVersionMetadata } from '@/lib/types/journey-version';
 import { getDataFilePath, readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 
-import { getJourneys, saveJourneys } from './storage';
+import { getJourneyById, updateJourney } from './storage';
 
 const VERSION_DIRECTORY = 'journey-versions';
 const MAX_VERSIONS = 50;
@@ -188,19 +188,16 @@ export function deleteJourneyVersion(journeyId: string, versionId: string): bool
   return true;
 }
 
-export function restoreJourneyVersion(journeyId: string, versionId: string): JourneyDefinition {
+export async function restoreJourneyVersion(journeyId: string, versionId: string): Promise<JourneyDefinition> {
   const version = getJourneyVersion(journeyId, versionId);
   if (!version) {
     throw new Error('Version not found');
   }
 
-  const journeys = getJourneys();
-  const idx = journeys.findIndex(journey => journey.id === journeyId);
-  if (idx === -1) {
+  const existing = await getJourneyById(journeyId);
+  if (!existing) {
     throw new Error('Journey not found');
   }
-
-  const existing = journeys[idx];
 
   saveJourneyVersion(existing, {
     label: `${existing.name || 'Journey'} (pre-restore)`,
@@ -217,8 +214,7 @@ export function restoreJourneyVersion(journeyId: string, versionId: string): Jou
     updatedAt: Date.now(),
   };
 
-  journeys[idx] = restored;
-  saveJourneys(journeys);
+  await updateJourney(restored);
 
   return restored;
 }

@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { listJourneyVersionMetadata, saveJourneyVersion } from '@/lib/journey-engine/versioning';
-import type { JourneyDefinition } from '@/lib/types/journey';
-import { readJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById } from '@/lib/journey-engine/storage';
 
 export const runtime = 'nodejs';
 
@@ -49,8 +48,7 @@ export async function POST(
     const resolved = await params;
     const body = (await request.json().catch(() => ({}))) as VersionRequestPayload;
 
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const journey = journeys.find(item => item.id === resolved.id);
+    const journey = await getJourneyById(resolved.id);
     if (!journey) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }

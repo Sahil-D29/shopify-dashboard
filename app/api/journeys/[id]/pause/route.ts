@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
-import type { JourneyDefinition } from '@/lib/types/journey';
+import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
 
 export const runtime = 'nodejs';
 
@@ -16,22 +15,21 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
     const { id } = await params;
-    const idx = journeys.findIndex(j => j.id === id);
-    if (idx === -1) {
+    const journey = await getJourneyById(id);
+    if (!journey) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
 
-    journeys[idx] = {
-      ...journeys[idx],
-      status: 'PAUSED',
+    const updated = {
+      ...journey,
+      status: 'PAUSED' as const,
       updatedAt: new Date().toISOString(),
     };
 
-    writeJsonFile('journeys.json', journeys);
+    await updateJourney(updated);
 
-    return NextResponse.json({ journey: journeys[idx] });
+    return NextResponse.json({ journey: updated });
   } catch (error) {
     return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }

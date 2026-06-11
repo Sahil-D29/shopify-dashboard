@@ -17,7 +17,7 @@ export async function POST(
 ) {
   try {
     const resolved = await params;
-    const journey = restoreJourneyVersion(resolved.id, resolved.versionId);
+    const journey = await restoreJourneyVersion(resolved.id, resolved.versionId);
     return NextResponse.json({ journey });
   } catch (error) {
     return NextResponse.json({ error: getErrorMessage(error) || 'Failed to restore version' }, { status: 400 });

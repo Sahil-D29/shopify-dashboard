@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 import type { WhatsAppActionConfig } from '@/lib/types/whatsapp-config';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
 import { validateWhatsAppConfig } from '@/lib/whatsapp/validate-config';
 
 type Params = { id: string; nodeId: string };
@@ -43,8 +43,7 @@ export async function GET(
   const { id, nodeId } = await params;
   const journeyId = id;
 
-  const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-  const journey = journeys.find(item => item.id === journeyId);
+  const journey = await getJourneyById(journeyId);
   if (!journey) {
     return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
   }
@@ -94,14 +93,11 @@ export async function POST(
       );
     }
 
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const journeyIndex = journeys.findIndex(item => item.id === journeyId);
-
-    if (journeyIndex === -1) {
+    const journey = await getJourneyById(journeyId);
+    if (!journey) {
       return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
     }
 
-    const journey = journeys[journeyIndex];
     const nodes = journey.nodes || [];
     const nodeIndex = nodes.findIndex(item => item.id === nodeId);
 
@@ -178,13 +174,7 @@ export async function POST(
       updatedAt: new Date().toISOString(),
     };
 
-    const nextJourneys = [
-      ...journeys.slice(0, journeyIndex),
-      nextJourney,
-      ...journeys.slice(journeyIndex + 1),
-    ];
-
-    writeJsonFile('journeys.json', nextJourneys);
+    await updateJourney(nextJourney);
 
     // Log audit trail
     console.log(`[AUDIT] WhatsApp config saved: journey=${journeyId}, node=${nodeId}, by=${savedBy}, changes=${changes.join(', ')}`);

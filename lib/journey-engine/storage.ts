@@ -1,8 +1,9 @@
-import fs from 'fs';
-
-import { getDataFilePath, readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { prisma } from '@/lib/prisma';
 
 import type { JourneyDefinition } from '@/lib/types/journey';
+
+/** Strip `undefined` (which Prisma's Json input rejects) before persisting. */
+const toJson = (value: unknown): object => JSON.parse(JSON.stringify(value ?? null));
 
 export type JourneyEnrollmentStatus = 'active' | 'waiting' | 'completed' | 'exited' | 'failed';
 
@@ -49,11 +50,6 @@ export interface ScheduledExecutionRecord {
   error?: string;
   metadata?: Record<string, unknown>;
 }
-
-const JOURNEYS_FILE = 'journeys.json';
-const ENROLLMENTS_FILE = 'journey-enrollments.json';
-const ACTIVITY_LOG_FILE = 'journey-activity-log.json';
-const SCHEDULE_FILE = 'scheduled-executions.json';
 
 const VALID_ENROLLMENT_STATUS: JourneyEnrollmentStatus[] = ['active', 'waiting', 'completed', 'exited', 'failed'];
 const VALID_EXECUTION_STATUS: ScheduledExecutionRecord['status'][] = ['pending', 'processed', 'failed', 'cancelled'];
@@ -250,201 +246,216 @@ function normaliseScheduledExecution(raw: unknown): ScheduledExecutionRecord | n
   return record;
 }
 
-function readRecords<T>(file: string, normalise: (raw: unknown) => T | null): T[] {
-  const raw = readJsonFile<unknown>(file);
-  if (!Array.isArray(raw)) {
-    return [];
+// ─── Journeys (definitions) ─────────────────────────────────────────────────
+
+export async function getJourneys(): Promise<JourneyDefinition[]> {
+  const docs = await prisma.journeyDoc.findMany({ orderBy: { updatedAt: 'desc' } });
+  return docs.map(doc => doc.data as unknown as JourneyDefinition);
+}
+
+export async function getActiveJourneys(): Promise<JourneyDefinition[]> {
+  const docs = await prisma.journeyDoc.findMany({ where: { status: 'ACTIVE' } });
+  return docs.map(doc => doc.data as unknown as JourneyDefinition);
+}
+
+/** Upsert each provided journey (does not delete others). */
+export async function saveJourneys(journeys: JourneyDefinition[]): Promise<void> {
+  for (const journey of journeys) {
+    await updateJourney(journey);
   }
-  const records: T[] = [];
-  raw.forEach(item => {
-    const normalised = normalise(item);
-    if (normalised) {
-      records.push(normalised);
-    }
+}
+
+export async function updateJourney(journey: JourneyDefinition): Promise<void> {
+  if (!journey?.id) return;
+  const status = journey.status ?? 'DRAFT';
+  const storeId = (journey as { storeId?: string }).storeId ?? '';
+  await prisma.journeyDoc.upsert({
+    where: { id: journey.id },
+    create: { id: journey.id, storeId, status, data: toJson(journey) },
+    update: { storeId, status, data: toJson(journey) },
   });
-  return records;
 }
 
-function writeRecords<T>(file: string, records: T[]): void {
-  writeJsonFile<T>(file, records);
+export async function deleteJourney(journeyId: string): Promise<void> {
+  await prisma.journeyDoc.deleteMany({ where: { id: journeyId } });
 }
 
-export function getJourneys(): JourneyDefinition[] {
-  return readJsonFile<JourneyDefinition>(JOURNEYS_FILE);
+export async function getJourneyById(journeyId: string): Promise<JourneyDefinition | undefined> {
+  const doc = await prisma.journeyDoc.findUnique({ where: { id: journeyId } });
+  return doc ? (doc.data as unknown as JourneyDefinition) : undefined;
 }
 
-export function getActiveJourneys(): JourneyDefinition[] {
-  return getJourneys().filter(journey => journey.status === 'ACTIVE');
+// ─── Enrollments ────────────────────────────────────────────────────────────
+
+export async function getEnrollments(): Promise<JourneyEnrollmentRecord[]> {
+  const docs = await prisma.journeyEnrollmentDoc.findMany();
+  return docs
+    .map(doc => normaliseEnrollment(doc.data))
+    .filter((item): item is JourneyEnrollmentRecord => Boolean(item));
 }
 
-export function saveJourneys(journeys: JourneyDefinition[]): void {
-  writeJsonFile<JourneyDefinition>(JOURNEYS_FILE, journeys);
-}
-
-export function updateJourney(journey: JourneyDefinition): void {
-  const journeys = getJourneys();
-  const idx = journeys.findIndex(item => item.id === journey.id);
-  if (idx === -1) journeys.push(journey);
-  else journeys[idx] = journey;
-  saveJourneys(journeys);
-}
-
-export function getEnrollments(): JourneyEnrollmentRecord[] {
-  return readRecords(ENROLLMENTS_FILE, normaliseEnrollment);
-}
-
-export function saveEnrollments(enrollments: JourneyEnrollmentRecord[]): void {
-  const sanitised = enrollments.map(normaliseEnrollment).filter((item): item is JourneyEnrollmentRecord => Boolean(item));
-  try {
-    const serialised = JSON.stringify(sanitised, null, 2);
-    JSON.parse(serialised);
-    writeRecords(ENROLLMENTS_FILE, sanitised);
-  } catch (error) {
-    const backupPath = `${getDataFilePath(ENROLLMENTS_FILE)}.${Date.now()}.backup`;
-    try {
-      fs.writeFileSync(backupPath, JSON.stringify(sanitised, null, 2), 'utf-8');
-    } catch (backupError) {
-      console.error('Failed to write enrollments backup:', backupError);
-    }
-    console.error('Failed to save enrollments:', error);
-    throw error;
+export async function saveEnrollments(enrollments: JourneyEnrollmentRecord[]): Promise<void> {
+  for (const enrollment of enrollments) {
+    await updateEnrollmentRecord(enrollment);
   }
 }
 
-export function appendEnrollment(enrollment: JourneyEnrollmentRecord): void {
-  const normalised = normaliseEnrollment(enrollment);
-  if (!normalised) {
-    console.warn('appendEnrollment: received invalid enrollment payload');
-    return;
-  }
-  const enrollments = getEnrollments();
-  enrollments.unshift(normalised);
-  saveEnrollments(enrollments);
+export async function appendEnrollment(enrollment: JourneyEnrollmentRecord): Promise<void> {
+  await updateEnrollmentRecord(enrollment);
 }
 
-export function updateEnrollmentRecord(enrollment: JourneyEnrollmentRecord): void {
+export async function updateEnrollmentRecord(enrollment: JourneyEnrollmentRecord): Promise<void> {
   const normalised = normaliseEnrollment(enrollment);
   if (!normalised) {
     console.warn('updateEnrollmentRecord: received invalid enrollment payload');
     return;
   }
-  const enrollments = getEnrollments();
-  const idx = enrollments.findIndex(item => item.id === normalised.id);
-  if (idx === -1) {
-    enrollments.unshift(normalised);
-  } else {
-    enrollments[idx] = normalised;
-  }
-  saveEnrollments(enrollments);
+  await prisma.journeyEnrollmentDoc.upsert({
+    where: { id: normalised.id },
+    create: {
+      id: normalised.id,
+      journeyId: normalised.journeyId,
+      customerId: normalised.customerId,
+      status: normalised.status,
+      enteredAt: new Date(normalised.enteredAt),
+      data: toJson(normalised),
+    },
+    update: {
+      journeyId: normalised.journeyId,
+      customerId: normalised.customerId,
+      status: normalised.status,
+      data: toJson(normalised),
+    },
+  });
 }
 
-export function getEnrollmentById(enrollmentId: string): JourneyEnrollmentRecord | undefined {
-  return getEnrollments().find(item => item.id === enrollmentId);
+export async function getEnrollmentById(enrollmentId: string): Promise<JourneyEnrollmentRecord | undefined> {
+  const doc = await prisma.journeyEnrollmentDoc.findUnique({ where: { id: enrollmentId } });
+  return doc ? (normaliseEnrollment(doc.data) ?? undefined) : undefined;
 }
 
-export function getCustomerEnrollments(journeyId: string, customerId: string): JourneyEnrollmentRecord[] {
-  return getEnrollments().filter(item => item.journeyId === journeyId && item.customerId === customerId);
+export async function getCustomerEnrollments(journeyId: string, customerId: string): Promise<JourneyEnrollmentRecord[]> {
+  const docs = await prisma.journeyEnrollmentDoc.findMany({ where: { journeyId, customerId } });
+  return docs
+    .map(doc => normaliseEnrollment(doc.data))
+    .filter((item): item is JourneyEnrollmentRecord => Boolean(item));
 }
 
-export function getLastEnrollment(journeyId: string, customerId: string): JourneyEnrollmentRecord | undefined {
-  return getEnrollments()
-    .filter(item => item.journeyId === journeyId && item.customerId === customerId)
-    .sort((a, b) => (safeDateParse(b.enteredAt) ?? 0) - (safeDateParse(a.enteredAt) ?? 0))[0];
+export async function getLastEnrollment(journeyId: string, customerId: string): Promise<JourneyEnrollmentRecord | undefined> {
+  const doc = await prisma.journeyEnrollmentDoc.findFirst({
+    where: { journeyId, customerId },
+    orderBy: { enteredAt: 'desc' },
+  });
+  return doc ? (normaliseEnrollment(doc.data) ?? undefined) : undefined;
 }
 
-export function getJourneyActivityLogs(): JourneyActivityLogRecord[] {
-  return readRecords(ACTIVITY_LOG_FILE, normaliseActivityLog);
+// ─── Activity logs ──────────────────────────────────────────────────────────
+
+export async function getJourneyActivityLogs(): Promise<JourneyActivityLogRecord[]> {
+  const docs = await prisma.journeyActivityDoc.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
+  return docs
+    .map(doc => normaliseActivityLog(doc.data))
+    .filter((item): item is JourneyActivityLogRecord => Boolean(item));
 }
 
-export function appendJourneyActivity(log: JourneyActivityLogRecord): void {
+export async function appendJourneyActivity(log: JourneyActivityLogRecord): Promise<void> {
   const normalised = normaliseActivityLog(log);
   if (!normalised) {
     console.warn('appendJourneyActivity: received invalid activity payload');
     return;
   }
-  const logs = getJourneyActivityLogs();
-  logs.unshift(normalised);
-  const MAX_LOGS = 500;
-  if (logs.length > MAX_LOGS) {
-    logs.length = MAX_LOGS;
+  await prisma.journeyActivityDoc.create({
+    data: { id: normalised.id, enrollmentId: normalised.enrollmentId, data: toJson(normalised) },
+  });
+}
+
+// ─── Scheduled executions ───────────────────────────────────────────────────
+
+export async function getScheduledExecutions(): Promise<ScheduledExecutionRecord[]> {
+  const docs = await prisma.journeyScheduleDoc.findMany();
+  return docs
+    .map(doc => normaliseScheduledExecution(doc.data))
+    .filter((item): item is ScheduledExecutionRecord => Boolean(item));
+}
+
+export async function saveScheduledExecutions(records: ScheduledExecutionRecord[]): Promise<void> {
+  for (const record of records) {
+    await upsertScheduledExecution(record);
   }
-  writeRecords(ACTIVITY_LOG_FILE, logs);
 }
 
-export function getScheduledExecutions(): ScheduledExecutionRecord[] {
-  return readRecords(SCHEDULE_FILE, normaliseScheduledExecution);
+export async function addScheduledExecution(record: ScheduledExecutionRecord): Promise<void> {
+  await upsertScheduledExecution(record);
 }
 
-export function saveScheduledExecutions(records: ScheduledExecutionRecord[]): void {
-  const sanitised = records.map(normaliseScheduledExecution).filter((item): item is ScheduledExecutionRecord => Boolean(item));
-  writeRecords(SCHEDULE_FILE, sanitised);
-}
-
-export function addScheduledExecution(record: ScheduledExecutionRecord): void {
-  const normalised = normaliseScheduledExecution(record);
-  if (!normalised) {
-    console.warn('addScheduledExecution: received invalid scheduled execution payload');
-    return;
-  }
-  const records = getScheduledExecutions();
-  records.push(normalised);
-  saveScheduledExecutions(records);
-}
-
-export function upsertScheduledExecution(record: ScheduledExecutionRecord): void {
+export async function upsertScheduledExecution(record: ScheduledExecutionRecord): Promise<void> {
   const normalised = normaliseScheduledExecution(record);
   if (!normalised) {
     console.warn('upsertScheduledExecution: received invalid scheduled execution payload');
     return;
   }
-  const records = getScheduledExecutions();
-  const idx = records.findIndex(item => item.id === normalised.id);
-  if (idx === -1) records.push(normalised);
-  else records[idx] = normalised;
-  saveScheduledExecutions(records);
-}
-
-export function getDueScheduledExecutions(nowIso: string): ScheduledExecutionRecord[] {
-  const nowMs = safeDateParse(nowIso);
-  if (nowMs === undefined) {
-    return [];
-  }
-  return getScheduledExecutions().filter(record => {
-    const resumeAt = safeDateParse(record.resumeAt);
-    return record.status === 'pending' && resumeAt !== undefined && resumeAt <= nowMs;
+  await prisma.journeyScheduleDoc.upsert({
+    where: { id: normalised.id },
+    create: {
+      id: normalised.id,
+      journeyId: normalised.journeyId,
+      enrollmentId: normalised.enrollmentId,
+      nodeId: normalised.nodeId,
+      status: normalised.status,
+      resumeAt: new Date(normalised.resumeAt),
+      data: toJson(normalised),
+    },
+    update: {
+      status: normalised.status,
+      resumeAt: new Date(normalised.resumeAt),
+      data: toJson(normalised),
+    },
   });
 }
 
-export function cancelScheduledExecutionsForEnrollment(enrollmentId: string): void {
-  const records = getScheduledExecutions().map(record => ({ ...record }));
-  const timestamp = new Date().toISOString();
-  const updated = records.map(record =>
-    record.enrollmentId === enrollmentId && record.status === 'pending'
-      ? { ...record, status: 'cancelled', processedAt: timestamp }
-      : record,
-  );
-  saveScheduledExecutions(updated as ScheduledExecutionRecord[]);
+export async function getDueScheduledExecutions(nowIso: string): Promise<ScheduledExecutionRecord[]> {
+  const nowMs = safeDateParse(nowIso);
+  if (nowMs === undefined) return [];
+  const docs = await prisma.journeyScheduleDoc.findMany({
+    where: { status: 'pending', resumeAt: { lte: new Date(nowMs) } },
+  });
+  return docs
+    .map(doc => normaliseScheduledExecution(doc.data))
+    .filter((item): item is ScheduledExecutionRecord => Boolean(item));
 }
 
-export function markScheduledExecution(recordId: string, status: ScheduledExecutionRecord['status'], error?: string): void {
+export async function cancelScheduledExecutionsForEnrollment(enrollmentId: string): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const docs = await prisma.journeyScheduleDoc.findMany({ where: { enrollmentId, status: 'pending' } });
+  for (const doc of docs) {
+    const record = normaliseScheduledExecution(doc.data);
+    if (!record) continue;
+    const updated = { ...record, status: 'cancelled' as const, processedAt: timestamp };
+    await prisma.journeyScheduleDoc.update({
+      where: { id: doc.id },
+      data: { status: 'cancelled', data: toJson(updated) },
+    });
+  }
+}
+
+export async function markScheduledExecution(recordId: string, status: ScheduledExecutionRecord['status'], error?: string): Promise<void> {
   const statusNormalised = toExecutionStatus(status);
   if (!statusNormalised) {
     console.warn('markScheduledExecution: invalid status payload', status);
     return;
   }
-  const records = getScheduledExecutions().map(record =>
-    record.id === recordId
-      ? {
-          ...record,
-          status: statusNormalised,
-          processedAt: new Date().toISOString(),
-          error: error ? error : record.error,
-        }
-      : record,
-  );
-  saveScheduledExecutions(records);
-}
-
-export function getJourneyById(journeyId: string): JourneyDefinition | undefined {
-  return getJourneys().find(journey => journey.id === journeyId);
+  const doc = await prisma.journeyScheduleDoc.findUnique({ where: { id: recordId } });
+  if (!doc) return;
+  const record = normaliseScheduledExecution(doc.data);
+  if (!record) return;
+  const updated = {
+    ...record,
+    status: statusNormalised,
+    processedAt: new Date().toISOString(),
+    error: error ? error : record.error,
+  };
+  await prisma.journeyScheduleDoc.update({
+    where: { id: recordId },
+    data: { status: statusNormalised, data: toJson(updated) },
+  });
 }

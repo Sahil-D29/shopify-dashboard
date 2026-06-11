@@ -170,7 +170,7 @@ export async function startJourneyExecution(
     metadata: {},
   };
 
-  appendEnrollment(enrollment);
+  await appendEnrollment(enrollment);
   await logJourneyActivity(enrollment.id, 'journey_started', {
     journeyId: journey.id,
     journeyName: journey.name,
@@ -197,7 +197,7 @@ export async function executeNode(
   enrollment.status = 'active';
   enrollment.currentNodeId = node.id;
   enrollment.lastActivityAt = new Date().toISOString();
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 
   await logJourneyActivity(enrollment.id, 'node_entered', {
     nodeId: node.id,
@@ -272,13 +272,13 @@ async function executeActionNode(
       });
     }
 
-    clearFailure(enrollment, node.id);
+    await clearFailure(enrollment, node.id);
     enrollment.completedNodes.push(node.id);
-    updateEnrollmentRecord(enrollment);
+    await updateEnrollmentRecord(enrollment);
     await moveToNextNode(journey, enrollment, node);
   } catch (error) {
     console.error('[journey-engine] Action node failed', error);
-    const attempt = recordFailure(enrollment, node.id, error);
+    const attempt = await recordFailure(enrollment, node.id, error);
     await logJourneyActivity(enrollment.id, 'node_error', {
       nodeId: node.id,
       error: String(error),
@@ -311,7 +311,7 @@ async function executeDelayNode(
     }
     enrollment.status = 'waiting';
     enrollment.completedNodes.push(node.id);
-    updateEnrollmentRecord(enrollment);
+    await updateEnrollmentRecord(enrollment);
     return;
   }
 
@@ -343,11 +343,11 @@ async function executeDelayNode(
     createdAt: new Date().toISOString(),
   };
 
-  addScheduledExecution(schedule);
+  await addScheduledExecution(schedule);
 
   enrollment.status = 'waiting';
   enrollment.completedNodes.push(node.id);
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 }
 
 async function executeConditionNode(
@@ -377,9 +377,9 @@ async function executeConditionNode(
     result,
   });
 
-  clearFailure(enrollment, node.id);
+  await clearFailure(enrollment, node.id);
   enrollment.completedNodes.push(node.id);
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 
   const label = result ? (config.trueLabel || 'Yes') : (config.falseLabel || 'No');
   const nextEdge = findNextEdge(journey.edges, node.id, label);
@@ -404,7 +404,7 @@ async function executeGoalNode(
     enrollment.goalAchieved = true;
     enrollment.completedAt = new Date().toISOString();
     enrollment.completedNodes.push(node.id);
-    updateEnrollmentRecord(enrollment);
+    await updateEnrollmentRecord(enrollment);
     await logJourneyActivity(enrollment.id, 'goal_achieved', {
       nodeId: node.id,
       goalType: config.goalType,
@@ -412,7 +412,7 @@ async function executeGoalNode(
   } else {
     enrollment.waitingForGoal = true;
     enrollment.goalNodeId = node.id;
-    updateEnrollmentRecord(enrollment);
+    await updateEnrollmentRecord(enrollment);
     await logJourneyActivity(enrollment.id, 'goal_pending', {
       nodeId: node.id,
     });
@@ -446,8 +446,8 @@ export async function exitJourney(
   enrollment.status = 'exited';
   enrollment.exitReason = reason;
   enrollment.completedAt = new Date().toISOString();
-  updateEnrollmentRecord(enrollment);
-  cancelScheduledExecutionsForEnrollment(enrollment.id);
+  await updateEnrollmentRecord(enrollment);
+  await cancelScheduledExecutionsForEnrollment(enrollment.id);
   await logJourneyActivity(enrollment.id, 'journey_exited', { reason });
 }
 
@@ -493,7 +493,7 @@ function findNextEdge(edges: JourneyEdge[], sourceId: string, label?: string): J
 }
 
 async function logJourneyActivity(enrollmentId: string, eventType: string, data: JsonRecord) {
-  appendJourneyActivity({
+  await appendJourneyActivity({
     id: generateId('log'),
     enrollmentId,
     timestamp: new Date().toISOString(),
@@ -515,7 +515,7 @@ function getFailureMap(enrollment: JourneyEnrollmentRecord): Record<string, Fail
   return map as Record<string, FailureState>;
 }
 
-function recordFailure(enrollment: JourneyEnrollmentRecord, nodeId: string, error: unknown): number {
+async function recordFailure(enrollment: JourneyEnrollmentRecord, nodeId: string, error: unknown): Promise<number> {
   const failures = getFailureMap(enrollment);
   const nowIso = new Date().toISOString();
   const existing = failures[nodeId];
@@ -533,16 +533,16 @@ function recordFailure(enrollment: JourneyEnrollmentRecord, nodeId: string, erro
       lastError: error ? getErrorMessage(error) : undefined,
     };
   }
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
   return failures[nodeId].attempts;
 }
 
-function clearFailure(enrollment: JourneyEnrollmentRecord, nodeId: string) {
+async function clearFailure(enrollment: JourneyEnrollmentRecord, nodeId: string) {
   const failures = getFailureMap(enrollment);
   if (!failures[nodeId]) return;
   delete failures[nodeId];
   enrollment.metadata!.failures = failures;
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 }
 
 async function scheduleRetryIfPossible(
@@ -563,8 +563,8 @@ async function scheduleRetryIfPossible(
     enrollment.status = 'failed';
     enrollment.exitReason = 'node_failure';
     enrollment.completedAt = new Date().toISOString();
-    updateEnrollmentRecord(enrollment);
-    cancelScheduledExecutionsForEnrollment(enrollment.id);
+    await updateEnrollmentRecord(enrollment);
+    await cancelScheduledExecutionsForEnrollment(enrollment.id);
     await logJourneyActivity(enrollment.id, 'journey_failed', {
       nodeId: node.id,
       attempts: attempt,
@@ -597,11 +597,11 @@ async function scheduleRetryIfPossible(
     },
   };
 
-  addScheduledExecution(schedule);
+  await addScheduledExecution(schedule);
 
   enrollment.status = 'waiting';
   enrollment.currentNodeId = node.id;
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 
   await logJourneyActivity(enrollment.id, 'retry_scheduled', {
     nodeId: node.id,
@@ -703,7 +703,7 @@ async function executeExperimentNode(
     };
     assignments[node.id] = assignment;
     enrollment.metadata!.experiments = assignments;
-    updateEnrollmentRecord(enrollment);
+    await updateEnrollmentRecord(enrollment);
     await logJourneyActivity(enrollment.id, 'experiment_assigned', {
       nodeId: node.id,
       variantId: assignment.variantId,
@@ -712,11 +712,11 @@ async function executeExperimentNode(
     });
   }
 
-  clearFailure(enrollment, node.id);
+  await clearFailure(enrollment, node.id);
   if (!enrollment.completedNodes.includes(node.id)) {
     enrollment.completedNodes.push(node.id);
   }
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 
   const label = assignment.variantLabel || assignment.variantId;
   let nextEdge = label ? findNextEdge(journey.edges, node.id, label) : undefined;
@@ -732,8 +732,8 @@ async function executeExperimentNode(
     enrollment.status = 'failed';
     enrollment.exitReason = 'node_failure';
     enrollment.completedAt = new Date().toISOString();
-    updateEnrollmentRecord(enrollment);
-    cancelScheduledExecutionsForEnrollment(enrollment.id);
+    await updateEnrollmentRecord(enrollment);
+    await cancelScheduledExecutionsForEnrollment(enrollment.id);
     return;
   }
 
@@ -754,7 +754,7 @@ async function executeExperimentNode(
     edgeId: nextEdge.id,
   };
   enrollment.metadata!.experiments = assignments;
-  updateEnrollmentRecord(enrollment);
+  await updateEnrollmentRecord(enrollment);
 
   await logJourneyActivity(enrollment.id, 'experiment_variant_selected', {
     nodeId: node.id,
@@ -795,7 +795,7 @@ async function checkGoalAchievement(goalConfig: NodeConfig, enrollment: JourneyE
     case 'link_clicked': {
       const tracking = goalConfig.linkTracking;
       if (!tracking) return false;
-      const logs = getJourneyActivityLogs();
+      const logs = await getJourneyActivityLogs();
       return logs.some(
         log =>
           log.enrollmentId === enrollment.id &&
@@ -811,7 +811,7 @@ async function checkGoalAchievement(goalConfig: NodeConfig, enrollment: JourneyE
 }
 
 export async function scheduleNodeExecution(payload: ScheduledExecutionRecord) {
-  addScheduledExecution(payload);
+  await addScheduledExecution(payload);
 }
 
 export function getEnrollment(enrollmentId: string) {
@@ -819,47 +819,48 @@ export function getEnrollment(enrollmentId: string) {
 }
 
 export async function processScheduledExecutions(nowIso: string): Promise<{ processed: number; failed: number }> {
-  const due = getScheduledExecutions().filter(record => record.status === 'pending' && Date.parse(record.resumeAt) <= Date.parse(nowIso));
+  const all = await getScheduledExecutions();
+  const due = all.filter(record => record.status === 'pending' && Date.parse(record.resumeAt) <= Date.parse(nowIso));
   let processed = 0;
   let failed = 0;
 
   for (const record of due) {
     try {
-      const enrollment = getEnrollmentById(record.enrollmentId);
+      const enrollment = await getEnrollmentById(record.enrollmentId);
       if (!enrollment) {
-        markScheduledExecution(record.id, 'failed', 'enrollment_not_found');
+        await markScheduledExecution(record.id, 'failed', 'enrollment_not_found');
         failed += 1;
         continue;
       }
 
-      const journey = getJourneyById(record.journeyId);
+      const journey = await getJourneyById(record.journeyId);
       if (!journey) {
-        markScheduledExecution(record.id, 'failed', 'journey_not_found');
+        await markScheduledExecution(record.id, 'failed', 'journey_not_found');
         failed += 1;
         continue;
       }
 
       const node = journey.nodes.find(item => item.id === record.nodeId);
       if (!node) {
-        markScheduledExecution(record.id, 'failed', 'node_not_found');
+        await markScheduledExecution(record.id, 'failed', 'node_not_found');
         failed += 1;
         continue;
       }
 
       const kind = record.metadata?.kind as string | undefined;
-      markScheduledExecution(record.id, 'processed');
+      await markScheduledExecution(record.id, 'processed');
       processed += 1;
 
       if (kind === 'retry') {
         enrollment.status = 'active';
-        updateEnrollmentRecord(enrollment);
+        await updateEnrollmentRecord(enrollment);
         await executeNode(journey, enrollment, node);
       } else {
         await moveToNextNode(journey, enrollment, node);
       }
     } catch (error) {
       console.error('[journey-engine] Failed to process scheduled execution', error);
-      markScheduledExecution(record.id, 'failed', getErrorMessage(error));
+      await markScheduledExecution(record.id, 'failed', getErrorMessage(error));
       failed += 1;
     }
   }

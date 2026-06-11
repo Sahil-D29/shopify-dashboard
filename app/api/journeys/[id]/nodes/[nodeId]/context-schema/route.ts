@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { JourneyDefinition } from '@/lib/types/journey';
-import { readJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById } from '@/lib/journey-engine/storage';
 
 type Params = { id: string; nodeId: string };
 
@@ -128,8 +128,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<P
     const journeyId = id;
 
     // Load journey to determine trigger context
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const journey = journeys.find(j => j.id === journeyId);
+    const journey = await getJourneyById(journeyId);
 
     if (!journey) {
       return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });

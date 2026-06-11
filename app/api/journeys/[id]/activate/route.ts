@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getJourneys, saveJourneys } from '@/lib/journey-engine/storage';
+import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
 import { validateJourney } from '@/lib/journey-engine/validation';
 
 export const runtime = 'nodejs';
@@ -19,13 +19,10 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid status. Use ACTIVE or PAUSED.' }, { status: 400 });
     }
 
-    const journeys = getJourneys();
-    const idx = journeys.findIndex(journey => journey.id === resolved.id);
-    if (idx === -1) {
+    const journey = await getJourneyById(resolved.id);
+    if (!journey) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
-
-    const journey = journeys[idx];
 
     if (status === 'ACTIVE') {
       const validation = await validateJourney(journey, journey.storeId);
@@ -39,28 +36,17 @@ export async function POST(
         );
       }
 
-      journeys[idx] = {
-        ...journeys[idx],
-        status: 'ACTIVE',
-        updatedAt: Date.now(),
-      };
-      saveJourneys(journeys);
+      const updated = { ...journey, status: 'ACTIVE' as const, updatedAt: Date.now() };
+      await updateJourney(updated);
 
-      return NextResponse.json({
-        journey: journeys[idx],
-        validation,
-      });
+      return NextResponse.json({ journey: updated, validation });
     }
 
     // Pause flow (no validation required)
-    journeys[idx] = {
-      ...journeys[idx],
-      status: 'PAUSED',
-      updatedAt: Date.now(),
-    };
-    saveJourneys(journeys);
+    const paused = { ...journey, status: 'PAUSED' as const, updatedAt: Date.now() };
+    await updateJourney(paused);
 
-    return NextResponse.json({ journey: journeys[idx] });
+    return NextResponse.json({ journey: paused });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update journey status';
     console.error('[journey][activate]', message);

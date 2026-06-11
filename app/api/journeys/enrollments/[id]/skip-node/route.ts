@@ -15,12 +15,12 @@ export async function POST(
 ) {
   try {
     const resolved = await params;
-    const enrollment = getEnrollment(resolved.id);
+    const enrollment = await getEnrollment(resolved.id);
     if (!enrollment) {
       return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 });
     }
 
-    const journey = getJourneyById(enrollment.journeyId);
+    const journey = await getJourneyById(enrollment.journeyId);
     if (!journey) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
@@ -37,7 +37,7 @@ export async function POST(
       );
     }
 
-    appendJourneyActivity({
+    await appendJourneyActivity({
       id: generateId('log'),
       enrollmentId: enrollment.id,
       timestamp: new Date().toISOString(),

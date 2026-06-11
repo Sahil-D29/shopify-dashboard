@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 import type { GoalConfig } from '@/lib/types/goal-config';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
 
 type Params = { id: string; nodeId: string };
 
@@ -47,8 +47,7 @@ export async function GET(
   { params }: { params: Promise<Params> },
 ) {
   const { id, nodeId } = await params;
-  const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-  const journey = journeys.find(item => item.id === id);
+  const journey = await getJourneyById(id);
   if (!journey) {
     return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
   }
@@ -75,13 +74,11 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid goal configuration payload.' }, { status: 400 });
     }
 
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const journeyIndex = journeys.findIndex(item => item.id === id);
-    if (journeyIndex === -1) {
+    const journey = await getJourneyById(id);
+    if (!journey) {
       return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
     }
 
-    const journey = journeys[journeyIndex];
     const nodes = journey.nodes || [];
     const nodeIndex = nodes.findIndex(item => item.id === nodeId);
     if (nodeIndex === -1) {
@@ -117,13 +114,7 @@ export async function POST(
       updatedAt: new Date().toISOString(),
     };
 
-    const nextJourneys = [
-      ...journeys.slice(0, journeyIndex),
-      updatedJourney,
-      ...journeys.slice(journeyIndex + 1),
-    ];
-
-    writeJsonFile('journeys.json', nextJourneys);
+    await updateJourney(updatedJourney);
 
     return NextResponse.json({ success: true, journeyId: id, nodeId });
   } catch (error) {

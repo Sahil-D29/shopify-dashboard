@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { saveJourneyVersion } from '@/lib/journey-engine/versioning';
 import type { JourneyConfig, JourneyDefinition, JourneyStats } from '@/lib/types/journey';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+import { getJourneyById, updateJourney, deleteJourney } from '@/lib/journey-engine/storage';
 
 export const runtime = 'nodejs';
 
@@ -69,8 +69,7 @@ export async function GET(
 ) {
   try {
     const resolved = await params;
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const journey = journeys.find(j => j.id === resolved.id);
+    const journey = await getJourneyById(resolved.id);
     if (!journey) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ journey: withJourneyDefaults(journey) });
   } catch (error) {
@@ -86,10 +85,8 @@ export async function PUT(
   try {
     const resolved = await params;
     const updates = (await request.json()) as Partial<JourneyDefinition>;
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const idx = journeys.findIndex(j => j.id === resolved.id);
-    if (idx === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const existing = journeys[idx];
+    const existing = await getJourneyById(resolved.id);
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     saveJourneyVersion(existing, {
       label: `${existing.name || 'Journey'} (auto save)` ,
@@ -104,9 +101,9 @@ export async function PUT(
       nodes: updates.nodes ? normaliseNodes(updates.nodes) : existing.nodes,
       edges: updates.edges ? normaliseEdges(updates.edges) : existing.edges,
     };
-    journeys[idx] = withJourneyDefaults(updated);
-    writeJsonFile('journeys.json', journeys);
-    return NextResponse.json({ journey: journeys[idx] });
+    const finalJourney = withJourneyDefaults(updated);
+    await updateJourney(finalJourney);
+    return NextResponse.json({ journey: finalJourney });
   } catch (error) {
     console.error('[journeys][PUT]', error);
     return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
@@ -119,10 +116,9 @@ export async function DELETE(
 ) {
   try {
     const resolved = await params;
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    const next = journeys.filter(j => j.id !== resolved.id);
-    if (next.length === journeys.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    writeJsonFile('journeys.json', next);
+    const existing = await getJourneyById(resolved.id);
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await deleteJourney(resolved.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[journeys][DELETE]', error);

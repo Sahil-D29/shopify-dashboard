@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     const resolved = await params;
-    const journey = getJourneyById(resolved.id);
+    const journey = await getJourneyById(resolved.id);
 
     if (!journey) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });

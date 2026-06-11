@@ -565,6 +565,65 @@ model JourneyLog {
   @@map("journey_logs")
 }
 
+// ─── Journey engine persistence (document-style) ────────────────────────────
+// These store the journey-engine's existing in-memory record shapes verbatim
+// as JSON, replacing the previous (ephemeral) JSON-file storage so journeys,
+// enrollments and scheduled steps survive deploys/restarts.
+
+model JourneyDoc {
+  id        String   @id // journey definition id
+  storeId   String   @default("")
+  status    String   @default("DRAFT")
+  data      Json // full JourneyDefinition
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId])
+  @@index([status])
+  @@map("journey_docs")
+}
+
+model JourneyEnrollmentDoc {
+  id         String   @id
+  journeyId  String
+  customerId String
+  status     String
+  data       Json // full JourneyEnrollmentRecord
+  enteredAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([journeyId])
+  @@index([customerId])
+  @@index([status])
+  @@map("journey_enrollment_docs")
+}
+
+model JourneyScheduleDoc {
+  id           String   @id
+  journeyId    String
+  enrollmentId String
+  nodeId       String
+  status       String
+  resumeAt     DateTime
+  data         Json // full ScheduledExecutionRecord
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+  @@index([resumeAt])
+  @@index([enrollmentId])
+  @@map("journey_schedule_docs")
+}
+
+model JourneyActivityDoc {
+  id           String   @id
+  enrollmentId String
+  data         Json // full JourneyActivityLogRecord
+  createdAt    DateTime @default(now())
+
+  @@index([enrollmentId])
+  @@map("journey_activity_docs")
+}
+
 model Subscription {
   id                   String             @id @default(uuid())
   storeId              String             @unique

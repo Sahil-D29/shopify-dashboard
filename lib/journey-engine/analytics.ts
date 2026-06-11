@@ -172,14 +172,14 @@ export interface JourneyAnalyticsResult {
   activityLogs: JourneyActivityLogRecord[];
 }
 
-export function computeJourneyAnalytics(journeyId: string, filters: AnalyticsFilters = {}): JourneyAnalyticsResult | null {
-  const journey = getJourneyById(journeyId);
+export async function computeJourneyAnalytics(journeyId: string, filters: AnalyticsFilters = {}): Promise<JourneyAnalyticsResult | null> {
+  const journey = await getJourneyById(journeyId);
   if (!journey) return null;
 
   const from = filters.from ? safeDateParse(filters.from) : undefined;
   const to = filters.to ? safeDateParse(filters.to) : undefined;
 
-  const enrollments = getEnrollments()
+  const enrollments = (await getEnrollments())
     .filter(enrollment => enrollment.journeyId === journeyId)
     .filter(enrollment => {
       const enteredAt = safeDateParse(enrollment.enteredAt);
@@ -202,7 +202,7 @@ export function computeJourneyAnalytics(journeyId: string, filters: AnalyticsFil
   const goalConversionRate = totalEntered ? Number(((completed / totalEntered) * 100).toFixed(1)) : 0;
 
   const enrollmentIds = new Set(enrollments.map(enrollment => enrollment.id));
-  const logs = getJourneyActivityLogs().filter(
+  const logs = (await getJourneyActivityLogs()).filter(
     log => Boolean(log.enrollmentId && enrollmentIds.has(log.enrollmentId)),
   );
 

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
 
 import type { JourneyDefinition, JourneyConfig, JourneyStats } from '@/lib/types/journey';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
-import { filterByStoreId, ensureStoreId, getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { getJourneys, updateJourney } from '@/lib/journey-engine/storage';
+import { ensureStoreId, getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getUserContext, buildStoreFilter } from '@/lib/user-context';
 
 export const runtime = 'nodejs';
@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
     // Build store filter based on user role
     const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
     
-    let journeys = readJsonFile<JourneyDefinition>('journeys.json');
-    
+    let journeys = await getJourneys();
+
     // Flexible filtering - show all data including legacy (null/default/empty storeId)
     if (userContext.role === 'ADMIN') {
       // Admin sees everything - no filtering
@@ -193,17 +193,14 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-
     const newJourney = normalisePayload(body);
     // Ensure storeId is added
     const journeyWithStore = ensureStoreId(newJourney, storeId);
-    journeys.push(journeyWithStore);
-    writeJsonFile('journeys.json', journeys);
+    await updateJourney(journeyWithStore);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      journey: journeyWithStore 
+      journey: journeyWithStore
     }, { status: 201 });
   } catch (error) {
     console.error('[Journeys][POST] Error:', error);
