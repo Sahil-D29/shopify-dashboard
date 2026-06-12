@@ -106,13 +106,28 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${baseUrl}/billing?error=charge_declined`);
       }
 
-      // Plan handle maps directly to our planId (handles are 'starter' / 'growth')
-      const planId = planHandle;
-      const plan = await prisma.planFeature.findUnique({ where: { planId } });
+      // Map the Managed Pricing plan_handle to our planId. Handles should be
+      // 'starter' / 'growth', but tolerate variations like 'starter-plan' or a
+      // name match against the Shopify subscription — the merchant has a real,
+      // approved charge at this point, so NEVER fail with an error here.
+      const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const handleNorm = normalise(planHandle);
+      const subNameNorm = normalise(activeSub.name || '');
+
+      const plans = await prisma.planFeature.findMany();
+      const plan =
+        plans.find(p => p.planId === planHandle) ||
+        plans.find(p => normalise(p.planId) === handleNorm) ||
+        plans.find(p => handleNorm.includes(normalise(p.planId)) || normalise(p.planId).includes(handleNorm)) ||
+        plans.find(p => subNameNorm && normalise(p.name) === subNameNorm) ||
+        null;
+
       if (!plan) {
-        console.error('[Shopify Billing] Unknown plan_handle:', planHandle);
-        return NextResponse.redirect(`${baseUrl}/billing?error=unknown_plan`);
+        console.warn('[Shopify Billing] Unrecognised plan_handle, activating with raw handle:', planHandle);
       }
+
+      const planId = plan?.planId || planHandle;
+      const planName = plan?.name || activeSub.name || planHandle;
 
       const now = new Date();
       const periodEnd = activeSub.currentPeriodEnd
@@ -123,8 +138,8 @@ export async function GET(request: NextRequest) {
         where: { storeId: store.id },
         create: {
           storeId: store.id,
-          planId: plan.planId,
-          planName: plan.name,
+          planId,
+          planName,
           status: 'ACTIVE',
           billingProvider: 'shopify',
           shopifyChargeId: activeSub.id,
@@ -132,8 +147,8 @@ export async function GET(request: NextRequest) {
           currentPeriodEnd: periodEnd,
         },
         update: {
-          planId: plan.planId,
-          planName: plan.name,
+          planId,
+          planName,
           status: 'ACTIVE',
           billingProvider: 'shopify',
           shopifyChargeId: activeSub.id,
@@ -146,7 +161,7 @@ export async function GET(request: NextRequest) {
       const subscription = await prisma.subscription.findUnique({
         where: { storeId: store.id },
       });
-      if (subscription) {
+      if (subscription && plan) {
         await prisma.payment.create({
           data: {
             subscriptionId: subscription.id,
@@ -161,7 +176,7 @@ export async function GET(request: NextRequest) {
 
       console.log('[Shopify Billing] Managed pricing subscription synced:', {
         storeId: store.id,
-        planId: plan.planId,
+        planId,
         gid: activeSub.id,
       });
 
