@@ -180,6 +180,13 @@ export async function POST(request: NextRequest) {
       // Shopify's hosted plan-selection page. Shopify handles the charge
       // approval, then redirects back to /api/billing/shopify-confirm with
       // ?plan_handle=<handle>&shop=<domain>.
+      if (!process.env.SHOPIFY_APP_HANDLE) {
+        console.error('[Billing] SHOPIFY_APP_HANDLE env var is not set — cannot build Managed Pricing URL');
+        return NextResponse.json(
+          { error: 'Billing is not fully configured. Please contact support.' },
+          { status: 503 }
+        );
+      }
       const pricingUrl = buildManagedPricingUrl(store.shopifyDomain!);
 
       // Increment coupon usage (best-effort; merchant still selects on Shopify)

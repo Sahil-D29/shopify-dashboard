@@ -47,16 +47,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/billing?error=missing_plan`);
     }
 
-    // Resolve store
+    // Resolve store: cookie/header first, then fall back to the `shop` domain
+    // Shopify sends in the redirect (the cookie may be absent when returning
+    // from admin.shopify.com on a fresh install).
     const storeId = await getCurrentStoreId(request);
-    if (!storeId) {
-      return NextResponse.redirect(`${baseUrl}/billing?error=no_store`);
-    }
 
-    const store = await prisma.store.findUnique({
-      where: { id: storeId },
-      select: { id: true, shopifyDomain: true, accessToken: true },
-    });
+    let store = storeId
+      ? await prisma.store.findUnique({
+          where: { id: storeId },
+          select: { id: true, shopifyDomain: true, accessToken: true },
+        })
+      : null;
+
+    if ((!store || !store.accessToken) && shopDomain) {
+      store = await prisma.store.findFirst({
+        where: { shopifyDomain: shopDomain, isActive: true },
+        select: { id: true, shopifyDomain: true, accessToken: true },
+      });
+    }
 
     if (!store || !store.accessToken) {
       return NextResponse.redirect(`${baseUrl}/billing?error=store_not_found`);
