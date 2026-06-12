@@ -44,7 +44,21 @@ const OPT_IN_KEYWORDS = ['START', 'SUBSCRIBE', 'YES'];
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as InboundMessagePayload;
+    await handleInboundPayload(body);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('[Inbound webhook]', error);
+    return NextResponse.json(
+      { error: 'Failed to process inbound message' },
+      { status: 500 }
+    );
+  }
+}
 
+// Shared inbound-message processor. Called by this route AND by the main
+// WhatsApp webhook (`/api/webhooks/whatsapp`), which is the single callback URL
+// Meta actually delivers to — so it must dispatch inbound messages here.
+export async function handleInboundPayload(body: InboundMessagePayload) {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
         const phoneNumberId = change.value?.metadata?.phone_number_id;
@@ -284,14 +298,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('[Inbound webhook]', error);
-    return NextResponse.json(
-      { error: 'Failed to process inbound message' },
-      { status: 500 }
-    );
-  }
 }
 
 // ─── Auto-Reply Rule Checker ────────────────────────────────────

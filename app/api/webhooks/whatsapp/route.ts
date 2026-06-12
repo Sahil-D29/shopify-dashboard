@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { JourneyEnrollment } from '@/lib/types/journey';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { prisma } from '@/lib/prisma';
+import { handleInboundPayload } from './inbound/route';
 
 export const runtime = 'nodejs';
 
@@ -166,6 +167,16 @@ export async function POST(request: NextRequest) {
       receivedAt,
       status: 'processed',
     });
+
+    // Inbound customer messages (value.messages) are handled by the shared
+    // inbound processor. Meta delivers BOTH delivery statuses and inbound
+    // messages to this single callback URL, so we must dispatch both here.
+    // No-op for status-only payloads (the processor only acts on value.messages).
+    try {
+      await handleInboundPayload(payload as never);
+    } catch (err) {
+      console.error('[WhatsApp Webhook] Inbound processing error:', err);
+    }
 
     if (payload.object === 'whatsapp_business_account') {
       const entries = Array.isArray(payload.entry) ? payload.entry : [];
