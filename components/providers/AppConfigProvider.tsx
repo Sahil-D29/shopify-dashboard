@@ -21,6 +21,7 @@ export interface AppSettingsValue {
   helpDocsUrl: string;
   primaryColor: string;
   accentColor: string;
+  couponsEnabled: boolean;
 }
 
 export interface StoreFeatureFlagsValue {
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: AppSettingsValue = {
   helpDocsUrl: '',
   primaryColor: '#1a1a2e',
   accentColor: '#e94560',
+  couponsEnabled: true,
 };
 
 const DEFAULT_FLAGS: StoreFeatureFlagsValue = {

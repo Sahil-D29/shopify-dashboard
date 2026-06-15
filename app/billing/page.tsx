@@ -19,6 +19,7 @@ import PaymentHistory from '@/components/billing/PaymentHistory';
 import CouponInput from '@/components/billing/CouponInput';
 import RazorpayCheckout from '@/components/billing/RazorpayCheckout';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { Loader2, AlertTriangle, XCircle } from 'lucide-react';
 
 interface Plan {
@@ -62,6 +63,8 @@ interface CheckoutResponse {
 
 export default function BillingPage() {
   const { currentStore, isLoading: tenantLoading } = useTenant();
+  const { settings: appSettings } = useAppConfig();
+  const couponsEnabled = appSettings.couponsEnabled !== false;
   const storeId = currentStore?.id || null;
   const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -466,9 +469,10 @@ export default function BillingPage() {
               )}
             </div>
 
-            {/* Coupon — hidden for Shopify-billed stores: under Managed Pricing,
-                discounts are issued by Shopify (Partner Dashboard), not by our app. */}
-            {!isShopifyStore && (
+            {/* Coupon — hidden for Shopify-billed stores (under Managed Pricing,
+                discounts are issued by Shopify, not by our app) and when the
+                super admin has globally disabled the coupon system. */}
+            {!isShopifyStore && couponsEnabled && (
               <CouponInput onApply={setDiscount} planId={selectedPlanId || ''} />
             )}
 

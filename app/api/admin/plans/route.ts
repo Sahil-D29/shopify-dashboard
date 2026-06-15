@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       analytics = 'basic', support = 'email',
       whatsappAutomation = false, customTemplates = false, advancedSegmentation = false,
       isVisible = true, isActive = true, displayOrder = 0,
+      isFreePlan = false, enabledFeatures = [],
     } = body;
 
     if (!planId || !name || (price === undefined && !priceINR)) {
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest) {
         isVisible,
         isActive,
         displayOrder,
+        isFreePlan: Boolean(isFreePlan),
+        enabledFeatures: Array.isArray(enabledFeatures) ? enabledFeatures : [],
       },
     });
 

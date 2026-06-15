@@ -18,7 +18,7 @@ export async function PUT(
       name, price, priceINR, billingCycle, messagesPerMonth, campaignsPerMonth,
       stores, teamMembersPerStore, analytics, support,
       whatsappAutomation, customTemplates, advancedSegmentation,
-      isVisible, isActive, displayOrder,
+      isVisible, isActive, displayOrder, isFreePlan, enabledFeatures,
     } = body;
 
     const plan = await prisma.planFeature.update({
@@ -40,6 +40,10 @@ export async function PUT(
         ...(isVisible !== undefined && { isVisible }),
         ...(isActive !== undefined && { isActive }),
         ...(displayOrder !== undefined && { displayOrder }),
+        ...(isFreePlan !== undefined && { isFreePlan: Boolean(isFreePlan) }),
+        ...(enabledFeatures !== undefined && {
+          enabledFeatures: Array.isArray(enabledFeatures) ? enabledFeatures : [],
+        }),
       },
     });
 

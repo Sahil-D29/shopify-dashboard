@@ -39,10 +39,48 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // AppSettings.couponsEnabled is stored/loaded separately (via /api/admin/app-settings).
+  const [couponsEnabled, setCouponsEnabled] = useState(true);
+  const [couponsSaving, setCouponsSaving] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    fetchCouponsSetting();
   }, []);
+
+  const fetchCouponsSetting = async () => {
+    try {
+      const res = await fetch('/api/admin/app-settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.settings?.couponsEnabled === 'boolean') {
+          setCouponsEnabled(data.settings.couponsEnabled);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching coupon setting:', error);
+    }
+  };
+
+  const handleToggleCoupons = async (checked: boolean) => {
+    setCouponsEnabled(checked); // optimistic
+    setCouponsSaving(true);
+    try {
+      const res = await fetch('/api/admin/app-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ couponsEnabled: checked }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      toast.success(`Coupons ${checked ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Error saving coupon setting:', error);
+      setCouponsEnabled(!checked); // revert
+      toast.error('Failed to update coupon setting');
+    } finally {
+      setCouponsSaving(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -137,6 +175,7 @@ export default function AdminSettingsPage() {
         <TabsList>
           <TabsTrigger value="system">System Configuration</TabsTrigger>
           <TabsTrigger value="features">Feature Flags</TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="security">Security Settings</TabsTrigger>
           <TabsTrigger value="api">API Settings</TabsTrigger>
         </TabsList>
@@ -258,6 +297,36 @@ export default function AdminSettingsPage() {
                   onCheckedChange={(checked) =>
                     updateSettings(['featureFlags', 'predictiveAnalytics'], checked)
                   }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Billing */}
+        <TabsContent value="billing" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Billing & Coupons</CardTitle>
+              <CardDescription>
+                Control the internal coupon system. Note: this applies to
+                Razorpay/Stripe checkouts only — Shopify-billed stores use
+                Shopify Managed Pricing discounts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Enable Coupons</Label>
+                  <p className="text-sm text-gray-500">
+                    When off, the coupon field is hidden at checkout and any code
+                    is rejected.
+                  </p>
+                </div>
+                <Switch
+                  checked={couponsEnabled}
+                  disabled={couponsSaving}
+                  onCheckedChange={handleToggleCoupons}
                 />
               </div>
             </CardContent>

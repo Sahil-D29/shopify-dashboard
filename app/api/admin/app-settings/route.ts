@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/admin-auth';
-import { getAppSettings, saveAppSettings } from '@/lib/app-config';
+import { getAppSettings, saveAppSettings, type AppSettingsValue } from '@/lib/app-config';
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -48,10 +48,13 @@ export async function PATCH(request: NextRequest) {
       'primaryColor',
       'accentColor',
     ];
-    const patch: Record<string, string> = {};
+    const patch: Partial<AppSettingsValue> = {};
     for (const key of allowedKeys) {
-      if (typeof body?.[key] === 'string') patch[key] = body[key].trim();
+      if (typeof body?.[key] === 'string') {
+        (patch as Record<string, string>)[key] = body[key].trim();
+      }
     }
+    if (typeof body?.couponsEnabled === 'boolean') patch.couponsEnabled = body.couponsEnabled;
     if (patch.appName === '') patch.appName = 'dorza.io';
 
     const settings = await saveAppSettings(patch, session.userId);

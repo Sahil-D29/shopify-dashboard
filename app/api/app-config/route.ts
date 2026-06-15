@@ -4,7 +4,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAppSettings } from '@/lib/app-config';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { getStoreFeatureFlags } from '@/lib/app-config';
+import { getStoreFeatureFlags, getEffectiveDisabledItems } from '@/lib/app-config';
 
 /**
  * Public app config + per-store feature flags for the current session.
@@ -25,12 +25,20 @@ export async function GET(request: NextRequest) {
       getAppSettings(),
       getCurrentStoreId(request).catch(() => null),
     ]);
+    // Runtime sidebar consumes the EFFECTIVE disabled list (plan gating ∪
+    // per-store admin overrides). The admin editor uses the raw per-store flags.
     const flags = storeId
-      ? await getStoreFeatureFlags(storeId).catch(() => ({
-          storeId,
-          disabledItems: [],
-          notes: '',
-        }))
+      ? await (async () => {
+          const [base, effectiveDisabled] = await Promise.all([
+            getStoreFeatureFlags(storeId).catch(() => ({
+              storeId,
+              disabledItems: [] as string[],
+              notes: '',
+            })),
+            getEffectiveDisabledItems(storeId).catch(() => [] as string[]),
+          ]);
+          return { storeId, disabledItems: effectiveDisabled, notes: base.notes };
+        })()
       : { storeId: null, disabledItems: [] as string[], notes: '' };
 
     return NextResponse.json({

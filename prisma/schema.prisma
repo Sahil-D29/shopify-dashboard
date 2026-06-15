@@ -750,6 +750,8 @@ model PlanFeature {
   priceINR             Decimal? @db.Decimal(10, 2) // Price in INR
   isVisible            Boolean  @default(true)  // Hide/show from public plan listing
   isActive             Boolean  @default(true)  // Deactivate a plan entirely
+  isFreePlan           Boolean  @default(false) // Free tier: activate with no charge
+  enabledFeatures      String[] @default([])    // Sidebar item keys allowed on this plan; empty = all allowed
   displayOrder         Int      @default(0)     // Control plan ordering
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -1662,6 +1664,7 @@ model AppSettings {
   helpDocsUrl     String   @default("")
   primaryColor    String   @default("#1a1a2e")
   accentColor     String   @default("#e94560")
+  couponsEnabled  Boolean  @default(true)  // Global on/off for the internal coupon system
   updatedAt       DateTime @updatedAt
   updatedBy       String?
 

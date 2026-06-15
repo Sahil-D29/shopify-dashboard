@@ -5,6 +5,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
 import { isShopifyBilledStore, buildManagedPricingUrl } from '@/lib/shopify-billing';
+import { getAppSettings } from '@/lib/app-config';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -61,12 +62,55 @@ export async function POST(request: NextRequest) {
 
     const userEmail = session.user.email;
 
+    // ─── Free plan: activate instantly, no payment gateway ─────
+    step = 'free-plan';
+    if (plan.isFreePlan) {
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+      await prisma.subscription.upsert({
+        where: { storeId },
+        create: {
+          storeId,
+          planId: plan.planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          billingProvider: 'free',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+        },
+        update: {
+          planId: plan.planId,
+          planName: plan.name,
+          status: 'ACTIVE',
+          billingProvider: 'free',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+        },
+      });
+
+      return NextResponse.json({
+        gateway: 'free',
+        message: 'Free plan activated.',
+      });
+    }
+
     // ─── Apply coupon discount ───────────────────────────────
     step = 'apply-coupon';
     let discountAmount = 0;
     let appliedCouponId: string | null = null;
 
     if (couponCode) {
+      // Respect the global coupon on/off switch (super admin → settings).
+      const settings = await getAppSettings();
+      if (!settings.couponsEnabled) {
+        return NextResponse.json(
+          { error: 'Coupons are currently disabled' },
+          { status: 400 }
+        );
+      }
       const coupon = await prisma.coupon.findUnique({
         where: { code: couponCode.toUpperCase() },
       });

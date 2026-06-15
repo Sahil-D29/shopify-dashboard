@@ -23,6 +23,7 @@ export interface AppSettingsValue {
   helpDocsUrl: string;
   primaryColor: string;
   accentColor: string;
+  couponsEnabled: boolean;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettingsValue = {
@@ -36,6 +37,7 @@ export const DEFAULT_APP_SETTINGS: AppSettingsValue = {
   helpDocsUrl: '',
   primaryColor: '#1a1a2e',
   accentColor: '#e94560',
+  couponsEnabled: true,
 };
 
 export async function getAppSettings(): Promise<AppSettingsValue> {
@@ -53,6 +55,7 @@ export async function getAppSettings(): Promise<AppSettingsValue> {
       helpDocsUrl: row.helpDocsUrl ?? '',
       primaryColor: row.primaryColor || DEFAULT_APP_SETTINGS.primaryColor,
       accentColor: row.accentColor || DEFAULT_APP_SETTINGS.accentColor,
+      couponsEnabled: row.couponsEnabled ?? DEFAULT_APP_SETTINGS.couponsEnabled,
     };
   } catch (error) {
     console.warn('[app-config] Failed to load AppSettings, using defaults:', error);
@@ -67,7 +70,7 @@ export async function saveAppSettings(
   const data: any = {};
   for (const key of Object.keys(patch) as Array<keyof AppSettingsValue>) {
     const value = patch[key];
-    if (typeof value === 'string') data[key] = value;
+    if (typeof value === 'string' || typeof value === 'boolean') data[key] = value;
   }
   if (updatedBy) data.updatedBy = updatedBy;
 
@@ -155,4 +158,56 @@ export async function saveStoreFeatureFlags(
     update: data,
   });
   return getStoreFeatureFlags(storeId);
+}
+
+// ─── Plan-based gating ─────────────────────────────────────────────────
+
+// Items never hidden by plan gating, so a restricted plan can't lock a user
+// out of upgrading or managing their store.
+const PLAN_GATING_ALWAYS_ON: SidebarItemKey[] = ['dashboard', 'settings', 'billing'];
+
+/**
+ * Sidebar items disabled by the store's PLAN (vs. per-store admin overrides).
+ * If the active plan's `enabledFeatures` is non-empty, every key not in that
+ * list (minus the always-on items) is disabled. Empty list / no plan / inactive
+ * subscription = no plan gating (backward compatible).
+ */
+async function getPlanDisabledItems(storeId: string): Promise<SidebarItemKey[]> {
+  try {
+    const sub = await prisma.subscription.findUnique({
+      where: { storeId },
+      select: { planId: true, status: true },
+    });
+    // Only gate while the plan is actually active; otherwise don't hide anything
+    // (the user needs full nav to re-subscribe).
+    if (!sub || sub.status !== 'ACTIVE') return [];
+
+    const plan = await prisma.planFeature.findUnique({
+      where: { planId: sub.planId },
+      select: { enabledFeatures: true },
+    });
+    const enabled = (plan?.enabledFeatures ?? []).filter((k): k is SidebarItemKey =>
+      (ALL_SIDEBAR_KEYS as readonly string[]).includes(k),
+    );
+    if (enabled.length === 0) return []; // empty = all allowed
+
+    const allowed = new Set<SidebarItemKey>([...enabled, ...PLAN_GATING_ALWAYS_ON]);
+    return ALL_SIDEBAR_KEYS.filter(k => !allowed.has(k));
+  } catch (error) {
+    console.warn('[app-config] plan gating lookup failed, no plan gating:', error);
+    return [];
+  }
+}
+
+/**
+ * Effective disabled sidebar items for a store = plan gating ∪ per-store admin
+ * overrides. This is what the runtime sidebar should consume. The admin feature
+ * editor continues to use {@link getStoreFeatureFlags} (raw per-store overrides).
+ */
+export async function getEffectiveDisabledItems(storeId: string): Promise<SidebarItemKey[]> {
+  const [storeFlags, planGated] = await Promise.all([
+    getStoreFeatureFlags(storeId),
+    getPlanDisabledItems(storeId),
+  ]);
+  return Array.from(new Set<SidebarItemKey>([...storeFlags.disabledItems, ...planGated]));
 }

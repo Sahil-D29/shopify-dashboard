@@ -7,6 +7,26 @@ import { prisma } from '../lib/prisma';
 
 const plans = [
   {
+    planId: 'free',
+    name: 'Free',
+    price: 0.00,          // USD
+    priceINR: 0.00,       // INR
+    billingCycle: 'monthly',
+    messagesPerMonth: 250,
+    campaignsPerMonth: 2,
+    stores: 1,
+    teamMembersPerStore: 1,
+    analytics: 'basic',
+    support: 'email',
+    whatsappAutomation: false,
+    customTemplates: false,
+    advancedSegmentation: false,
+    isFreePlan: true,
+    // Empty enabledFeatures = all features visible. Tighten per business need.
+    enabledFeatures: [] as string[],
+    displayOrder: 0,
+  },
+  {
     planId: 'starter',
     name: 'Starter',
     price: 24.00,         // USD
@@ -21,6 +41,7 @@ const plans = [
     whatsappAutomation: true,
     customTemplates: true,
     advancedSegmentation: false,
+    displayOrder: 1,
   },
   {
     planId: 'growth',
@@ -37,6 +58,7 @@ const plans = [
     whatsappAutomation: true,
     customTemplates: true,
     advancedSegmentation: true,
+    displayOrder: 2,
   },
 ];
 

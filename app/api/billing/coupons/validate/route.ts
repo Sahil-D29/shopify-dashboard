@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { getAppSettings } from '@/lib/app-config';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,6 +23,15 @@ export async function POST(request: NextRequest) {
         { error: 'Store not found' },
         { status: 404 }
       );
+    }
+
+    // Respect the global coupon on/off switch (super admin → settings).
+    const settings = await getAppSettings();
+    if (!settings.couponsEnabled) {
+      return NextResponse.json({
+        valid: false,
+        error: 'Coupons are currently disabled',
+      });
     }
 
     const body = await request.json();

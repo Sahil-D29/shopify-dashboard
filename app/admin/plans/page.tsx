@@ -32,7 +32,39 @@ interface Plan {
   isVisible: boolean;
   isActive: boolean;
   displayOrder: number;
+  isFreePlan: boolean;
+  enabledFeatures: string[];
 }
+
+// Sidebar feature keys a plan can gate. Mirrors SIDEBAR_ITEMS in
+// lib/app-config.ts (kept local to avoid importing server code into the client).
+// Empty selection = all features allowed (backward compatible).
+const PLAN_FEATURE_CATALOG: { key: string; label: string }[] = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'chat', label: 'Live Chat' },
+  { key: 'customers', label: 'Customers' },
+  { key: 'segments', label: 'Segments' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'templates', label: 'Templates' },
+  { key: 'campaigns', label: 'Campaigns' },
+  { key: 'email_marketing', label: 'Email Marketing' },
+  { key: 'email_campaigns', label: '— Email · Campaigns' },
+  { key: 'email_templates', label: '— Email · Templates' },
+  { key: 'email_analytics', label: '— Email · Analytics' },
+  { key: 'email_subscribers', label: '— Email · Subscribers' },
+  { key: 'email_domains', label: '— Email · Domains' },
+  { key: 'email_ab_tests', label: '— Email · A/B Tests' },
+  { key: 'email_back_in_stock', label: '— Email · Back-in-Stock' },
+  { key: 'email_cross_sell', label: '— Email · Cross-Sell' },
+  { key: 'journeys', label: 'Journeys' },
+  { key: 'flows', label: 'Flows' },
+  { key: 'analytics', label: 'Analytics' },
+  { key: 'orders', label: 'Orders' },
+  { key: 'products', label: 'Products' },
+  { key: 'abandoned_carts', label: 'Abandoned Carts' },
+  { key: 'settings', label: 'Settings' },
+  { key: 'billing', label: 'Billing' },
+];
 
 const emptyForm = {
   planId: '',
@@ -52,6 +84,8 @@ const emptyForm = {
   isVisible: true,
   isActive: true,
   displayOrder: '0',
+  isFreePlan: false,
+  enabledFeatures: [] as string[],
 };
 
 export default function PlansPage() {
@@ -107,6 +141,8 @@ export default function PlansPage() {
       isVisible: plan.isVisible,
       isActive: plan.isActive,
       displayOrder: String(plan.displayOrder),
+      isFreePlan: plan.isFreePlan ?? false,
+      enabledFeatures: Array.isArray(plan.enabledFeatures) ? plan.enabledFeatures : [],
     });
     setDialogOpen(true);
   }
@@ -132,6 +168,8 @@ export default function PlansPage() {
         isVisible: form.isVisible,
         isActive: form.isActive,
         displayOrder: parseInt(form.displayOrder || '0'),
+        isFreePlan: !!form.isFreePlan,
+        enabledFeatures: Array.isArray(form.enabledFeatures) ? form.enabledFeatures : [],
       };
 
       const url = isCreating ? '/api/admin/plans' : `/api/admin/plans/${editingPlan!.id}`;
@@ -398,6 +436,48 @@ export default function PlansPage() {
                   className="rounded"
                 />
                 <span className="text-sm">Active (can be subscribed to)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.isFreePlan ?? false}
+                  onChange={e => setForm({ ...form, isFreePlan: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm">Free plan (activates instantly, no charge)</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t">
+              <label className="text-sm font-medium">Features visible on this plan</label>
+              <p className="text-xs text-gray-500">
+                Select which sidebar tabs subscribers on this plan can see. Leave
+                everything unchecked to allow all features. Dashboard, Settings
+                and Billing are always available.
+              </p>
+              <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto pr-1">
+                {PLAN_FEATURE_CATALOG.map(f => {
+                  const selected: string[] = Array.isArray(form.enabledFeatures) ? form.enabledFeatures : [];
+                  const checked = selected.includes(f.key);
+                  return (
+                    <label key={f.key} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setForm({
+                            ...form,
+                            enabledFeatures: checked
+                              ? selected.filter(k => k !== f.key)
+                              : [...selected, f.key],
+                          })
+                        }
+                        className="rounded"
+                      />
+                      <span className="text-sm">{f.label}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           </div>
