@@ -5,6 +5,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { cancelRazorpaySubscription } from '@/lib/razorpay';
 import { cancelStripeSubscription } from '@/lib/stripe';
 import { buildManagedPricingUrl } from '@/lib/shopify-billing';
+import { reconcileShopifySubscription } from '@/lib/billing-sync';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -37,6 +38,17 @@ export async function GET(request: NextRequest) {
       !store?.shopifyDomain?.startsWith('default-') &&
       store?.accessToken
     );
+
+    // Shopify is the source of truth for Managed Pricing. Reconcile the local
+    // record against Shopify's actual subscription before returning so the page
+    // never shows a false "ACTIVE" (and picks up Shopify's real next-billing date).
+    if (isShopifyStore) {
+      try {
+        await reconcileShopifySubscription(storeId);
+      } catch (err) {
+        console.error('[billing] reconcile failed (non-fatal):', err);
+      }
+    }
 
     const subscription = await prisma.subscription.findUnique({
       where: { storeId },

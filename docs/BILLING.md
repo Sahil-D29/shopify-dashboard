@@ -85,6 +85,44 @@ npx tsx scripts/seed-plans.ts
 ```
 Creates PlanFeature records (free, starter, pro, enterprise) with pricing and feature limits.
 
+## Coupons & Discounts (how they work per billing path)
+
+Coupons are **not** uniform across payment paths:
+
+- **Shopify-billed stores (Managed Pricing):** Our app **cannot** apply its own
+  coupon codes to Shopify charges — Shopify owns billing under Managed Pricing.
+  Discounts for Shopify merchants are configured in the **Shopify Partner
+  Dashboard → Apps → (this app) → Pricing → Discounts**, then shared with the
+  merchant as a Shopify discount. The internal coupon input is therefore hidden
+  on the billing page for Shopify stores (`!isShopifyStore` guard in
+  `app/billing/page.tsx`).
+- **Razorpay / Stripe (non-Shopify) stores:** The internal coupon system applies.
+  Admins create coupons in **Super Admin → Coupons**; merchants enter the code at
+  checkout. Validated in `app/api/billing/coupons/validate/route.ts` and applied
+  in `app/api/billing/checkout/route.ts`.
+
+### For Shopify App Review (coupon example/instructions)
+To grant a reviewer a discounted/free subscription on the Shopify path:
+1. Partner Dashboard → this app → **Pricing** → create or edit a plan discount
+   (e.g. a 100%-off promotional discount on the Starter plan).
+2. Share the resulting Shopify discount with the reviewer; they apply it on
+   Shopify's hosted plan page when subscribing.
+3. After approval, Shopify redirects to `/api/billing/shopify-confirm` and the
+   subscription syncs to the dashboard (and is reconciled on every billing load).
+
+### Free plan
+The Free plan activates locally with `billingProvider: 'free'` and **no charge**
+(no Shopify/Razorpay/Stripe call). A matching free tier should also exist in
+Managed Pricing for hosted-page consistency, but since it is $0 there is no
+charge to approve — local activation is the source of truth.
+
+## Source of truth & reconciliation
+For Shopify stores, **Shopify is the source of truth**. `reconcileShopifySubscription()`
+(`lib/billing-sync.ts`) queries Shopify's active subscription and corrects the
+local `Subscription` row (status, plan, next-billing date) on every billing-page
+load and from the `app_subscriptions/update` webhook fallback. This prevents
+false "ACTIVE" rows from ever persisting.
+
 ## Common Gotchas
 - Billing page uses `useTenant()` to get storeId — not from session
 - Checkout API resolves storeId from `x-store-id` header, `current_store_id` cookie, query param, OR request body (fallback)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useRef, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,13 @@ export default function NewStorePage() {
   const [name, setName] = useState('');
   const [shopDomain, setShopDomain] = useState('');
   const [loading, setLoading] = useState(false);
+  // Network-level guard: prevents a double-fire slipping through before the
+  // `disabled={loading}` state has flushed (root cause of the duplicate POST).
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     const domain = shopDomain.trim().toLowerCase().endsWith('.myshopify.com')
       ? shopDomain.trim().toLowerCase()
       : `${shopDomain.trim().toLowerCase().replace(/\.myshopify\.com$/i, '')}.myshopify.com`;
@@ -32,6 +36,7 @@ export default function NewStorePage() {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
     try {
       const res = await fetch('/api/stores', {
@@ -46,7 +51,7 @@ export default function NewStorePage() {
         return;
       }
 
-      toast.success('Store created. You are the owner.');
+      toast.success(data.message || 'Store created. You are the owner.');
       await refreshStores();
       if (data.store?.id) {
         await switchStore(data.store.id);
@@ -57,6 +62,7 @@ export default function NewStorePage() {
       toast.error('Failed to create store');
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 

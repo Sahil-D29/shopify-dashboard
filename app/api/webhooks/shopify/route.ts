@@ -149,7 +149,6 @@ export async function POST(request: NextRequest) {
       if (appSubscription) {
         const gid = appSubscription.admin_graphql_api_id as string;
         const status = (appSubscription.status as string || '').toUpperCase();
-        const subName = String(appSubscription.name || '');
 
         if (gid) {
           const { mapShopifyStatus } = await import('@/lib/shopify-billing');
@@ -161,48 +160,17 @@ export async function POST(request: NextRequest) {
           });
 
           // No row matched the GID (e.g. the confirm redirect never completed).
-          // The webhook is the source of truth for Managed Pricing — upsert the
-          // subscription for the store so the merchant's paid plan is recorded.
+          // Reconcile against Shopify (source of truth) so the merchant's real
+          // plan, period end and charge are recorded — no hardcoded fallbacks.
           if (updated.count === 0 && mappedStatus === 'ACTIVE' && shopHeader) {
             const store = await prisma.store.findFirst({
               where: { shopifyDomain: shopHeader },
               select: { id: true },
             });
             if (store) {
-              // Match the plan by name (Managed Pricing sends the plan's name)
-              const plans = await prisma.planFeature.findMany({
-                select: { planId: true, name: true },
-              });
-              const matched = plans.find(
-                p => p.name.toLowerCase() === subName.toLowerCase() ||
-                     subName.toLowerCase().includes(p.planId.toLowerCase()),
-              );
-              const now = new Date();
-              const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-              await prisma.subscription.upsert({
-                where: { storeId: store.id },
-                create: {
-                  storeId: store.id,
-                  planId: matched?.planId || 'starter',
-                  planName: matched?.name || subName || 'Starter',
-                  status: 'ACTIVE',
-                  billingProvider: 'shopify',
-                  shopifyChargeId: gid,
-                  currentPeriodStart: now,
-                  currentPeriodEnd: periodEnd,
-                },
-                update: {
-                  planId: matched?.planId || 'starter',
-                  planName: matched?.name || subName || 'Starter',
-                  status: 'ACTIVE',
-                  billingProvider: 'shopify',
-                  shopifyChargeId: gid,
-                  currentPeriodStart: now,
-                  currentPeriodEnd: periodEnd,
-                  cancelAtPeriodEnd: false,
-                },
-              });
-              console.log(`[webhooks][shopify] app_subscriptions/update: upserted subscription for ${shopHeader} (${gid})`);
+              const { reconcileShopifySubscription } = await import('@/lib/billing-sync');
+              await reconcileShopifySubscription(store.id);
+              console.log(`[webhooks][shopify] app_subscriptions/update: reconciled subscription for ${shopHeader} (${gid})`);
             }
           }
 

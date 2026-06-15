@@ -62,24 +62,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const store = await createStoreForUser(session.user.id, {
+    const { store, alreadyExisted } = await createStoreForUser(session.user.id, {
       name: String(name).trim(),
       shopDomain: domain,
     });
 
     return NextResponse.json(
-      { store, message: 'Store created successfully. You are the owner.' },
-      { status: 201 }
+      {
+        store,
+        message: alreadyExisted
+          ? 'Store already connected. You are the owner.'
+          : 'Store created successfully. You are the owner.',
+      },
+      { status: alreadyExisted ? 200 : 201 }
     );
   } catch (error: any) {
     console.error('Error creating store:', error);
-    const message =
-      error?.message === 'Store with this domain already exists'
-        ? error.message
-        : 'Failed to create store';
+    // Domain belongs to a different account → real conflict.
+    if (error?.code === 'STORE_DOMAIN_TAKEN') {
+      return NextResponse.json(
+        { error: 'This Shopify domain is already connected to another account.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: message },
-      { status: error?.message === 'Store with this domain already exists' ? 409 : 500 }
+      { error: 'Failed to create store' },
+      { status: 500 }
     );
   }
 }

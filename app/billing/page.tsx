@@ -466,8 +466,11 @@ export default function BillingPage() {
               )}
             </div>
 
-            {/* Coupon */}
-            <CouponInput onApply={setDiscount} planId={selectedPlanId || ''} />
+            {/* Coupon — hidden for Shopify-billed stores: under Managed Pricing,
+                discounts are issued by Shopify (Partner Dashboard), not by our app. */}
+            {!isShopifyStore && (
+              <CouponInput onApply={setDiscount} planId={selectedPlanId || ''} />
+            )}
 
             {/* Discount Summary */}
             {discount && (

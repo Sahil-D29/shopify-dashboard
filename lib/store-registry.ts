@@ -142,60 +142,101 @@ export async function findStoreById(storeId: string): Promise<Store | null> {
   }
 }
 
-// Create new store with creator as OWNER (Store + StoreMember)
+// Create new store with creator as OWNER (Store + StoreMember).
+//
+// Idempotent & race-safe: concurrent identical requests (double-submit, retry,
+// or a manual "Add Store" colliding with an OAuth callback) resolve to the SAME
+// store instead of one succeeding and the other throwing — which previously
+// surfaced as a 409/500 and the "Failed to create store" + "Store created"
+// double toast (Shopify review blocker 2.1.1).
+//
+// Returns `alreadyExisted` so the caller can respond 200 (idempotent) vs 201
+// (newly created). Throws an error with `code: 'STORE_DOMAIN_TAKEN'` only when
+// the domain belongs to a DIFFERENT owner (a real conflict → 409).
 export async function createStoreForUser(
   creatorId: string,
   data: { name: string; shopDomain: string }
-): Promise<Store> {
+): Promise<{ store: Store; alreadyExisted: boolean }> {
   const raw = data.shopDomain.trim().toLowerCase();
   const normalizedDomain = raw.endsWith('.myshopify.com')
     ? raw
     : `${raw.replace(/\.myshopify\.com$/i, '')}.myshopify.com`;
 
-  const existingStore = await prisma.store.findUnique({
+  const domainTakenError = () => {
+    const err: any = new Error('Store with this domain already exists');
+    err.code = 'STORE_DOMAIN_TAKEN';
+    return err;
+  };
+
+  // Ensure the creator is an OWNER member (idempotent), then return the Store DTO.
+  const finalize = async (
+    storeId: string,
+    alreadyExisted: boolean
+  ): Promise<{ store: Store; alreadyExisted: boolean }> => {
+    await prisma.storeMember.upsert({
+      where: { userId_storeId: { userId: creatorId, storeId } },
+      update: {},
+      create: { userId: creatorId, storeId, role: 'OWNER', status: 'ACTIVE' },
+    });
+    const store = await prisma.store.findUniqueOrThrow({
+      where: { id: storeId },
+      include: { owner: true, _count: { select: { members: true, campaigns: true } } },
+    });
+    return {
+      alreadyExisted,
+      store: {
+        id: store.id,
+        name: store.storeName,
+        shopDomain: store.shopifyDomain,
+        owner: store.owner.email,
+        status: store.isActive ? 'active' : 'inactive',
+        plan: 'free',
+        createdAt: store.createdAt.toISOString(),
+        usersCount: store._count.members,
+        messagesCount: 0,
+        lastSync: store.updatedAt.toISOString(),
+      },
+    };
+  };
+
+  // Fast path: store already exists.
+  const existing = await prisma.store.findUnique({
     where: { shopifyDomain: normalizedDomain },
+    select: { id: true, ownerId: true },
   });
-  if (existingStore) {
-    throw new Error('Store with this domain already exists');
+  if (existing) {
+    if (existing.ownerId !== creatorId) throw domainTakenError();
+    return finalize(existing.id, true);
   }
 
-  const store = await prisma.store.create({
-    data: {
-      shopifyDomain: normalizedDomain,
-      shopifyStoreId: `store_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-      storeName: data.name,
-      accessToken: 'placeholder_token',
-      scope: 'read_products,write_products',
-      ownerId: creatorId,
-      isActive: true,
-    },
-    include: {
-      owner: true,
-      _count: { select: { members: true, campaigns: true } },
-    },
-  });
-
-  await prisma.storeMember.create({
-    data: {
-      userId: creatorId,
-      storeId: store.id,
-      role: 'OWNER',
-      status: 'ACTIVE',
-    },
-  });
-
-  return {
-    id: store.id,
-    name: store.storeName,
-    shopDomain: store.shopifyDomain,
-    owner: store.owner.email,
-    status: 'active',
-    plan: 'free',
-    createdAt: store.createdAt.toISOString(),
-    usersCount: store._count.members + 1,
-    messagesCount: 0,
-    lastSync: store.updatedAt.toISOString(),
-  };
+  // Create; if a concurrent request wins the race, catch P2002 and resolve to it.
+  try {
+    const created = await prisma.store.create({
+      data: {
+        shopifyDomain: normalizedDomain,
+        shopifyStoreId: `store_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        storeName: data.name,
+        accessToken: 'placeholder_token',
+        scope: 'read_products,write_products',
+        ownerId: creatorId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    return finalize(created.id, false);
+  } catch (e: any) {
+    if (e?.code === 'P2002') {
+      const now = await prisma.store.findUnique({
+        where: { shopifyDomain: normalizedDomain },
+        select: { id: true, ownerId: true },
+      });
+      if (now) {
+        if (now.ownerId !== creatorId) throw domainTakenError();
+        return finalize(now.id, true);
+      }
+    }
+    throw e;
+  }
 }
 
 // Create new store (admin/legacy: owner by email)
