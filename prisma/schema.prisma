@@ -160,6 +160,7 @@ enum ContactSource {
   MANUAL
   WHATSAPP_INBOUND
   FORM
+  WEBHOOK
 }
 
 enum OptInStatus {
@@ -292,6 +293,8 @@ model Store {
   crossSellRules    CrossSellRule[]         @relation("StoreCrossSellRules")
   crossSellLogs     CrossSellLog[]          @relation("StoreCrossSellLogs")
   featureFlags      StoreFeatureFlags?      @relation("StoreFeatureFlags")
+  webhookIntegrations WebhookIntegration[]
+  webhookEvents     WebhookEvent[]
 
   @@index([shopifyDomain])
   @@index([ownerId])
@@ -1254,6 +1257,57 @@ model StorefrontEvent {
   @@index([storeId, customerId])
   @@index([storeId, eventType])
   @@map("storefront_events")
+}
+
+/// Inbound webhook integration config (third party → Dorza). Each integration
+/// exposes a unique public ingest URL (publicId) + a secret token (secretEnc,
+/// AES-encrypted). External systems POST contacts/events which flow into
+/// Contacts, Segments, Journeys and Analytics. Managed at /settings/webhooks.
+model WebhookIntegration {
+  id              String   @id @default(uuid())
+  storeId         String
+  name            String
+  description     String?
+  dataTypes       String[] @default([]) // contacts | events | facebook_fbp
+  events          String[] @default([]) // accepted event names (e.g. product_view, orders/create)
+  publicId        String   @unique      // random slug used in the ingest URL path (not secret)
+  secretEnc       String                 // AES-encrypted shared token the sender must present
+  isActive        Boolean  @default(true)
+  lastReceivedAt  DateTime?
+  receivedCount   Int      @default(0)
+  failureCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store     Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  deliveries WebhookEvent[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([publicId])
+  @@map("webhook_integrations")
+}
+
+/// Log of payloads received on an inbound webhook integration (for debugging
+/// and the "Recent deliveries" panel).
+model WebhookEvent {
+  id            String   @id @default(uuid())
+  integrationId String
+  storeId       String
+  eventType     String   // "contact" | the event name
+  payload       Json
+  contactId     String?
+  status        String   @default("RECEIVED") // RECEIVED | PROCESSED | FAILED
+  error         String?
+  createdAt     DateTime @default(now())
+
+  integration WebhookIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  store       Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+  @@index([storeId])
+  @@index([createdAt])
+  @@map("webhook_events")
 }
 
 // ============================================

@@ -70,7 +70,7 @@ const settingsSections = [
   { id: 'api-keys', name: 'API Keys', icon: Key, description: 'Manage API keys' },
   { id: 'integrations', name: 'Integrations', icon: LinkIcon, description: 'Third-party apps', disabled: true },
   { id: 'payments', name: 'Payments', icon: CreditCard, description: 'Payment settings', disabled: true },
-  { id: 'webhooks', name: 'Webhooks', icon: Settings, description: 'Webhook configuration', disabled: true },
+  { id: 'webhooks', name: 'Webhooks', icon: Settings, description: 'Webhook configuration' },
   { id: 'notifications', name: 'Notifications', icon: Bell, description: 'Alert settings', disabled: true },
 ];
 
@@ -1543,8 +1543,14 @@ function SettingsContent() {
                 <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Settings className="h-10 w-10 text-gray-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Webhooks</h3>
-                <p className="text-gray-600">This feature is coming soon. Stay tuned!</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Webhook Integrations</h3>
+                <p className="text-gray-600 mb-6">Receive contacts &amp; events from third-party systems. Ingested data flows into Contacts, Segments, Journeys and Analytics.</p>
+                <Link
+                  href="/settings/webhooks"
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                >
+                  Manage Webhooks
+                </Link>
               </div>
             </div>
           )}
