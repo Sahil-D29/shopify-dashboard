@@ -11,13 +11,21 @@ Managed in the app at **Settings → Webhooks**. Each integration has:
 - optional **events** allow-list (empty = accept any event name)
 
 ## Authentication
-Send the secret as a bearer token (preferred) or query param:
+Send the secret in whichever form your platform supports — all of these work:
 ```
-Authorization: Bearer <secret>
-# or  ?token=<secret>
+Authorization: <secret>            # raw value (e.g. NitroCommerce "Authorization Token")
+Authorization: Bearer <secret>     # or "Token <secret>"
+X-Authorization / X-Webhook-Token / X-Api-Key / X-Auth-Token: <secret>
+?token=<secret>                     # query param
 ```
 Knowing the URL is not enough — the secret is required and compared timing-safe.
-Inactive integrations return 403; a bad token returns 401.
+Inactive integrations return 403; a bad/missing token returns 401.
+
+## Accepted payload shapes
+The processor is lenient about field names so most platforms work without mapping:
+- **Event name** is read from any of `event`, `eventType`, `event_name`, `topic`, `name`, or `type`.
+- **Contact** is read from `contact`, `customer`, `visitor`, `user`, `profile`, or top-level — using `phone`/`phoneNumber`/`mobile`/`whatsapp` and `email`/`emailAddress`.
+- Events not in the integration's selected list are still **recorded** (the selected list is used for journey filtering, not as an ingress gate), so no data is silently dropped. Every delivery appears under Settings → Webhooks → Recent deliveries.
 
 ## Payload contract
 `POST <ingest URL>` with `Content-Type: application/json`:
