@@ -163,12 +163,34 @@ async function flagSegmentReevaluation(topic: string): Promise<void> {
   }
 }
 
-/** Record/define a custom event so it shows in Analytics → custom events. */
-async function recordCustomEventDefinition(storeId: string, eventName: string): Promise<void> {
+const propType = (v: unknown): 'number' | 'boolean' | 'string' =>
+  typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string';
+
+/**
+ * Record/define a custom event so it shows in Analytics → custom events and in
+ * the segment-builder event picker. Accumulates the set of property keys seen
+ * for this event so they become filterable in segments.
+ */
+async function recordCustomEventDefinition(
+  storeId: string,
+  eventName: string,
+  properties?: Record<string, unknown>,
+): Promise<void> {
   try {
+    const incoming = properties ? Object.keys(properties) : [];
+    const existing = await prisma.customEventDefinition.findUnique({
+      where: { storeId_eventName: { storeId, eventName } },
+      select: { properties: true },
+    });
+    const prevNames: string[] = Array.isArray(existing?.properties)
+      ? (existing!.properties as any[]).map(p => p?.name).filter((n): n is string => typeof n === 'string')
+      : [];
+    const mergedNames = Array.from(new Set([...prevNames, ...incoming])).slice(0, 60);
+    const propDefs = mergedNames.map(name => ({ name, type: propType(properties?.[name]) }));
+
     await prisma.customEventDefinition.upsert({
       where: { storeId_eventName: { storeId, eventName } },
-      update: { eventCount: { increment: 1 }, lastSeenAt: new Date() },
+      update: { eventCount: { increment: 1 }, lastSeenAt: new Date(), properties: propDefs as any },
       create: {
         storeId,
         eventName,
@@ -176,6 +198,7 @@ async function recordCustomEventDefinition(storeId: string, eventName: string): 
         category: 'webhook',
         eventCount: 1,
         lastSeenAt: new Date(),
+        properties: propDefs as any,
       },
     });
   } catch (err) {
@@ -183,53 +206,116 @@ async function recordCustomEventDefinition(storeId: string, eventName: string): 
   }
 }
 
+interface ParsedInbound {
+  kind: 'event' | 'identify' | 'none';
+  eventName?: string;
+  contact?: IncomingContact | null;
+  properties?: Record<string, unknown>;
+}
+
+/**
+ * Parse NitroCommerce's two payload shapes:
+ *  - Behavioral event: { eventName, eventVal:{ ...props, customer:{name,email,phone} }, city,state,country,pincode, u }
+ *  - Identify:         { type:'PHONE'|'EMAIL', contact:'<value>', name, city,state,country,postal, nitro_id, identified_by }
+ */
+function parseNitroCommerce(body: IngestPayload): ParsedInbound {
+  const b = body as Record<string, any>;
+
+  // Identify payload.
+  const t = typeof b.type === 'string' ? b.type.toUpperCase() : '';
+  if ((t === 'PHONE' || t === 'EMAIL') && typeof b.contact === 'string') {
+    const val = b.contact.trim();
+    const cf: Record<string, unknown> = {};
+    for (const k of ['city', 'state', 'country', 'postal', 'nitro_id', 'identified_by']) {
+      if (b[k] != null && b[k] !== '') cf[k] = b[k];
+    }
+    return {
+      kind: 'identify',
+      contact: {
+        phone: t === 'PHONE' ? val : undefined,
+        email: t === 'EMAIL' ? val : undefined,
+        name: firstString(b.name),
+        customFields: cf,
+      },
+    };
+  }
+
+  // Behavioral event payload.
+  if (typeof b.eventName === 'string' && b.eventName.trim()) {
+    const ev = asObject(b.eventVal);
+    const cust = asObject(ev.customer);
+    const properties: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(ev)) if (k !== 'customer') properties[k] = v;
+    for (const k of ['city', 'state', 'country', 'pincode']) if (b[k] != null && b[k] !== '') properties[k] = b[k];
+    if (b.u) properties.url = b.u;
+    const contact =
+      cust.phone || cust.email || cust.name
+        ? { phone: firstString(cust.phone), email: firstString(cust.email), name: firstString(cust.name) }
+        : null;
+    return { kind: 'event', eventName: b.eventName.trim(), contact, properties };
+  }
+
+  return { kind: 'none' };
+}
+
 export async function processInboundWebhook(
   integration: IngestIntegration,
   body: IngestPayload,
 ): Promise<IngestResult> {
   const { storeId } = integration;
-  const eventName = inferEventName(body);
-  const isEvent = body.type === 'contact' ? false : !!eventName;
-  const eventType = isEvent ? String(eventName) : 'contact';
+
+  // 1. Try NitroCommerce's known shapes; 2. fall back to the generic contract.
+  let parsed = parseNitroCommerce(body);
+  if (parsed.kind === 'none') {
+    const generic = extractIncomingContact(body);
+    const genericEvent = inferEventName(body);
+    if (genericEvent && body.type !== 'contact') {
+      parsed = { kind: 'event', eventName: genericEvent, contact: generic, properties: asObject(body.properties) };
+    } else if (generic) {
+      parsed = { kind: 'identify', contact: generic, properties: {} };
+    }
+  }
+
+  const eventType =
+    parsed.kind === 'event' ? String(parsed.eventName) : parsed.kind === 'identify' ? 'identify' : 'unknown';
+  const properties = parsed.properties || {};
 
   try {
-    // NOTE: we intentionally do NOT hard-reject events that aren't in the
-    // integration's selected list — every received payload is recorded so no
-    // data is silently dropped. The selected events are used for journey
-    // triggering / filtering, not as an ingress gate.
-
-    // Upsert contact from whatever shape the sender used (contact/customer/visitor/top-level).
+    // Upsert the contact (events carry a nested customer; identify carries the value).
     let contactId: string | null = null;
-    const incomingContact = extractIncomingContact(body);
-    if (incomingContact) {
-      contactId = await upsertContact(storeId, incomingContact, { fbp: body.fbp, fbc: body.fbc });
+    if (parsed.contact) {
+      contactId = await upsertContact(storeId, parsed.contact, { fbp: body.fbp, fbc: body.fbc });
     }
 
-    if (isEvent) {
-      // Raw event row.
+    if (parsed.kind === 'event' && parsed.eventName) {
+      const eventName = parsed.eventName;
+      const resourceId = properties.resource_id != null ? String(properties.resource_id) : undefined;
+
       await prisma.storefrontEvent.create({
         data: {
           storeId,
           customerId: contactId,
-          sessionId: (body.properties?.sessionId as string) || `webhook_${Date.now()}`,
-          eventType,
-          resourceId: (body.properties?.resourceId as string) || null,
-          resourceTitle: (body.properties?.resourceTitle as string) || null,
-          metadata: { ...asObject(body.properties), source: 'webhook' },
+          sessionId: firstString((body as any).userId, (properties as any).roaming_id) || `webhook_${Date.now()}`,
+          eventType: eventName,
+          resourceId: resourceId || null,
+          resourceTitle: firstString((properties as any).title) || null,
+          metadata: { ...properties, source: 'nitro' } as any,
         },
       });
 
-      await recordCustomEventDefinition(storeId, eventType);
+      await recordCustomEventDefinition(storeId, eventName, properties);
 
       // Journeys: canonical "an event happened" entry point.
-      await matchAndExecuteJourneys(`custom:${eventType}`, {
+      await matchAndExecuteJourneys(`custom:${eventName}`, {
         shop: null,
         payload: { ...body, storeId, contactId },
         receivedAt: body.occurredAt || new Date().toISOString(),
       }).catch(err => console.warn('[ingest] journey match failed (non-fatal):', err));
 
       // Segments: schedule re-evaluation.
-      await flagSegmentReevaluation(`webhook:${eventType}`);
+      await flagSegmentReevaluation(`webhook:${eventName}`);
+    } else if (parsed.kind === 'identify' && contactId) {
+      await flagSegmentReevaluation('webhook:identify');
     }
 
     return { ok: true, status: 'PROCESSED', eventType, contactId: contactId || undefined };
