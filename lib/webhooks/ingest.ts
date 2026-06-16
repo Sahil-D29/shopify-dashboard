@@ -65,6 +65,41 @@ const asArray = (v: unknown): string[] =>
 const asObject = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
+const firstString = (...vals: unknown[]): string | undefined => {
+  for (const v of vals) if (typeof v === 'string' && v.trim()) return v.trim();
+  return undefined;
+};
+
+/** Infer the event name from a variety of webhook payload shapes. */
+function inferEventName(body: IngestPayload): string | undefined {
+  return firstString(
+    body.event,
+    (body as any).eventType,
+    (body as any).event_name,
+    (body as any).topic,
+    (body as any).name,
+    body.type && body.type !== 'contact' ? body.type : undefined,
+  );
+}
+
+/** Pull contact fields from contact/customer/visitor/user/profile or top-level. */
+function extractIncomingContact(body: IngestPayload): IncomingContact | null {
+  const nested = (body.contact || (body as any).customer || (body as any).visitor || (body as any).user || (body as any).profile) as Record<string, unknown> | undefined;
+  const src: Record<string, unknown> = nested && typeof nested === 'object' ? nested : (body as Record<string, unknown>);
+  const phone = firstString(src.phone, (src as any).phoneNumber, (src as any).mobile, (src as any).msisdn, (src as any).whatsapp);
+  const email = firstString(src.email, (src as any).emailAddress, (src as any).email_address);
+  if (!phone && !email) return null;
+  return {
+    phone,
+    email,
+    name: firstString(src.name, (src as any).fullName, (src as any).full_name),
+    firstName: firstString(src.firstName, (src as any).first_name),
+    lastName: firstString(src.lastName, (src as any).last_name),
+    tags: Array.isArray((src as any).tags) ? (src as any).tags.filter((t: unknown) => typeof t === 'string') : undefined,
+    customFields: asObject((src as any).customFields ?? (src as any).custom_fields ?? (src as any).attributes) || undefined,
+  };
+}
+
 /**
  * Upsert a Contact from an inbound payload. Contacts are keyed on
  * (storeId, phone); if no phone is provided we synthesise a stable placeholder
@@ -153,19 +188,21 @@ export async function processInboundWebhook(
   body: IngestPayload,
 ): Promise<IngestResult> {
   const { storeId } = integration;
-  const isEvent = body.type === 'event' || (!!body.event && body.type !== 'contact');
-  const eventType = isEvent ? String(body.event || 'event') : 'contact';
+  const eventName = inferEventName(body);
+  const isEvent = body.type === 'contact' ? false : !!eventName;
+  const eventType = isEvent ? String(eventName) : 'contact';
 
   try {
-    // If the integration restricts accepted events, enforce it for event payloads.
-    if (isEvent && integration.events.length > 0 && body.event && !integration.events.includes(body.event)) {
-      return { ok: false, status: 'FAILED', eventType, error: `Event "${body.event}" not enabled for this integration` };
-    }
+    // NOTE: we intentionally do NOT hard-reject events that aren't in the
+    // integration's selected list — every received payload is recorded so no
+    // data is silently dropped. The selected events are used for journey
+    // triggering / filtering, not as an ingress gate.
 
-    // Upsert contact when present (contact payloads always; events optionally).
+    // Upsert contact from whatever shape the sender used (contact/customer/visitor/top-level).
     let contactId: string | null = null;
-    if (body.contact) {
-      contactId = await upsertContact(storeId, body.contact, { fbp: body.fbp, fbc: body.fbc });
+    const incomingContact = extractIncomingContact(body);
+    if (incomingContact) {
+      contactId = await upsertContact(storeId, incomingContact, { fbp: body.fbp, fbc: body.fbc });
     }
 
     if (isEvent) {

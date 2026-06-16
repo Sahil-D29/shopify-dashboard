@@ -27,7 +27,7 @@ const DATA_TYPES = [
 const EVENT_CATALOG = [
   'visitor', 'view', 'product_view', 'category_view',
   'addtocart', 'removefromcart', 'checkout',
-  'orders/create', 'orders/updated', 'orders/fulfilled', 'hiu_tagged',
+  'orders/create', 'orders/paid', 'orders/updated', 'orders/fulfilled', 'hiu_tagged',
 ];
 
 interface WebhookItem {

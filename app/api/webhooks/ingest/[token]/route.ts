@@ -21,8 +21,21 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 function presentedSecret(request: NextRequest): string {
-  const auth = request.headers.get('authorization') || '';
-  if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  // Accept the token however the sender supplies it. Many webhook platforms
+  // (e.g. NitroCommerce's "Authorization Token" field) send the value RAW in the
+  // Authorization header, while others use "Bearer <token>" or "Token <token>".
+  const auth = (request.headers.get('authorization') || '').trim();
+  if (auth) {
+    const m = auth.match(/^(?:bearer|token)\s+(.+)$/i);
+    return (m ? m[1] : auth).trim();
+  }
+  // Common alternative header names + query param fallback.
+  const alt =
+    request.headers.get('x-authorization') ||
+    request.headers.get('x-webhook-token') ||
+    request.headers.get('x-api-key') ||
+    request.headers.get('x-auth-token');
+  if (alt) return alt.trim();
   return request.nextUrl.searchParams.get('token')?.trim() || '';
 }
 
