@@ -261,6 +261,7 @@ function parseNitroCommerce(body: IngestPayload): ParsedInbound {
 export async function processInboundWebhook(
   integration: IngestIntegration,
   body: IngestPayload,
+  opts?: { skipJourneys?: boolean },
 ): Promise<IngestResult> {
   const { storeId } = integration;
 
@@ -305,12 +306,15 @@ export async function processInboundWebhook(
 
       await recordCustomEventDefinition(storeId, eventName, properties);
 
-      // Journeys: canonical "an event happened" entry point.
-      await matchAndExecuteJourneys(`custom:${eventName}`, {
-        shop: null,
-        payload: { ...body, storeId, contactId },
-        receivedAt: body.occurredAt || new Date().toISOString(),
-      }).catch(err => console.warn('[ingest] journey match failed (non-fatal):', err));
+      // Journeys: canonical "an event happened" entry point. Skipped during
+      // historical backfill so old events don't retroactively fire journeys.
+      if (!opts?.skipJourneys) {
+        await matchAndExecuteJourneys(`custom:${eventName}`, {
+          shop: null,
+          payload: { ...body, storeId, contactId },
+          receivedAt: body.occurredAt || new Date().toISOString(),
+        }).catch(err => console.warn('[ingest] journey match failed (non-fatal):', err));
+      }
 
       // Segments: schedule re-evaluation.
       await flagSegmentReevaluation(`webhook:${eventName}`);
