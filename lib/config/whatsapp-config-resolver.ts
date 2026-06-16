@@ -23,20 +23,23 @@ export type ResolveResult =
   | { valid: false; error: string };
 
 export async function resolveWhatsAppConfig(storeId?: string | null): Promise<ResolveResult> {
+  // When a specific store is in context, use ONLY that store's own WhatsApp
+  // config. Never fall back to the global env credentials — doing so would make
+  // every store (including brand-new ones) appear connected to the same number.
   if (storeId) {
     const dbResult = await resolveFromDb(storeId);
     if (dbResult) return { valid: true, config: dbResult };
+    return {
+      valid: false,
+      error: 'WhatsApp is not configured for this store. Connect it in Settings > WhatsApp.',
+    };
   }
 
+  // No tenant context (system/legacy calls) — env fallback is allowed.
   const envResult = resolveFromEnv();
   if (envResult) return { valid: true, config: envResult };
 
-  return {
-    valid: false,
-    error: storeId
-      ? 'WhatsApp not configured. Connect via Settings > WhatsApp or set environment variables.'
-      : 'WhatsApp environment variables not configured.',
-  };
+  return { valid: false, error: 'WhatsApp environment variables not configured.' };
 }
 
 async function resolveFromDb(storeId: string): Promise<ResolvedWhatsAppConfig | null> {

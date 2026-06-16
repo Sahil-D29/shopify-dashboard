@@ -1,6 +1,15 @@
 import { NextRequest } from 'next/server';
 import { ShopifyClient } from './client';
 import { resolveStore } from '@/lib/tenant/resolve-store';
+import { getStoreIdFromRequest } from '@/lib/tenant/tenant-utils';
+
+/** Thrown when a specific store is selected but isn't connected to Shopify. */
+export class StoreNotConnectedError extends Error {
+  constructor() {
+    super('This store is not connected to Shopify. Connect it in Settings.');
+    this.name = 'StoreNotConnectedError';
+  }
+}
 
 // Re-export ShopifyClient for convenience
 export { ShopifyClient };
@@ -78,13 +87,20 @@ export async function getShopifyClientAsync(request: Request): Promise<ShopifyCl
     console.error('[getShopifyClientAsync] resolveStore failed:', err);
   }
 
-  // 2. Fallback to header-based config (backward compat)
+  // If a specific tenant store is selected but couldn't be resolved (not
+  // connected), do NOT fall back to env/header config — that would leak the
+  // env store's data into this store's views. Surface "not connected".
+  if (getStoreIdFromRequest(request as NextRequest)) {
+    throw new StoreNotConnectedError();
+  }
+
+  // 2. No tenant context — header-based config (backward compat)
   const config = getConfigFromRequest(request);
   if (config) {
     return new ShopifyClient(config);
   }
 
-  // 3. Fallback to env vars
+  // 3. Env vars (own store / system)
   return new ShopifyClient();
 }
 

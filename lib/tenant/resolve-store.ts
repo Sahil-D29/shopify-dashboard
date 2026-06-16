@@ -47,9 +47,14 @@ export async function resolveStore(request: NextRequest): Promise<ResolvedStore 
     } catch (err) {
       console.error('[resolveStore] DB lookup failed for storeId:', storeId, err);
     }
+
+    // A specific tenant store is selected but it isn't connected to Shopify.
+    // Do NOT fall back to the env/own store — that would leak another store's
+    // data into this store's views. Signal "not connected" instead.
+    return null;
   }
 
-  // 2. Fallback: own store via env + Client Credentials
+  // 2. No tenant context at all — own store via env + Client Credentials.
   const envShop = process.env.SHOPIFY_STORE_DOMAIN;
   if (envShop) {
     try {

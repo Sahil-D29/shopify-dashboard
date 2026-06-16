@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { Customer } from '@/lib/types/customer';
 import type { ShopifyOrder } from '@/lib/shopify/client';
-import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
+import { getShopifyClientAsync, StoreNotConnectedError } from '@/lib/shopify/api-helper';
 import { cache } from '@/lib/utils/cache';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { getUserContext } from '@/lib/user-context';
@@ -167,7 +167,17 @@ export async function GET(request: NextRequest) {
       cache.delete(cacheKey);
     }
 
-    const client = await getShopifyClientAsync(request);
+    let client;
+    try {
+      client = await getShopifyClientAsync(request);
+    } catch (err) {
+      // Store selected but not connected to Shopify → show an empty list, not an
+      // error (a brand-new store legitimately has no Shopify customers yet).
+      if (err instanceof StoreNotConnectedError) {
+        return NextResponse.json({ customers: [], lastSynced: Date.now(), cached: false, notConnected: true });
+      }
+      throw err;
+    }
 
     const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', {
       limit,
