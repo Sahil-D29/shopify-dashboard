@@ -32,19 +32,35 @@ import {
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+interface ContactEvent {
+  id: string;
+  eventType: string;
+  resourceTitle?: string | null;
+  createdAt: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 interface ContactDetail {
   id: string;
   phone: string;
+  name?: string | null;
   firstName: string;
   lastName: string;
   email?: string;
   tags: string[];
-  source: 'SHOPIFY' | 'CSV' | 'MANUAL' | 'WHATSAPP';
+  source: string;
   optInStatus: 'OPTED_IN' | 'OPTED_OUT' | 'PENDING';
   customFields: Record<string, string>;
   lastMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  events?: ContactEvent[];
+}
+
+/** Hide synthetic alias keys (email:/nitro:) from the Phone field. */
+function realPhone(phone?: string | null): string | null {
+  if (!phone || phone.startsWith('email:') || phone.startsWith('nitro:')) return null;
+  return phone;
 }
 
 const sourceColors: Record<string, string> = {
@@ -219,8 +235,15 @@ export default function ContactDetailPage() {
     );
   }
 
-  const displayName = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Unknown';
-  const initials = [contact.firstName?.[0], contact.lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?';
+  const displayName =
+    [contact.firstName, contact.lastName].filter(Boolean).join(' ') ||
+    contact.name ||
+    'Unknown';
+  const initials =
+    [contact.firstName?.[0], contact.lastName?.[0]].filter(Boolean).join('').toUpperCase() ||
+    contact.name?.[0]?.toUpperCase() ||
+    '?';
+  const phoneDisplay = realPhone(contact.phone);
 
   return (
     <div className="space-y-6">
@@ -241,10 +264,12 @@ export default function ContactDetailPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
               <div className="flex items-center gap-3 mt-1">
-                <div className="flex items-center gap-1 text-sm text-gray-500">
-                  <Phone className="w-3.5 h-3.5" />
-                  {contact.phone}
-                </div>
+                {phoneDisplay && (
+                  <div className="flex items-center gap-1 text-sm text-gray-500">
+                    <Phone className="w-3.5 h-3.5" />
+                    {phoneDisplay}
+                  </div>
+                )}
                 {contact.email && (
                   <div className="flex items-center gap-1 text-sm text-gray-500">
                     <Mail className="w-3.5 h-3.5" />
@@ -387,12 +412,38 @@ export default function ContactDetailPage() {
 
           {/* Activity / Timeline */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Activity</h2>
-            <div className="text-center py-10 text-gray-400">
-              <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Conversation history will appear here</p>
-              <p className="text-xs mt-1">Messages, events, and interactions with this contact will be shown in a timeline.</p>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Activity {contact.events?.length ? `(${contact.events.length})` : ''}
+            </h2>
+            {contact.events && contact.events.length > 0 ? (
+              <ul className="space-y-3">
+                {contact.events.map((ev) => {
+                  const title =
+                    ev.resourceTitle ||
+                    (ev.metadata && typeof ev.metadata === 'object' ? (ev.metadata as any).title : undefined);
+                  return (
+                    <li key={ev.id} className="flex items-start gap-3 border-b border-gray-100 pb-3 last:border-0">
+                      <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900">{ev.eventType}</p>
+                        {title && <p className="truncate text-xs text-gray-500">{title}</p>}
+                      </div>
+                      <span className="whitespace-nowrap text-xs text-gray-400">
+                        {format(new Date(ev.createdAt), 'MMM d, h:mm a')}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="text-center py-10 text-gray-400">
+                <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">No activity yet</p>
+                <p className="text-xs mt-1">Events and interactions with this contact will appear here.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -428,13 +479,15 @@ export default function ContactDetailPage() {
                   <p className="text-sm font-medium text-gray-900">{displayName}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Phone className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-xs text-gray-400">Phone</p>
-                  <p className="text-sm font-medium text-gray-900">{contact.phone}</p>
+              {phoneDisplay && (
+                <div className="flex items-center gap-3">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <p className="text-xs text-gray-400">Phone</p>
+                    <p className="text-sm font-medium text-gray-900">{phoneDisplay}</p>
+                  </div>
                 </div>
-              </div>
+              )}
               {contact.email && (
                 <div className="flex items-center gap-3">
                   <Mail className="w-4 h-4 text-gray-400" />
@@ -495,7 +548,7 @@ export default function ContactDetailPage() {
               email: contact.email || '',
               tags: contact.tags,
               optInStatus: contact.optInStatus,
-              source: contact.source,
+              source: contact.source as any,
               customFields: contact.customFields,
             }}
             onSubmit={handleEdit}

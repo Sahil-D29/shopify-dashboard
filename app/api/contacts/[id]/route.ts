@@ -37,10 +37,20 @@ export async function GET(
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
     }
 
+    // Recent behavioral events for this contact (webhook + storefront pixel),
+    // shown in the contact's Activity timeline.
+    const events = await prisma.storefrontEvent.findMany({
+      where: { storeId, customerId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, eventType: true, resourceTitle: true, resourceId: true, metadata: true, createdAt: true },
+    });
+
     const result = {
       ...contact,
       conversationsCount: contact.conversations.length,
       conversations: undefined,
+      events,
     };
 
     return NextResponse.json({ contact: result });

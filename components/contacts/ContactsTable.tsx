@@ -10,14 +10,21 @@ import { cn } from '@/lib/utils';
 export interface Contact {
   id: string;
   phone: string;
+  name?: string | null;
   firstName: string;
   lastName: string;
   email?: string;
   tags: string[];
-  source: 'SHOPIFY' | 'CSV' | 'MANUAL' | 'WHATSAPP';
+  source: string;
   optInStatus: 'OPTED_IN' | 'OPTED_OUT' | 'PENDING';
   lastMessageAt?: string | null;
   createdAt: string;
+}
+
+/** Hide synthetic alias keys (email:/nitro:) from the Phone column. */
+function realPhone(phone?: string | null): string | null {
+  if (!phone || phone.startsWith('email:') || phone.startsWith('nitro:')) return null;
+  return phone;
 }
 
 interface ContactsTableProps {
@@ -109,7 +116,9 @@ export default function ContactsTable({
       </TableHeader>
       <TableBody>
         {contacts.map(contact => {
-          const displayName = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Unknown';
+          const displayName =
+            [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.name || 'Unknown';
+          const phoneDisplay = realPhone(contact.phone);
           const isSelected = selectedIds.has(contact.id);
 
           return (
@@ -130,7 +139,7 @@ export default function ContactsTable({
               >
                 <div>
                   <div className="text-sm font-medium text-gray-900">{displayName}</div>
-                  <div className="text-xs text-gray-500">{contact.phone}</div>
+                  <div className="text-xs text-gray-500">{phoneDisplay || contact.email || '—'}</div>
                 </div>
               </TableCell>
               <TableCell

@@ -38,6 +38,8 @@ interface IncomingContact {
   lastName?: string;
   tags?: string[];
   customFields?: Record<string, unknown>;
+  /** Stable cross-payload person id (NitroCommerce nitro_id / userId) for de-duplication. */
+  externalId?: string;
 }
 
 export interface IngestPayload {
@@ -100,10 +102,16 @@ function extractIncomingContact(body: IngestPayload): IncomingContact | null {
   };
 }
 
+const isAliasPhone = (p?: string | null): boolean =>
+  !!p && (p.startsWith('email:') || p.startsWith('nitro:'));
+
 /**
- * Upsert a Contact from an inbound payload. Contacts are keyed on
- * (storeId, phone); if no phone is provided we synthesise a stable placeholder
- * from the email so email-only contacts still land (matches the unique key).
+ * Upsert a Contact from an inbound payload, de-duplicating one person into ONE
+ * contact across separate phone/email identify calls.
+ *
+ * Resolution order: existing by externalId (nitro_id) → by phone → by email.
+ * A real phone always upgrades a placeholder alias key, so the Phone field never
+ * keeps an `email:`/`nitro:` value once a real number is known.
  */
 async function upsertContact(
   storeId: string,
@@ -112,42 +120,85 @@ async function upsertContact(
 ): Promise<string | null> {
   const rawPhone = incoming.phone ? normalizePhone(incoming.phone) : '';
   const email = incoming.email?.trim().toLowerCase() || undefined;
-  if (!rawPhone && !email) return null;
+  const externalId = incoming.externalId?.trim() || undefined;
+  if (!rawPhone && !email && !externalId) return null;
 
-  // Phone is the unique key; for email-only contacts use a deterministic alias.
-  const phoneKey = rawPhone || `email:${email}`;
+  // Senders often provide a single full name; split it so the UI (which builds
+  // the display name from firstName/lastName) shows the person, not "Unknown".
+  let firstName = incoming.firstName;
+  let lastName = incoming.lastName;
+  if (!firstName && !lastName && incoming.name) {
+    const parts = incoming.name.trim().split(/\s+/);
+    firstName = parts[0];
+    lastName = parts.length > 1 ? parts.slice(1).join(' ') : undefined;
+  }
 
+  // Custom fields to merge (includes the stable nitro_id for future matching).
+  const incomingCf = asObject(incoming.customFields);
+  if (externalId) incomingCf.nitro_id = externalId;
+  if (extra?.fbp) incomingCf.fbp = extra.fbp;
+  if (extra?.fbc) incomingCf.fbc = extra.fbc;
   const tags = asArray(incoming.tags);
-  const customFields = asObject(incoming.customFields);
-  if (extra?.fbp) customFields.fbp = extra.fbp;
-  if (extra?.fbc) customFields.fbc = extra.fbc;
-  const hasCustom = Object.keys(customFields).length > 0;
 
-  const contact = await prisma.contact.upsert({
-    where: { storeId_phone: { storeId, phone: phoneKey } },
-    update: {
-      ...(email ? { email } : {}),
-      ...(incoming.name ? { name: incoming.name } : {}),
-      ...(incoming.firstName ? { firstName: incoming.firstName } : {}),
-      ...(incoming.lastName ? { lastName: incoming.lastName } : {}),
-      ...(tags.length ? { tags } : {}),
-      ...(hasCustom ? { customFields: customFields as any } : {}),
-    },
-    create: {
+  // Find an existing contact to merge into.
+  let existing: { id: string; phone: string; customFields: unknown } | null = null;
+  if (externalId) {
+    existing = await prisma.contact.findFirst({
+      where: { storeId, customFields: { path: ['nitro_id'], equals: externalId } },
+      select: { id: true, phone: true, customFields: true },
+    });
+  }
+  if (!existing && rawPhone) {
+    existing = await prisma.contact.findUnique({
+      where: { storeId_phone: { storeId, phone: rawPhone } },
+      select: { id: true, phone: true, customFields: true },
+    });
+  }
+  if (!existing && email) {
+    existing = await prisma.contact.findFirst({
+      where: { storeId, email },
+      select: { id: true, phone: true, customFields: true },
+    });
+  }
+
+  if (existing) {
+    const mergedCf = { ...asObject(existing.customFields), ...incomingCf };
+    const data: any = { customFields: mergedCf };
+    if (email) data.email = email;
+    if (incoming.name) data.name = incoming.name;
+    if (firstName) data.firstName = firstName;
+    if (lastName) data.lastName = lastName;
+    if (tags.length) data.tags = tags;
+    // Upgrade a placeholder alias to a real phone number when one arrives.
+    if (rawPhone && isAliasPhone(existing.phone)) data.phone = rawPhone;
+    try {
+      await prisma.contact.update({ where: { id: existing.id }, data });
+    } catch {
+      // phone-unique conflict (real number already on another contact) — keep alias.
+      delete data.phone;
+      await prisma.contact.update({ where: { id: existing.id }, data });
+    }
+    return existing.id;
+  }
+
+  // No match — create. Prefer a real phone; otherwise a deterministic alias key.
+  const phoneKey = rawPhone || (email ? `email:${email}` : `nitro:${externalId}`);
+  const created = await prisma.contact.create({
+    data: {
       storeId,
       phone: phoneKey,
       email: email || null,
       name: incoming.name || null,
-      firstName: incoming.firstName || null,
-      lastName: incoming.lastName || null,
+      firstName: firstName || null,
+      lastName: lastName || null,
       source: 'WEBHOOK',
       optInStatus: 'PENDING',
       tags,
-      customFields: (hasCustom ? customFields : {}) as any,
+      customFields: incomingCf as any,
     },
     select: { id: true },
   });
-  return contact.id;
+  return created.id;
 }
 
 /** Flag dynamic segments for re-evaluation (mirrors the Shopify webhook). */
@@ -236,6 +287,7 @@ function parseNitroCommerce(body: IngestPayload): ParsedInbound {
         email: t === 'EMAIL' ? val : undefined,
         name: firstString(b.name),
         customFields: cf,
+        externalId: firstString(b.nitro_id, b.userId),
       },
     };
   }
@@ -248,9 +300,10 @@ function parseNitroCommerce(body: IngestPayload): ParsedInbound {
     for (const [k, v] of Object.entries(ev)) if (k !== 'customer') properties[k] = v;
     for (const k of ['city', 'state', 'country', 'pincode']) if (b[k] != null && b[k] !== '') properties[k] = b[k];
     if (b.u) properties.url = b.u;
+    const externalId = firstString(b.userId, b.nitro_id);
     const contact =
-      cust.phone || cust.email || cust.name
-        ? { phone: firstString(cust.phone), email: firstString(cust.email), name: firstString(cust.name) }
+      cust.phone || cust.email || cust.name || externalId
+        ? { phone: firstString(cust.phone), email: firstString(cust.email), name: firstString(cust.name), externalId }
         : null;
     return { kind: 'event', eventName: b.eventName.trim(), contact, properties };
   }
