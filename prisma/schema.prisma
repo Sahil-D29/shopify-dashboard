@@ -1733,6 +1733,7 @@ model StoreFeatureFlags {
   id             String   @id @default(uuid())
   storeId        String   @unique
   disabledItems  String[] @default([])
+  fullAccess     Boolean  @default(false) // Super-admin override: full app access without a paid subscription
   notes          String?
   updatedBy      String?
   updatedAt      DateTime @updatedAt

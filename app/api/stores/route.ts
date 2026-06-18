@@ -41,6 +41,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Store creation is super-admin only. Merchants are assigned stores from the
+    // admin panel (/api/admin/stores + members); they cannot self-create.
+    if ((session.user as any).role !== 'SUPER_ADMIN') {
+      return NextResponse.json(
+        { error: 'Stores are created by an administrator. Please contact support to add a store.' },
+        { status: 403 },
+      );
+    }
+
     const body = await request.json();
     const { name, shopDomain } = body;
 

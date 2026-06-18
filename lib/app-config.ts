@@ -118,28 +118,31 @@ export interface StoreFeatureFlagsValue {
   storeId: string;
   disabledItems: SidebarItemKey[];
   notes: string;
+  /** Super-admin override: full app access without a paid subscription. */
+  fullAccess: boolean;
 }
 
 export async function getStoreFeatureFlags(storeId: string): Promise<StoreFeatureFlagsValue> {
   try {
     const row = await prisma.storeFeatureFlags.findUnique({ where: { storeId } });
-    if (!row) return { storeId, disabledItems: [], notes: '' };
+    if (!row) return { storeId, disabledItems: [], notes: '', fullAccess: false };
     return {
       storeId,
       disabledItems: (row.disabledItems ?? []).filter((k): k is SidebarItemKey =>
         (ALL_SIDEBAR_KEYS as readonly string[]).includes(k),
       ),
       notes: row.notes ?? '',
+      fullAccess: row.fullAccess ?? false,
     };
   } catch (error) {
     console.warn('[app-config] Failed to load StoreFeatureFlags, defaulting to none:', error);
-    return { storeId, disabledItems: [], notes: '' };
+    return { storeId, disabledItems: [], notes: '', fullAccess: false };
   }
 }
 
 export async function saveStoreFeatureFlags(
   storeId: string,
-  patch: { disabledItems?: string[]; notes?: string | null },
+  patch: { disabledItems?: string[]; notes?: string | null; fullAccess?: boolean },
   updatedBy?: string | null,
 ): Promise<StoreFeatureFlagsValue> {
   const disabledItems = Array.isArray(patch.disabledItems)
@@ -150,11 +153,18 @@ export async function saveStoreFeatureFlags(
   const data: any = {};
   if (disabledItems !== undefined) data.disabledItems = disabledItems;
   if (patch.notes !== undefined) data.notes = patch.notes ?? null;
+  if (typeof patch.fullAccess === 'boolean') data.fullAccess = patch.fullAccess;
   if (updatedBy) data.updatedBy = updatedBy;
 
   await prisma.storeFeatureFlags.upsert({
     where: { storeId },
-    create: { storeId, disabledItems: disabledItems ?? [], notes: patch.notes ?? null, updatedBy },
+    create: {
+      storeId,
+      disabledItems: disabledItems ?? [],
+      notes: patch.notes ?? null,
+      fullAccess: patch.fullAccess ?? false,
+      updatedBy,
+    },
     update: data,
   });
   return getStoreFeatureFlags(storeId);
@@ -210,4 +220,27 @@ export async function getEffectiveDisabledItems(storeId: string): Promise<Sideba
     getPlanDisabledItems(storeId),
   ]);
   return Array.from(new Set<SidebarItemKey>([...storeFlags.disabledItems, ...planGated]));
+}
+
+// ─── Subscription gating ───────────────────────────────────────────────
+
+/**
+ * Sidebar items that are LOCKED (shown greyed + lock → Billing) because the store
+ * has no valid active subscription. Everything except dashboard/settings/billing
+ * is locked. Bypassed when super admin sets the store's `fullAccess` flag.
+ *
+ * Kept separate from disabled items: disabled = admin-hidden (removed), locked =
+ * upsell (visible but gated).
+ */
+export async function getLockedItems(storeId: string): Promise<SidebarItemKey[]> {
+  try {
+    const flags = await getStoreFeatureFlags(storeId);
+    if (flags.fullAccess) return [];
+    const { hasValidActiveSubscription } = await import('@/lib/subscription');
+    if (await hasValidActiveSubscription(storeId)) return [];
+    return ALL_SIDEBAR_KEYS.filter(k => !PLAN_GATING_ALWAYS_ON.includes(k));
+  } catch (error) {
+    console.warn('[app-config] lock computation failed, nothing locked:', error);
+    return [];
+  }
 }

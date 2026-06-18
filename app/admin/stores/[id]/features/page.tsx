@@ -44,6 +44,7 @@ export default function AdminStoreFeaturesPage({
   const [allKeys, setAllKeys] = useState<string[]>([]);
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
+  const [fullAccess, setFullAccess] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +57,7 @@ export default function AdminStoreFeaturesPage({
       setAllKeys(Array.isArray(data.allKeys) ? data.allKeys : []);
       setDisabled(new Set<string>(data.flags?.disabledItems ?? []));
       setNotes(data.flags?.notes ?? '');
+      setFullAccess(Boolean(data.flags?.fullAccess));
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to load feature flags'));
     } finally {
@@ -93,6 +95,7 @@ export default function AdminStoreFeaturesPage({
         body: JSON.stringify({
           disabledItems: Array.from(disabled),
           notes,
+          fullAccess,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -154,6 +157,35 @@ export default function AdminStoreFeaturesPage({
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
+      </div>
+
+      {/* Full access override (bypass subscription gate) */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Full app access (bypass subscription)</div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            When ON, this store gets the full app even without a paid subscription. When OFF,
+            an unsubscribed store is limited to Dashboard, Settings &amp; Billing (other items
+            shown locked).
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={fullAccess}
+          onClick={() => setFullAccess(v => !v)}
+          className={cn(
+            'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
+            fullAccess ? 'bg-green-600' : 'bg-gray-300',
+          )}
+        >
+          <span
+            className={cn(
+              'inline-block h-5 w-5 transform rounded-full bg-white transition-transform',
+              fullAccess ? 'translate-x-5' : 'translate-x-0.5',
+            )}
+          />
+        </button>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900">

@@ -27,6 +27,7 @@ export interface AppSettingsValue {
 export interface StoreFeatureFlagsValue {
   storeId: string | null;
   disabledItems: string[];
+  lockedItems: string[];
   notes: string;
 }
 
@@ -54,6 +55,7 @@ const DEFAULT_SETTINGS: AppSettingsValue = {
 const DEFAULT_FLAGS: StoreFeatureFlagsValue = {
   storeId: null,
   disabledItems: [],
+  lockedItems: [],
   notes: '',
 };
 
@@ -79,6 +81,9 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
           storeId: data.featureFlags.storeId ?? null,
           disabledItems: Array.isArray(data.featureFlags.disabledItems)
             ? data.featureFlags.disabledItems
+            : [],
+          lockedItems: Array.isArray(data.featureFlags.lockedItems)
+            ? data.featureFlags.lockedItems
             : [],
           notes: data.featureFlags.notes ?? '',
         });
@@ -120,4 +125,10 @@ export function useAppConfig(): AppConfigContextValue {
 export function useSidebarItemEnabled(itemKey: string): boolean {
   const { featureFlags } = useAppConfig();
   return !featureFlags.disabledItems.includes(itemKey);
+}
+
+/** Convenience hook: is this sidebar item locked (gated by subscription)? */
+export function useSidebarItemLocked(itemKey: string): boolean {
+  const { featureFlags } = useAppConfig();
+  return featureFlags.lockedItems?.includes(itemKey) ?? false;
 }

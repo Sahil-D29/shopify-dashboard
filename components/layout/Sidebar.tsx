@@ -33,7 +33,8 @@ import {
   FlaskConical,
   BellRing,
   ArrowRightLeft,
-  UserPlus
+  UserPlus,
+  Lock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getWindowStorage } from '@/lib/window-storage';
@@ -64,6 +65,34 @@ const navigation = [
   { name: 'Billing', href: '/billing', icon: CreditCard },
 ];
 
+/** A nav item that is gated by subscription: greyed, lock icon, routes to Billing. */
+function LockedNavItem({
+  icon: Icon,
+  label,
+  small = false,
+  isMobile,
+  onClose,
+}: {
+  icon: React.ElementType;
+  label: string;
+  small?: boolean;
+  isMobile?: boolean;
+  onClose?: () => void;
+}) {
+  return (
+    <Link
+      href="/billing"
+      onClick={isMobile ? onClose : undefined}
+      title="Subscribe to unlock this feature"
+      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 opacity-60 hover:opacity-100 hover:bg-gray-800/60 transition-colors"
+    >
+      <Icon className={cn(small ? 'h-4 w-4' : 'h-5 w-5', 'shrink-0')} />
+      <span className="flex-1">{label}</span>
+      <Lock className="h-3.5 w-3.5 shrink-0" />
+    </Link>
+  );
+}
+
 export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
@@ -73,6 +102,15 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
     [featureFlags.disabledItems],
   );
   const isEnabled = (key: string) => !disabled.has(key);
+  // Locked = visible but gated by subscription (greyed + lock → Billing).
+  const locked = useMemo(
+    () => new Set(featureFlags.lockedItems || []),
+    [featureFlags.lockedItems],
+  );
+  const isLocked = (key: string) => locked.has(key);
+  const lockedItem = (icon: React.ElementType, label: string, small = false) => (
+    <LockedNavItem icon={icon} label={label} small={small} isMobile={isMobile} onClose={onClose} />
+  );
   const [isCustomersExpanded, setIsCustomersExpanded] = useState(false);
   const [isEmailExpanded, setIsEmailExpanded] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -276,7 +314,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           )}
 
           {/* Live Chat */}
-          {isEnabled('chat') && (
+          {isEnabled('chat') && (isLocked('chat') ? lockedItem(MessageCircle, 'Live Chat') : (
           <Link
             href="/chat"
             onClick={isMobile ? onClose : undefined}
@@ -291,10 +329,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             <span className="flex-1">Live Chat</span>
             <ChatNotificationBadge storeId={null} />
           </Link>
-          )}
+          ))}
 
         {/* Customers Section with Nested Segments */}
-        {isEnabled('customers') && (
+        {isEnabled('customers') && (isLocked('customers') ? lockedItem(Users, 'Customers') : (
         <div>
           <div className="flex items-center gap-1">
             <Link
@@ -352,10 +390,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           </div>
           )}
         </div>
-        )}
+        ))}
 
         {/* Contacts (WhatsApp) */}
-        {isEnabled('contacts') && (
+        {isEnabled('contacts') && (isLocked('contacts') ? lockedItem(Contact, 'Contacts') : (
         <Link
           href="/contacts"
           onClick={isMobile ? onClose : undefined}
@@ -369,10 +407,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Contact className="h-5 w-5 shrink-0" />
           Contacts
         </Link>
-        )}
+        ))}
 
         {/* Templates */}
-        {isEnabled('templates') && (
+        {isEnabled('templates') && (isLocked('templates') ? lockedItem(MessageSquare, 'Templates') : (
         <Link
           href="/templates"
           onClick={isMobile ? onClose : undefined}
@@ -386,10 +424,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <MessageSquare className="h-5 w-5 shrink-0" />
           Templates
         </Link>
-        )}
+        ))}
 
         {/* Campaigns */}
-        {isEnabled('campaigns') && (
+        {isEnabled('campaigns') && (isLocked('campaigns') ? lockedItem(Zap, 'Campaigns') : (
         <Link
           href="/campaigns"
           onClick={isMobile ? onClose : undefined}
@@ -403,10 +441,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Zap className="h-5 w-5 shrink-0" />
           Campaigns
         </Link>
-        )}
+        ))}
 
         {/* Email Marketing Section */}
-        {isEnabled('email_marketing') && (
+        {isEnabled('email_marketing') && (isLocked('email_marketing') ? lockedItem(Mail, 'Email Marketing') : (
         <div>
           <div className="flex items-center gap-1">
             <button
@@ -465,10 +503,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
             </div>
           </div>
         </div>
-        )}
+        ))}
 
         {/* Journeys */}
-        {isEnabled('journeys') && (
+        {isEnabled('journeys') && (isLocked('journeys') ? lockedItem(Zap, 'Journeys') : (
         <Link
           href="/journeys"
           onClick={isMobile ? onClose : undefined}
@@ -482,10 +520,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Zap className="h-5 w-5 shrink-0" />
           Journeys
         </Link>
-        )}
+        ))}
 
         {/* Flows */}
-        {isEnabled('flows') && (
+        {isEnabled('flows') && (isLocked('flows') ? lockedItem(Workflow, 'Flows') : (
         <Link
           href="/flows"
           onClick={isMobile ? onClose : undefined}
@@ -499,10 +537,10 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <Workflow className="h-5 w-5 shrink-0" />
           Flows
         </Link>
-        )}
+        ))}
 
         {/* Analytics */}
-        {isEnabled('analytics') && (
+        {isEnabled('analytics') && (isLocked('analytics') ? lockedItem(BarChart3, 'Analytics') : (
         <Link
           href="/analytics"
           onClick={isMobile ? onClose : undefined}
@@ -516,7 +554,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
           <BarChart3 className="h-5 w-5 shrink-0" />
           Analytics
         </Link>
-        )}
+        ))}
 
         {/* Other Navigation Items (excluding Dashboard and Settings) */}
         {navigation.map((item) => {
@@ -528,6 +566,9 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
               : item.name === 'Billing' ? 'billing'
               : null;
           if (flagKey && !isEnabled(flagKey)) return null;
+          if (flagKey && isLocked(flagKey)) {
+            return <LockedNavItem key={item.name} icon={item.icon} label={item.name} isMobile={isMobile} onClose={onClose} />;
+          }
 
           const isActive = pathname === item.href;
           return (

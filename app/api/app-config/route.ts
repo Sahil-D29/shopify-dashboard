@@ -4,7 +4,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAppSettings } from '@/lib/app-config';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { getStoreFeatureFlags, getEffectiveDisabledItems } from '@/lib/app-config';
+import { getStoreFeatureFlags, getEffectiveDisabledItems, getLockedItems } from '@/lib/app-config';
 
 /**
  * Public app config + per-store feature flags for the current session.
@@ -29,17 +29,18 @@ export async function GET(request: NextRequest) {
     // per-store admin overrides). The admin editor uses the raw per-store flags.
     const flags = storeId
       ? await (async () => {
-          const [base, effectiveDisabled] = await Promise.all([
+          const [base, effectiveDisabled, lockedItems] = await Promise.all([
             getStoreFeatureFlags(storeId).catch(() => ({
               storeId,
               disabledItems: [] as string[],
               notes: '',
             })),
             getEffectiveDisabledItems(storeId).catch(() => [] as string[]),
+            getLockedItems(storeId).catch(() => [] as string[]),
           ]);
-          return { storeId, disabledItems: effectiveDisabled, notes: base.notes };
+          return { storeId, disabledItems: effectiveDisabled, lockedItems, notes: base.notes };
         })()
-      : { storeId: null, disabledItems: [] as string[], notes: '' };
+      : { storeId: null, disabledItems: [] as string[], lockedItems: [] as string[], notes: '' };
 
     return NextResponse.json({
       success: true,

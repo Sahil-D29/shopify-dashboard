@@ -1,18 +1,48 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Menu, X } from 'lucide-react';
 import { useAppConfig } from '@/components/providers/AppConfigProvider';
 
+// Maps a route prefix to its sidebar feature key, for the subscription gate.
+// Dashboard (/), Settings, Billing are intentionally absent (never locked).
+const ROUTE_KEY: { prefix: string; key: string }[] = [
+  { prefix: '/chat', key: 'chat' },
+  { prefix: '/customers', key: 'customers' },
+  { prefix: '/segments', key: 'segments' },
+  { prefix: '/contacts', key: 'contacts' },
+  { prefix: '/templates', key: 'templates' },
+  { prefix: '/campaigns', key: 'campaigns' },
+  { prefix: '/email', key: 'email_marketing' },
+  { prefix: '/journeys', key: 'journeys' },
+  { prefix: '/flows', key: 'flows' },
+  { prefix: '/analytics', key: 'analytics' },
+  { prefix: '/orders', key: 'orders' },
+  { prefix: '/products', key: 'products' },
+  { prefix: '/abandoned-carts', key: 'abandoned_carts' },
+];
+
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { settings: appSettings } = useAppConfig();
+  const router = useRouter();
+  const { settings: appSettings, featureFlags } = useAppConfig();
   const isAuthPage = pathname?.startsWith('/auth');
   const isChatPage = pathname?.startsWith('/chat');
   const isBuilderPage = /^\/(journeys|flows)\/[^/]+\/builder/.test(pathname ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Defense-in-depth: if the current route maps to a subscription-locked feature,
+  // bounce to Billing (the sidebar already shows it locked, this stops direct URLs).
+  useEffect(() => {
+    const locked = new Set(featureFlags.lockedItems || []);
+    if (locked.size === 0 || !pathname) return;
+    const match = ROUTE_KEY.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'));
+    if (match && locked.has(match.key)) {
+      router.replace('/billing');
+    }
+  }, [pathname, featureFlags.lockedItems, router]);
 
   // Close sidebar when route changes on mobile
   useEffect(() => {

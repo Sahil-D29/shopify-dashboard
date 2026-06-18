@@ -70,6 +70,7 @@ export async function PATCH(
       {
         disabledItems: Array.isArray(body?.disabledItems) ? body.disabledItems : undefined,
         notes: typeof body?.notes === 'string' ? body.notes : undefined,
+        fullAccess: typeof body?.fullAccess === 'boolean' ? body.fullAccess : undefined,
       },
       session.userId,
     );

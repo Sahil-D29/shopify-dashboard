@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useTenant } from '@/lib/tenant/tenant-context';
-import { Store, ChevronDown, Check, Loader2, Plus } from 'lucide-react';
+import { Store, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -179,17 +178,8 @@ export function StoreSwitcher() {
               ))}
             </>
           )}
-
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link
-              href="/stores/new"
-              className="flex items-center gap-2 cursor-pointer text-primary"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add New Store</span>
-            </Link>
-          </DropdownMenuItem>
+          {/* Store creation is super-admin only — merchants are assigned stores
+              from the admin panel, so no self-serve "Add New Store" here. */}
         </DropdownMenuContent>
       </DropdownMenu>
     );

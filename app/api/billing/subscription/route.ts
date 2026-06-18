@@ -64,6 +64,12 @@ export async function GET(request: NextRequest) {
       where: { planId: subscription.planId },
     });
 
+    // Orphaned subscription (plan no longer exists, e.g. a stale "advance" row):
+    // present it as "no active plan" rather than showing a phantom plan.
+    if (!plan) {
+      return NextResponse.json({ subscription: null, usage: null, isShopifyStore });
+    }
+
     // Get usage metrics for current period
     const now = new Date();
     const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
