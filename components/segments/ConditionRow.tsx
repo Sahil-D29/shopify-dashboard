@@ -12,12 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  SEGMENT_FIELD_OPTIONS,
   SEGMENT_OPERATORS,
   type SegmentFieldType,
   type EntityType,
 } from '@/lib/constants/segment-fields';
 import { FieldSelect } from './FieldSelect';
+import { useSegmentFields } from './segment-fields-context';
 import { SubFilterRow } from './SubFilterRow';
 import { ProductSelect } from '@/components/selectors/ProductSelect';
 import { CampaignSelect } from '@/components/selectors/CampaignSelect';
@@ -54,20 +54,6 @@ const ensureNumberRange = (value: ConditionValue['value']): NumberRange => {
   return [0, 0];
 };
 
-function getFieldType(field: string): SegmentFieldType {
-  const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
-  return meta?.type ?? 'text';
-}
-
-function getFieldEntityType(field: string): EntityType | undefined {
-  const meta = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
-  return meta?.entityType;
-}
-
-function getFieldMeta(field: string) {
-  return SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
-}
-
 export default function ConditionRow({
   condition,
   onChange,
@@ -77,16 +63,26 @@ export default function ConditionRow({
   onChange: (next: ConditionValue) => void;
   onRemove: () => void;
 }) {
+  const { getOption, getCustomSubFilters } = useSegmentFields();
+
+  const getFieldType = (field: string): SegmentFieldType => getOption(field)?.type ?? 'text';
+  const getFieldEntityType = (field: string): EntityType | undefined => getOption(field)?.entityType;
+  const getFieldMeta = (field: string) => getOption(field);
+
   const fieldType = getFieldType(condition.field);
   const operators = SEGMENT_OPERATORS[fieldType] ?? SEGMENT_OPERATORS.text;
   const fieldMeta = getFieldMeta(condition.field);
 
   const showTimeWindow = fieldMeta?.supportsTimeWindow ?? false;
   const showFrequency = fieldMeta?.supportsFrequency ?? false;
+  // Custom events provide their own property sub-filters; otherwise use the category map.
+  const customSubFilters = getCustomSubFilters(condition.field);
   const subFilterCategory = FIELD_TO_SUBFILTER_CATEGORY[condition.field];
-  const availableSubFilterProps = subFilterCategory
-    ? getSubFilterProperties(condition.field)
-    : UNIVERSAL_SUB_FILTER_PROPERTIES;
+  const availableSubFilterProps = customSubFilters
+    ? customSubFilters
+    : subFilterCategory
+      ? getSubFilterProperties(condition.field)
+      : UNIVERSAL_SUB_FILTER_PROPERTIES;
 
   const [isExpanded, setIsExpanded] = useState(
     !!(condition.subFilters?.length || condition.timeWindow?.amount || condition.frequency?.count)

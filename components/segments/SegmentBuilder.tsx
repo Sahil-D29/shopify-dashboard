@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import ConditionRow, { ConditionValue } from './ConditionRow';
 import { ConditionSummary } from './ConditionSummary';
+import { SegmentFieldsProvider } from './segment-fields-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -235,6 +236,7 @@ export default function SegmentBuilder({
   const previewCount = previewData?.customerCount ?? previewData?.count ?? null;
 
   return (
+    <SegmentFieldsProvider>
     <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
       {/* ─── Left Column: Builder ─── */}
       <div className="w-full lg:flex-1 min-w-0 space-y-5">
@@ -545,5 +547,6 @@ export default function SegmentBuilder({
         </div>
       </div>
     </div>
+    </SegmentFieldsProvider>
   );
 }

@@ -82,8 +82,20 @@
     return Object.keys(meta).length ? meta : null;
   }
 
+  // Read a query-string param (used for search term)
+  function getQueryParam(name) {
+    try {
+      return new URLSearchParams(window.location.search).get(name);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Auto-detect page type and track
   function autoTrack() {
+    // Active on Site — fire on every page load (lightweight session signal)
+    sendEvent('active_on_site', null, null, { path: window.location.pathname });
+
     var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
     if (!meta || !meta.page) return;
 
@@ -108,22 +120,50 @@
         collectionTitle || null,
         collectionTitle ? { collectionTitle: String(collectionTitle) } : null
       );
+    } else if (pageType === 'search') {
+      var query = getQueryParam('q');
+      if (query) {
+        sendEvent('search_submitted', null, query, { query: query });
+      }
     }
   }
 
-  // Track add-to-cart via fetch/XHR interception
-  function interceptAddToCart() {
+  // Inspect a cart request URL + parsed body and emit add/remove events.
+  function handleCartRequest(url, body) {
+    try {
+      if (url.includes('/cart/add')) {
+        var addId = body && (body.id || (body.items && body.items[0] && body.items[0].id));
+        sendEvent('product_added_to_cart', addId ? String(addId) : null, null);
+        return;
+      }
+      // /cart/change and /cart/update with quantity 0 = removal
+      if (url.includes('/cart/change') || url.includes('/cart/update')) {
+        if (body && body.updates && typeof body.updates === 'object') {
+          // /cart/update: { updates: { variantId: qty } }
+          Object.keys(body.updates).forEach(function (variantId) {
+            if (Number(body.updates[variantId]) === 0) {
+              sendEvent('product_removed_from_cart', String(variantId), null);
+            }
+          });
+        } else if (body && (body.id || body.line) && Number(body.quantity) === 0) {
+          sendEvent('product_removed_from_cart', String(body.id || body.line), null);
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Track cart add/remove via fetch/XHR interception
+  function interceptCart() {
     // Intercept fetch
     var origFetch = window.fetch;
     window.fetch = function () {
       var url = arguments[0];
-      if (typeof url === 'string' && url.includes('/cart/add')) {
+      if (typeof url === 'string' && url.indexOf('/cart/') !== -1) {
         try {
           var opts = arguments[1];
           if (opts && opts.body) {
             var body = typeof opts.body === 'string' ? JSON.parse(opts.body) : null;
-            var itemId = body && (body.id || (body.items && body.items[0] && body.items[0].id));
-            sendEvent('product_added_to_cart', itemId ? String(itemId) : null, null);
+            if (body) handleCartRequest(url, body);
           }
         } catch (e) { /* ignore */ }
       }
@@ -138,11 +178,10 @@
     };
     var origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function (data) {
-      if (this._trackUrl && typeof this._trackUrl === 'string' && this._trackUrl.includes('/cart/add')) {
+      if (this._trackUrl && typeof this._trackUrl === 'string' && this._trackUrl.indexOf('/cart/') !== -1) {
         try {
           var body = typeof data === 'string' ? JSON.parse(data) : null;
-          var itemId = body && (body.id || (body.items && body.items[0] && body.items[0].id));
-          sendEvent('product_added_to_cart', itemId ? String(itemId) : null, null);
+          if (body) handleCartRequest(this._trackUrl, body);
         } catch (e) { /* ignore */ }
       }
       return origSend.apply(this, arguments);
@@ -162,10 +201,10 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       autoTrack();
-      interceptAddToCart();
+      interceptCart();
     });
   } else {
     autoTrack();
-    interceptAddToCart();
+    interceptCart();
   }
 })();

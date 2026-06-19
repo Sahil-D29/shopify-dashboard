@@ -8,8 +8,12 @@ const REQUIRED_WEBHOOKS = [
   'orders/create',
   'orders/paid',
   'orders/fulfilled',
+  'orders/partially_fulfilled',
   'orders/cancelled',
   'orders/updated',
+  'orders/edited',
+  // Draft orders (B2B / manual)
+  'draft_orders/create',
   // Fulfillment / shipping (tracking updates)
   'fulfillments/create',
   'fulfillments/update',
@@ -21,6 +25,7 @@ const REQUIRED_WEBHOOKS = [
   // Customers
   'customers/create',
   'customers/update',
+  'customers/enable',
   // App lifecycle + compliance
   'app/uninstalled',
   'app_subscriptions/update',

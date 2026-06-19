@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validEventTypes = ['product_viewed', 'product_added_to_cart', 'collection_viewed'];
+    const validEventTypes = [
+      'product_viewed', 'product_added_to_cart', 'collection_viewed',
+      'product_removed_from_cart', 'search_submitted', 'active_on_site',
+    ];
     if (!validEventTypes.includes(eventType)) {
       return json(
         { error: `Invalid eventType. Must be one of: ${validEventTypes.join(', ')}` },

@@ -12,7 +12,12 @@ type Group = {
 };
 
 function getFieldLabel(field: string): string {
-  return SEGMENT_FIELD_OPTIONS.find(f => f.value === field)?.label || field;
+  const match = SEGMENT_FIELD_OPTIONS.find(f => f.value === field);
+  if (match) return match.label;
+  if (field.startsWith('custom_event:')) {
+    return field.slice('custom_event:'.length).replace(/_/g, ' ');
+  }
+  return field;
 }
 
 function getOperatorLabel(operator: string): string {

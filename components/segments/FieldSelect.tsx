@@ -11,19 +11,18 @@ import {
   Check, ChevronsUpDown, Search,
   User, ShoppingCart, Package, MessageCircle, Target,
   GitBranch, Zap, MessageSquare, Contact, Activity,
-  MousePointer, BarChart3, Brain, ShoppingBag,
+  MousePointer, BarChart3, Brain, ShoppingBag, Webhook,
 } from 'lucide-react';
 import {
-  SEGMENT_FIELD_OPTIONS,
   SEGMENT_FIELD_GROUPS,
-  getFieldOptionsByGroup,
   type SegmentFieldOption,
 } from '@/lib/constants/segment-fields';
+import { useSegmentFields } from './segment-fields-context';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   User, ShoppingCart, Package, MessageCircle, Target,
   GitBranch, Zap, MessageSquare, Contact, Activity,
-  MousePointer, BarChart3, Brain, ShoppingBag,
+  MousePointer, BarChart3, Brain, ShoppingBag, Webhook,
 };
 
 interface FieldSelectProps {
@@ -37,9 +36,10 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
   const [search, setSearch] = useState('');
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
-  const grouped = useMemo(() => getFieldOptionsByGroup(), []);
+  const { options, optionsByGroup, getOption } = useSegmentFields();
+  const grouped = optionsByGroup;
 
-  const selectedField = SEGMENT_FIELD_OPTIONS.find(f => f.value === value);
+  const selectedField = getOption(value);
   const displayLabel = selectedField?.label || 'Select field...';
 
   // Filter fields by search term
@@ -111,7 +111,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                   )}
                 >
                   <span className="truncate">All Fields</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground/60">{SEGMENT_FIELD_OPTIONS.length}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/60">{options.length}</span>
                 </button>
                 {SEGMENT_FIELD_GROUPS.map(({ name, icon }) => {
                   const Icon = ICON_MAP[icon];

@@ -13,6 +13,7 @@ import {
   needsFlowEnrichment,
   needsConversationEnrichment,
   needsContactEnrichment,
+  needsCustomEventEnrichment,
   type CustomerEnrichment,
   type CampaignLogEnrichment,
   type AbandonedCheckoutEnrichment,
@@ -21,6 +22,7 @@ import {
   type FlowEnrichment,
   type ConversationEnrichment,
   type ContactEnrichment,
+  type CustomEventEnrichment,
 } from '@/lib/segments/evaluator';
 import { calculateRFMScores } from '@/lib/segments/rfm';
 
@@ -275,8 +277,9 @@ async function fetchStorefrontEventEnrichment(
     `.catch(() => [] as Array<{ customerId: string; eventType: string; resourceId: string | null; resourceTitle: string | null; metadata: unknown; createdAt: Date }>);
 
     // Determine whether any product event lacks rich metadata → backfill from Shopify.
+    const PRODUCT_EVENT_TYPES = new Set(['product_viewed', 'product_added_to_cart', 'product_removed_from_cart']);
     const needsBackfill = rows.some(r =>
-      (r.eventType === 'product_viewed' || r.eventType === 'product_added_to_cart') &&
+      PRODUCT_EVENT_TYPES.has(r.eventType) &&
       r.resourceId &&
       !(r.metadata && typeof r.metadata === 'object' && (r.metadata as any).tags)
     );
@@ -295,6 +298,13 @@ async function fetchStorefrontEventEnrichment(
           viewedProducts: [],
           addedToCartProducts: [],
           viewedCollections: [],
+          activeOnSite: false,
+          lastActiveAt: null,
+          searched: false,
+          searchTerms: [],
+          searchRecords: [],
+          productRemovedFromCart: false,
+          removedFromCartProducts: [],
         };
         result.set(row.customerId, entry);
       }
@@ -336,10 +346,73 @@ async function fetchStorefrontEventEnrichment(
             timestamp: ts,
           });
           break;
+        case 'product_removed_from_cart':
+          entry.productRemovedFromCart = true;
+          entry.removedFromCartProducts.push(buildProductRecord());
+          break;
+        case 'active_on_site':
+          entry.activeOnSite = true;
+          if (!entry.lastActiveAt || ts > entry.lastActiveAt) entry.lastActiveAt = ts;
+          break;
+        case 'search_submitted': {
+          const term = String(meta.query ?? meta.term ?? meta.searchTerm ?? row.resourceTitle ?? '').trim();
+          entry.searched = true;
+          if (term) {
+            if (!entry.searchTerms.includes(term)) entry.searchTerms.push(term);
+            entry.searchRecords.push({ term, timestamp: ts });
+          }
+          break;
+        }
       }
     }
   } catch (err) {
     console.warn('[SegmentStats] Failed to fetch storefront events:', err);
+  }
+
+  return result;
+}
+
+async function fetchCustomEventEnrichment(
+  storeId: string
+): Promise<Map<string, CustomEventEnrichment>> {
+  const result = new Map<string, CustomEventEnrichment>();
+
+  try {
+    const { prisma } = await import('@/lib/prisma');
+
+    const rows = await prisma.$queryRaw<Array<{
+      customerId: string;
+      eventType: string;
+      metadata: unknown;
+      createdAt: Date;
+    }>>`
+      SELECT "customerId", "eventType", "metadata", "createdAt"
+      FROM "storefront_events"
+      WHERE "storeId" = ${storeId} AND "customerId" IS NOT NULL AND "eventType" LIKE 'custom:%'
+    `.catch(() => [] as Array<{ customerId: string; eventType: string; metadata: unknown; createdAt: Date }>);
+
+    for (const row of rows) {
+      if (!row.customerId) continue;
+      const name = row.eventType.slice('custom:'.length);
+      if (!name) continue;
+
+      let entry = result.get(row.customerId);
+      if (!entry) {
+        entry = { events: {} };
+        result.set(row.customerId, entry);
+      }
+      if (!entry.events[name]) entry.events[name] = [];
+
+      const props = (row.metadata && typeof row.metadata === 'object')
+        ? row.metadata as Record<string, unknown>
+        : {};
+      entry.events[name].push({
+        properties: props,
+        timestamp: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
+      });
+    }
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to fetch custom events:', err);
   }
 
   return result;
@@ -652,6 +725,7 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
   const requiresFlows = hasConditions && options.storeId && needsFlowEnrichment(conditionGroups);
   const requiresConversations = hasConditions && options.storeId && needsConversationEnrichment(conditionGroups);
   const requiresContacts = hasConditions && options.storeId && needsContactEnrichment(conditionGroups);
+  const requiresCustomEvents = hasConditions && options.storeId && needsCustomEventEnrichment(conditionGroups);
 
   // Fetch all needed enrichments in parallel
   let ordersByCustomer: Map<string, ShopifyOrder[]> | null = null;
@@ -663,6 +737,7 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
   let flowMap: Map<string, FlowEnrichment> | null = null;
   let conversationMap: Map<string, ConversationEnrichment> | null = null;
   let contactMap: Map<string, ContactEnrichment> | null = null;
+  let customEventMap: Map<string, CustomEventEnrichment> | null = null;
 
   const fetches: Promise<void>[] = [];
 
@@ -740,6 +815,14 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
     );
   }
 
+  if (requiresCustomEvents && options.storeId) {
+    fetches.push(
+      fetchCustomEventEnrichment(options.storeId).then(map => {
+        customEventMap = map;
+      })
+    );
+  }
+
   await Promise.all(fetches);
 
   // RFM is calculated from customer data
@@ -782,6 +865,9 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
           }
           if (contactMap) {
             enrichment.contact = resolveContactEnrichment(contactMap, customer);
+          }
+          if (customEventMap) {
+            enrichment.customEvents = customEventMap.get(custId);
           }
 
           return matchesGroups(customer, conditionGroups, enrichment);

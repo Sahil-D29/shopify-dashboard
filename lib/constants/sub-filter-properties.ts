@@ -8,6 +8,7 @@ export type SubFilterCategory =
   | 'flow'
   | 'product_event'
   | 'collection_event'
+  | 'search_event'
   | 'universal';
 
 export interface SubFilterProperty {
@@ -262,6 +263,14 @@ export const SUB_FILTER_PROPERTIES: SubFilterProperty[] = [
     searchable: true,
   },
 
+  // Search-event sub-filters (Searched Product)
+  {
+    name: 'search_term',
+    label: 'Search Term',
+    type: 'text',
+    parentCategory: 'search_event',
+  },
+
   // Universal sub-filters (available on ALL conditions)
   { name: 'value', label: 'Value', type: 'text', parentCategory: 'universal' },
   { name: 'count', label: 'Count', type: 'number', parentCategory: 'universal' },
@@ -308,11 +317,28 @@ export const FIELD_TO_SUBFILTER_CATEGORY: Record<string, SubFilterCategory> = {
   viewed_product: 'product_event',
   event_product_added_to_cart: 'product_event',
   added_product_to_cart: 'product_event',
-  // Shopify order events (line-item backed — same shape as order sub-filters)
+  event_product_removed_from_cart: 'product_event',
+  // Shopify cart & checkout events (abandoned items → product props)
+  event_cart_abandoned: 'product_event',
+  event_checkout_started: 'product_event',
+  event_checkout_abandoned: 'product_event',
+  // Shopify order + fulfillment events (line-item backed — same shape as order sub-filters)
   event_order_created: 'order',
   event_order_paid: 'order',
+  event_first_order: 'order',
+  event_repeat_order: 'order',
+  event_order_updated: 'order',
+  event_order_cancelled: 'order',
+  event_order_refunded: 'order',
+  event_order_fulfilled: 'order',
+  event_order_partially_fulfilled: 'order',
+  event_order_shipped: 'order',
+  event_out_for_delivery: 'order',
+  event_order_delivered: 'order',
   // Shopify storefront collection events
   event_collection_viewed: 'collection_event',
+  // Shopify storefront search events
+  event_product_searched: 'search_event',
 };
 
 /** Get available sub-filter properties for a given parent field */

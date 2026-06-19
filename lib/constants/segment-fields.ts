@@ -144,25 +144,42 @@ export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
   { value: 'churn_risk', label: 'Churn Risk', type: 'number', group: 'Predictive' },
   { value: 'lifetime_value_prediction', label: 'Lifetime Value Prediction', type: 'number', group: 'Predictive' },
 
-  // ─── Shopify Events ───
-  { value: 'event_order_created', label: 'Order Created', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
-  { value: 'event_order_paid', label: 'Order Paid', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
-  { value: 'event_order_fulfilled', label: 'Order Fulfilled', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_order_shipped', label: 'Order Shipped', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_order_delivered', label: 'Order Delivered', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_order_updated', label: 'Order Updated', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_order_cancelled', label: 'Order Cancelled', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_order_refunded', label: 'Order Refunded', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_checkout_started', label: 'Checkout Started', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_checkout_abandoned', label: 'Checkout Abandoned', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
-  { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
+  // ─── Shopify Events ─── (ordered: Browse → Cart & Checkout → Order → Fulfillment → Customer → Catalog/Subscription)
+  // Browse
+  { value: 'event_active_on_site', label: 'Active on Site', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true, supportsFrequency: true },
   { value: 'event_product_viewed', label: 'Product Viewed', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
   { value: 'viewed_product', label: 'Viewed Specific Product', type: 'text', group: 'Shopify Events', entityType: 'product', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  { value: 'event_product_searched', label: 'Searched Product', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
   { value: 'event_product_added_to_cart', label: 'Product Added to Cart', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
   { value: 'added_product_to_cart', label: 'Added Specific Product to Cart', type: 'text', group: 'Shopify Events', entityType: 'product', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
-  { value: 'event_collection_viewed', label: 'Collection Viewed', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
-  { value: 'event_product_searched', label: 'Searched Product', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
+  { value: 'event_product_removed_from_cart', label: 'Product Removed from Cart', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  // Cart & Checkout
+  { value: 'event_cart_abandoned', label: 'Cart Abandoned', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_checkout_started', label: 'Checkout Started', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_checkout_abandoned', label: 'Checkout Abandoned', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  // Order
+  { value: 'event_order_created', label: 'Order Placed', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  { value: 'event_order_paid', label: 'Order Paid', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  { value: 'event_first_order', label: 'First Order (New Customer)', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_repeat_order', label: 'Repeat Order (Returning Customer)', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true, supportsFrequency: true },
+  { value: 'event_order_updated', label: 'Order Updated', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_cancelled', label: 'Order Cancelled', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_refunded', label: 'Order Refunded', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_edited', label: 'Order Edited', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
+  { value: 'event_draft_order_created', label: 'Draft Order Created', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
+  // Fulfillment
+  { value: 'event_order_fulfilled', label: 'Order Fulfilled', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_partially_fulfilled', label: 'Order Partially Fulfilled', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_shipped', label: 'Order Shipped', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_out_for_delivery', label: 'Out for Delivery', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  { value: 'event_order_delivered', label: 'Order Delivered', type: 'boolean', group: 'Shopify Events', supportsSubFilters: true, supportsTimeWindow: true },
+  // Customer
+  { value: 'event_customer_created', label: 'Customer Created', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
+  { value: 'event_customer_updated', label: 'Customer Updated', type: 'boolean', group: 'Shopify Events', supportsTimeWindow: true },
+  { value: 'event_customer_enabled', label: 'Customer Account Enabled', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
+  { value: 'event_marketing_consent', label: 'Marketing Consent Updated', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
+  // Catalog / Subscription
   { value: 'event_back_in_stock', label: 'Back in Stock', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
   { value: 'event_price_drop', label: 'Price Drop', type: 'boolean', group: 'Shopify Events', status: 'coming_soon', supportsTimeWindow: true },
   { value: 'event_subscription_created', label: 'Subscription Created', type: 'boolean', group: 'Shopify Events', status: 'requires_app', supportsTimeWindow: true },
@@ -236,15 +253,22 @@ export function getFieldOptionsByGroup(): Record<string, SegmentFieldOption[]> {
   }, {} as Record<string, SegmentFieldOption[]>);
 }
 
+export interface CustomEventDef {
+  eventName: string;
+  displayName: string;
+  properties?: Array<{ name: string; type?: string }>;
+}
+
 /** Generate dynamic segment field options from custom event definitions */
 export function getCustomEventSegmentFields(
-  customEvents: Array<{ eventName: string; displayName: string }>
+  customEvents: CustomEventDef[]
 ): SegmentFieldOption[] {
   return customEvents.map((event) => ({
     value: `custom_event:${event.eventName}`,
-    label: `Triggered: ${event.displayName}`,
+    label: event.displayName,
     type: 'boolean' as SegmentFieldType,
     group: 'Custom Events',
+    supportsSubFilters: (event.properties?.length ?? 0) > 0,
     supportsTimeWindow: true,
     supportsFrequency: true,
   }));

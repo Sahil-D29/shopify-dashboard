@@ -51,6 +51,11 @@ export interface StorefrontCollectionRecord {
   timestamp: number;
 }
 
+export interface StorefrontSearchRecord {
+  term: string;
+  timestamp: number;
+}
+
 export interface StorefrontEventEnrichment {
   productViewed: boolean;
   viewedProductIds: string[];
@@ -61,6 +66,14 @@ export interface StorefrontEventEnrichment {
   viewedProducts: StorefrontProductRecord[];
   addedToCartProducts: StorefrontProductRecord[];
   viewedCollections: StorefrontCollectionRecord[];
+  // Extended browse events
+  activeOnSite: boolean;
+  lastActiveAt: number | null;
+  searched: boolean;
+  searchTerms: string[];
+  searchRecords: StorefrontSearchRecord[];
+  productRemovedFromCart: boolean;
+  removedFromCartProducts: StorefrontProductRecord[];
 }
 
 export interface JourneyEnrichment {
@@ -113,6 +126,16 @@ export interface ContactEnrichment {
   phone: string | null;
 }
 
+export interface CustomEventRecord {
+  properties: Record<string, unknown>;
+  timestamp: number;
+}
+
+/** Per-customer custom events, keyed by eventName (without the `custom:` prefix). */
+export interface CustomEventEnrichment {
+  events: Record<string, CustomEventRecord[]>;
+}
+
 export interface CustomerEnrichment {
   orders?: ShopifyOrder[];
   campaignLogs?: CampaignLogEnrichment;
@@ -123,6 +146,7 @@ export interface CustomerEnrichment {
   flows?: FlowEnrichment;
   conversations?: ConversationEnrichment;
   contact?: ContactEnrichment;
+  customEvents?: CustomEventEnrichment;
 }
 
 function getPrimaryAddress(customer: ShopifyCustomer) {
@@ -163,6 +187,14 @@ function timeWindowToMs(tw: TimeWindow): number {
 
 function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: CustomerEnrichment): ConditionValue {
   const addr = getPrimaryAddress(customer);
+
+  // ─── Custom Events (dynamic: `custom_event:<name>`) ───
+  if (field.startsWith('custom_event:')) {
+    const name = field.slice('custom_event:'.length);
+    const records = enrichment?.customEvents?.events?.[name];
+    return Array.isArray(records) && records.length > 0;
+  }
+
   switch (field) {
     // ─── Customer Attributes ───
     case 'customer_name':
@@ -604,8 +636,18 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
       return (enrichment?.orders?.length ?? Number(customer.orders_count || 0)) > 0;
     case 'event_order_paid':
       return (enrichment?.orders ?? []).some(o => o.financial_status === 'paid');
+    case 'event_first_order':
+      return Number(customer.orders_count || 0) === 1;
+    case 'event_repeat_order':
+      return Number(customer.orders_count || 0) > 1;
     case 'event_order_fulfilled':
       return (enrichment?.orders ?? []).some(o => o.fulfillment_status === 'fulfilled');
+    case 'event_order_partially_fulfilled':
+      return (enrichment?.orders ?? []).some(o => o.fulfillment_status === 'partial');
+    case 'event_out_for_delivery':
+      return (enrichment?.orders ?? []).some(o =>
+        ((o as any).fulfillments || []).some((f: any) => f?.shipment_status === 'out_for_delivery')
+      );
     case 'event_order_shipped':
       return (enrichment?.orders ?? []).some(o =>
         ((o as any).fulfillments || []).some((f: any) =>
@@ -647,7 +689,23 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
       return (enrichment?.storefrontEvents?.addedToCartProductIds ?? []).join(',');
     case 'event_collection_viewed':
       return enrichment?.storefrontEvents?.collectionViewed ?? false;
+    case 'event_active_on_site':
+      return enrichment?.storefrontEvents?.activeOnSite ?? false;
     case 'event_product_searched':
+      return enrichment?.storefrontEvents?.searched ?? false;
+    case 'event_product_removed_from_cart':
+      return enrichment?.storefrontEvents?.productRemovedFromCart ?? false;
+    case 'event_cart_abandoned': {
+      // Added to cart but never completed an order, OR has an abandoned checkout
+      const addedToCart = enrichment?.storefrontEvents?.productAddedToCart ?? false;
+      const noOrders = Number(customer.orders_count || 0) === 0 && (enrichment?.orders?.length ?? 0) === 0;
+      const abandonedCheckout = (enrichment?.abandonedCheckouts?.count ?? 0) > 0;
+      return (addedToCart && noOrders) || abandonedCheckout;
+    }
+    case 'event_order_edited':
+    case 'event_draft_order_created':
+    case 'event_customer_enabled':
+    case 'event_marketing_consent':
     case 'event_back_in_stock':
     case 'event_price_drop':
       // Not yet tracked (marked coming_soon in field options) — never match silently
@@ -771,6 +829,14 @@ function getFieldCollection(
   field: string,
   enrichment?: CustomerEnrichment
 ): Array<Record<string, unknown>> | null {
+  // Custom events: each occurrence's properties become a filterable record
+  if (field.startsWith('custom_event:')) {
+    const name = field.slice('custom_event:'.length);
+    const records = enrichment?.customEvents?.events?.[name];
+    if (!records) return null;
+    return records.map(r => ({ ...r.properties, timestamp: r.timestamp }));
+  }
+
   switch (field) {
     // Order-based fields return order line items
     case 'ordered_specific_product':
@@ -778,9 +844,19 @@ function getFieldCollection(
     case 'ordered_product_vendor':
     case 'ordered_product_type':
     case 'order_discount_code':
-    // Order events expose the same line-item collection for sub-filtering
+    // Order + fulfillment events expose the same line-item collection for sub-filtering
     case 'event_order_created':
-    case 'event_order_paid': {
+    case 'event_order_paid':
+    case 'event_first_order':
+    case 'event_repeat_order':
+    case 'event_order_updated':
+    case 'event_order_cancelled':
+    case 'event_order_refunded':
+    case 'event_order_fulfilled':
+    case 'event_order_partially_fulfilled':
+    case 'event_order_shipped':
+    case 'event_out_for_delivery':
+    case 'event_order_delivered': {
       if (!enrichment?.orders?.length) return null;
       return enrichment.orders.flatMap(order =>
         (order.line_items || []).map(li => ({
@@ -844,13 +920,23 @@ function getFieldCollection(
     case 'event_product_viewed':
     case 'viewed_product':
     case 'event_product_added_to_cart':
-    case 'added_product_to_cart': {
+    case 'added_product_to_cart':
+    case 'event_product_removed_from_cart':
+    // Cart & checkout events sub-filter on the items in the cart/checkout (= added-to-cart records)
+    case 'event_cart_abandoned':
+    case 'event_checkout_started':
+    case 'event_checkout_abandoned': {
       const sf = enrichment?.storefrontEvents;
       if (!sf) return null;
-      const records =
-        field === 'event_product_added_to_cart' || field === 'added_product_to_cart'
-          ? sf.addedToCartProducts || []
-          : sf.viewedProducts || [];
+      let records: StorefrontProductRecord[];
+      if (field === 'event_product_removed_from_cart') {
+        records = sf.removedFromCartProducts || [];
+      } else if (field === 'event_product_viewed' || field === 'viewed_product') {
+        records = sf.viewedProducts || [];
+      } else {
+        // added-to-cart, cart abandoned, checkout started/abandoned → cart items
+        records = sf.addedToCartProducts || [];
+      }
       return records.map(r => ({
         product_id: r.id,
         product_title: r.title,
@@ -867,6 +953,15 @@ function getFieldCollection(
       return records.map(r => ({
         collection_id: r.id,
         collection_title: r.title,
+        timestamp: r.timestamp,
+      }));
+    }
+    // Search events sub-filter on the search term
+    case 'event_product_searched': {
+      const records = enrichment?.storefrontEvents?.searchRecords || [];
+      return records.map(r => ({
+        search_term: r.term,
+        value: r.term,
         timestamp: r.timestamp,
       }));
     }
@@ -989,6 +1084,8 @@ export function needsOrderEnrichment(groups: SegmentGroup[]): boolean {
     'event_order_created', 'event_order_paid', 'event_order_fulfilled',
     'event_order_shipped', 'event_order_delivered', 'event_order_updated',
     'event_order_cancelled', 'event_order_refunded', 'event_checkout_started',
+    'event_first_order', 'event_repeat_order', 'event_order_partially_fulfilled',
+    'event_out_for_delivery', 'event_cart_abandoned',
     // Advanced order fields
     'ordered_product_vendor', 'ordered_product_type', 'order_discount_code',
     'order_shipping_method', 'order_payment_method', 'order_fulfillment_status',
@@ -1020,7 +1117,7 @@ export function needsEngagementEnrichment(groups: SegmentGroup[]): boolean {
 export function needsAbandonedCheckoutEnrichment(groups: SegmentGroup[]): boolean {
   const fields = new Set([
     'cart_abandonment_count', 'last_abandoned_cart_date',
-    'event_checkout_started', 'event_checkout_abandoned',
+    'event_checkout_started', 'event_checkout_abandoned', 'event_cart_abandoned',
   ]);
   return (groups || []).some(g =>
     (g.conditions || []).some(c => fields.has(c.field))
@@ -1043,9 +1140,19 @@ export function needsStorefrontEnrichment(groups: SegmentGroup[]): boolean {
     'event_product_viewed', 'viewed_product',
     'event_product_added_to_cart', 'added_product_to_cart',
     'event_collection_viewed',
+    'event_active_on_site', 'event_product_searched',
+    'event_product_removed_from_cart', 'event_cart_abandoned',
+    'event_checkout_started', 'event_checkout_abandoned',
   ]);
   return (groups || []).some(g =>
     (g.conditions || []).some(c => fields.has(c.field))
+  );
+}
+
+/** Check if any condition references a custom event (`custom_event:<name>`) */
+export function needsCustomEventEnrichment(groups: SegmentGroup[]): boolean {
+  return (groups || []).some(g =>
+    (g.conditions || []).some(c => typeof c.field === 'string' && c.field.startsWith('custom_event:'))
   );
 }
 
