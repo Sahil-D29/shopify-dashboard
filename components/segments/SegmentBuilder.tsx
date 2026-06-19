@@ -32,6 +32,7 @@ type PreviewData = {
   totalValue?: number;
   avgOrderValue?: number;
   averageOrderValue?: number;
+  error?: string;
   sampleCustomers?: Array<{ name?: string; email?: string; phone?: string }>;
 };
 
@@ -125,7 +126,6 @@ export default function SegmentBuilder({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conditionGroups: readyGroups,
-            forceRefresh: true,
           }),
           signal: controller.signal,
         });
@@ -410,6 +410,14 @@ export default function SegmentBuilder({
                     <Loader2 className="w-6 h-6 text-primary animate-spin" />
                     <span className="text-sm text-muted-foreground">Calculating...</span>
                   </div>
+                ) : hasConditions && previewData?.error ? (
+                  <div className="py-2">
+                    <Users className="w-8 h-8 text-amber-500/40 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-foreground">Couldn&apos;t reach Shopify</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Reconnect your store in Settings to preview matching customers.
+                    </p>
+                  </div>
                 ) : hasConditions && previewCount != null ? (
                   <>
                     <p className="text-4xl font-bold text-foreground">
@@ -428,7 +436,7 @@ export default function SegmentBuilder({
               </div>
 
               {/* Quick stats */}
-              {hasConditions && previewData && !isPreviewing && (
+              {hasConditions && previewData && !previewData.error && !isPreviewing && (
                 <>
                   <div className="h-px bg-border" />
                   <div className="grid grid-cols-2 gap-3">

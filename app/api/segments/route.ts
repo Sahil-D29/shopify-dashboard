@@ -338,26 +338,29 @@ export async function POST(request: NextRequest) {
     });
     const newSegment = toCustomerSegment(created);
 
-    // Calculate customer count via Shopify API and persist (best-effort, non-blocking)
-    try {
-      const client = await getShopifyClientAsync(request);
-      const stats = await calculateSegmentStats({
-        client,
-        segmentId: created.id,
-        conditionGroups: data.conditionGroups || [],
-        forceRefresh: true,
-        storeId,
-      });
-      await updateSegmentStats(created.id, {
-        customerCount: stats.customerCount,
-        totalRevenue: stats.totalValue,
-        averageOrderValue: stats.avgOrderValue,
-        lastCalculated: stats.lastUpdated,
-      });
-      newSegment.customerCount = stats.customerCount;
-    } catch (statsError) {
-      console.warn('[Segments][POST] Failed to calculate initial stats:', getErrorMessage(statsError));
-    }
+    // Calculate customer count via Shopify API and persist — fire-and-forget so saving the
+    // segment returns immediately (the Shopify fetch can be slow/unreachable). The count is
+    // backfilled asynchronously and refreshed on the segment list/detail views.
+    void (async () => {
+      try {
+        const client = await getShopifyClientAsync(request);
+        const stats = await calculateSegmentStats({
+          client,
+          segmentId: created.id,
+          conditionGroups: data.conditionGroups || [],
+          forceRefresh: true,
+          storeId,
+        });
+        await updateSegmentStats(created.id, {
+          customerCount: stats.customerCount,
+          totalRevenue: stats.totalValue,
+          averageOrderValue: stats.avgOrderValue,
+          lastCalculated: stats.lastUpdated,
+        });
+      } catch (statsError) {
+        console.warn('[Segments][POST] Failed to calculate initial stats:', getErrorMessage(statsError));
+      }
+    })();
 
     return NextResponse.json(
       {

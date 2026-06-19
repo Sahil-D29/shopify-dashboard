@@ -44,6 +44,8 @@ export interface SegmentStats {
   avgOrderValue: number;
   lastUpdated: number;
   customers?: ShopifyCustomer[];
+  /** Set when the customer population couldn't be loaded (e.g. Shopify auth error). */
+  error?: string;
 }
 
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
@@ -709,9 +711,28 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
 
   const conditionGroups = options.conditionGroups || [];
 
-  const sourceCustomers: ShopifyCustomer[] = options.customers
-    ? options.customers
-    : await options.client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
+  let sourceCustomers: ShopifyCustomer[];
+  if (options.customers) {
+    sourceCustomers = options.customers;
+  } else {
+    try {
+      sourceCustomers = await options.client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
+    } catch (err) {
+      // Shopify unreachable / invalid credentials — degrade gracefully instead of throwing,
+      // so the preview shows a clear message and Save never hangs/errors on stats.
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[SegmentStats] Failed to fetch customers:', message);
+      return {
+        customerCount: 0,
+        totalValue: 0,
+        totalOrders: 0,
+        avgOrderValue: 0,
+        lastUpdated: now,
+        customers: [],
+        error: message,
+      };
+    }
+  }
 
   const hasConditions = conditionGroups.length > 0 && conditionGroups.some(group => (group.conditions || []).length > 0);
 

@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       totalValue: stats.totalValue,
       avgOrderValue: stats.avgOrderValue,
       lastUpdated: stats.lastUpdated,
+      error: stats.error,
       sampleCustomers: customers.map(customer => ({
         id: customer.id,
         name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),

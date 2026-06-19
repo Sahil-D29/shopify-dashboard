@@ -84,8 +84,11 @@ export default function ConditionRow({
       ? getSubFilterProperties(condition.field)
       : UNIVERSAL_SUB_FILTER_PROPERTIES;
 
+  // Auto-expand the filter panel when the field supports sub-filters (or already has advanced
+  // config) so the property-filter dropdown is visible without hunting for the funnel icon.
   const [isExpanded, setIsExpanded] = useState(
-    !!(condition.subFilters?.length || condition.timeWindow?.amount || condition.frequency?.count)
+    !!(condition.subFilters?.length || condition.timeWindow?.amount || condition.frequency?.count
+      || fieldMeta?.supportsSubFilters)
   );
 
   const hasAdvanced = true; // Every condition has expandable filters
@@ -147,6 +150,8 @@ export default function ConditionRow({
             onValueChange={(nextField) => {
               const nextType = getFieldType(nextField);
               const defaultOp = SEGMENT_OPERATORS[nextType]?.[0]?.value ?? '';
+              // Reveal the property-filter panel for fields that support sub-filters
+              if (getOption(nextField)?.supportsSubFilters) setIsExpanded(true);
               onChange({
                 ...condition,
                 field: nextField,
