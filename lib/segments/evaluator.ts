@@ -35,12 +35,32 @@ export interface RFMEnrichment {
   monetary: number;
 }
 
+export interface StorefrontProductRecord {
+  id: string;
+  title: string;
+  tags: string[];
+  type: string;
+  vendor: string;
+  price: number;
+  timestamp: number;
+}
+
+export interface StorefrontCollectionRecord {
+  id: string;
+  title: string;
+  timestamp: number;
+}
+
 export interface StorefrontEventEnrichment {
   productViewed: boolean;
   viewedProductIds: string[];
   productAddedToCart: boolean;
   addedToCartProductIds: string[];
   collectionViewed: boolean;
+  // Rich per-event records powering sub-filters (product tags/type/vendor/price, collection)
+  viewedProducts: StorefrontProductRecord[];
+  addedToCartProducts: StorefrontProductRecord[];
+  viewedCollections: StorefrontCollectionRecord[];
 }
 
 export interface JourneyEnrichment {
@@ -586,6 +606,21 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
       return (enrichment?.orders ?? []).some(o => o.financial_status === 'paid');
     case 'event_order_fulfilled':
       return (enrichment?.orders ?? []).some(o => o.fulfillment_status === 'fulfilled');
+    case 'event_order_shipped':
+      return (enrichment?.orders ?? []).some(o =>
+        ((o as any).fulfillments || []).some((f: any) =>
+          f?.status === 'success' || f?.shipment_status === 'in_transit' ||
+          f?.shipment_status === 'out_for_delivery' || f?.shipment_status === 'delivered'
+        )
+      );
+    case 'event_order_delivered':
+      return (enrichment?.orders ?? []).some(o =>
+        ((o as any).fulfillments || []).some((f: any) => f?.shipment_status === 'delivered')
+      );
+    case 'event_order_updated': {
+      const updTs = customer.updated_at ? new Date(customer.updated_at).getTime() : 0;
+      return updTs > 0 ? updTs : undefined;
+    }
     case 'event_order_cancelled':
       return (enrichment?.orders ?? []).some(o => (o as any).cancelled_at != null);
     case 'event_order_refunded':
@@ -612,6 +647,11 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
       return (enrichment?.storefrontEvents?.addedToCartProductIds ?? []).join(',');
     case 'event_collection_viewed':
       return enrichment?.storefrontEvents?.collectionViewed ?? false;
+    case 'event_product_searched':
+    case 'event_back_in_stock':
+    case 'event_price_drop':
+      // Not yet tracked (marked coming_soon in field options) — never match silently
+      return false;
     case 'event_subscription_created':
     case 'event_subscription_renewed':
     case 'event_subscription_cancelled':
@@ -626,6 +666,9 @@ function getFieldValue(customer: ShopifyCustomer, field: string, enrichment?: Cu
       return false;
 
     default:
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[SegmentEvaluator] Unknown segment field "${field}" — no evaluator case; condition will not match.`);
+      }
       return undefined;
   }
 }
@@ -734,11 +777,18 @@ function getFieldCollection(
     case 'ordered_from_collection':
     case 'ordered_product_vendor':
     case 'ordered_product_type':
-    case 'order_discount_code': {
+    case 'order_discount_code':
+    // Order events expose the same line-item collection for sub-filtering
+    case 'event_order_created':
+    case 'event_order_paid': {
       if (!enrichment?.orders?.length) return null;
       return enrichment.orders.flatMap(order =>
         (order.line_items || []).map(li => ({
           product_name: li.title || li.name || '',
+          // alias so product_event-style sub-filters also work on order line items
+          product_title: li.title || li.name || '',
+          product_tags: '',
+          vendor: (li as any).vendor || '',
           product_price: Number(li.price || 0),
           product_vendor: (li as any).vendor || '',
           product_type: (li as any).product_type || '',
@@ -790,10 +840,47 @@ function getFieldCollection(
         timestamp: r.createdAt,
       }));
     }
+    // Storefront product events return per-view/per-cart product records
+    case 'event_product_viewed':
+    case 'viewed_product':
+    case 'event_product_added_to_cart':
+    case 'added_product_to_cart': {
+      const sf = enrichment?.storefrontEvents;
+      if (!sf) return null;
+      const records =
+        field === 'event_product_added_to_cart' || field === 'added_product_to_cart'
+          ? sf.addedToCartProducts || []
+          : sf.viewedProducts || [];
+      return records.map(r => ({
+        product_id: r.id,
+        product_title: r.title,
+        product_tags: (r.tags || []).join(','),
+        product_type: r.type,
+        vendor: r.vendor,
+        product_price: r.price,
+        timestamp: r.timestamp,
+      }));
+    }
+    // Storefront collection views return per-view collection records
+    case 'event_collection_viewed': {
+      const records = enrichment?.storefrontEvents?.viewedCollections || [];
+      return records.map(r => ({
+        collection_id: r.id,
+        collection_title: r.title,
+        timestamp: r.timestamp,
+      }));
+    }
     default:
       return null;
   }
 }
+
+/** Identity keys used to apply a condition's main value as a per-item filter on collections */
+const COLLECTION_IDENTITY_KEYS = [
+  'product_id', 'product_title', 'product_name',
+  'collection_id', 'collection_title',
+  'discount_code', 'template_name',
+];
 
 /** Evaluate a condition with sub-filters, time windows, and frequency qualifiers */
 function evaluateConditionWithSubFilters(
@@ -829,13 +916,24 @@ function evaluateConditionWithSubFilters(
     });
   }
 
-  // Apply the main condition value filter (e.g., specific product match)
-  if (condition.value && condition.value !== '' && condition.operator !== 'is_true' && condition.operator !== 'is_false') {
-    const mainValue = getFieldValue(customer, condition.field, enrichment);
-    if (!opCompare(mainValue, condition.operator, condition.value)) {
-      // If the main condition doesn't match at all, return false
-      // But we need to check per-item for collection fields
-    }
+  // Apply the main condition value as a per-item filter on the collection
+  // (e.g. "Viewed Specific Product = X", "Ordered Specific Product contains X").
+  const hasMainValue =
+    condition.value !== undefined &&
+    condition.value !== '' &&
+    !(Array.isArray(condition.value) && condition.value.length === 0) &&
+    condition.operator !== 'is_true' &&
+    condition.operator !== 'is_false';
+  if (hasMainValue) {
+    const op = condition.operator || 'equals';
+    filtered = filtered.filter(item => {
+      const candidates = COLLECTION_IDENTITY_KEYS
+        .map(key => item[key])
+        .filter(v => v !== undefined && v !== null && v !== '');
+      // If the item exposes no identity key, don't exclude it on the main value.
+      if (candidates.length === 0) return true;
+      return candidates.some(c => opCompare(c as ConditionValue, op, condition.value));
+    });
   }
 
   // Apply sub-filters to each item
@@ -889,6 +987,7 @@ export function needsOrderEnrichment(groups: SegmentGroup[]): boolean {
     'first_order_date', 'last_order_date', 'ordered_from_collection',
     'days_since_last_order', 'last_seen', 'churn_risk',
     'event_order_created', 'event_order_paid', 'event_order_fulfilled',
+    'event_order_shipped', 'event_order_delivered', 'event_order_updated',
     'event_order_cancelled', 'event_order_refunded', 'event_checkout_started',
     // Advanced order fields
     'ordered_product_vendor', 'ordered_product_type', 'order_discount_code',

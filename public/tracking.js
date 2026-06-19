@@ -60,6 +60,28 @@
     }
   }
 
+  // Build product metadata from whatever the theme exposes. Tags are usually NOT
+  // available client-side — the app backfills them server-side from the product id.
+  function buildProductMeta(product) {
+    if (!product) return null;
+    var meta = {};
+    if (product.title) meta.title = String(product.title);
+    if (product.vendor) meta.vendor = String(product.vendor);
+    if (product.type) meta.productType = String(product.type);
+    if (Array.isArray(product.tags) && product.tags.length) {
+      meta.tags = product.tags.map(String);
+    } else if (typeof product.tags === 'string' && product.tags) {
+      meta.tags = product.tags.split(',').map(function (t) { return t.trim(); });
+    }
+    var variants = product.variants;
+    if (variants && variants.length && variants[0] && variants[0].price != null) {
+      var price = Number(variants[0].price);
+      // Shopify analytics prices are often in cents
+      meta.price = price > 1000 ? price / 100 : price;
+    }
+    return Object.keys(meta).length ? meta : null;
+  }
+
   // Auto-detect page type and track
   function autoTrack() {
     var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
@@ -68,13 +90,24 @@
     var pageType = meta.page.pageType;
 
     if (pageType === 'product') {
-      var productId = meta.product && meta.product.id;
-      var productTitle = meta.product && meta.product.title;
-      sendEvent('product_viewed', productId ? String(productId) : null, productTitle || null);
+      var product = meta.product || (window.meta && window.meta.product);
+      var productId = product && product.id;
+      var productTitle = product && product.title;
+      sendEvent(
+        'product_viewed',
+        productId ? String(productId) : null,
+        productTitle || null,
+        buildProductMeta(product)
+      );
     } else if (pageType === 'collection') {
       var collectionId = meta.page.resourceId;
       var collectionTitle = meta.page.title;
-      sendEvent('collection_viewed', collectionId ? String(collectionId) : null, collectionTitle || null);
+      sendEvent(
+        'collection_viewed',
+        collectionId ? String(collectionId) : null,
+        collectionTitle || null,
+        collectionTitle ? { collectionTitle: String(collectionTitle) } : null
+      );
     }
   }
 

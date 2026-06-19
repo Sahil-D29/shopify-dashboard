@@ -86,7 +86,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[480px] p-0" align="start">
+      <PopoverContent className="w-[calc(100vw-1.5rem)] max-w-[480px] p-0" align="start">
         {/* Search bar */}
         <div className="flex items-center border-b px-3 py-2">
           <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
@@ -101,7 +101,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
         <div className="flex">
           {/* Left: Category tabs */}
           {!search.trim() && (
-            <ScrollArea className="w-[180px] border-r">
+            <ScrollArea className="w-[130px] sm:w-[180px] shrink-0 border-r">
               <div className="py-1">
                 <button
                   onClick={() => setActiveGroup(null)}

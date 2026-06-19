@@ -3,14 +3,12 @@
 import { useMemo } from 'react';
 import { SEGMENT_FIELD_OPTIONS } from '@/lib/constants/segment-fields';
 import type { ConditionValue } from './ConditionRow';
-import type { EventRule } from './EventRuleRow';
 import { FileText } from 'lucide-react';
 
 type Group = {
   id: string;
   groupOperator: 'AND' | 'OR';
   conditions: ConditionValue[];
-  eventRules?: EventRule[];
 };
 
 function getFieldLabel(field: string): string {
@@ -88,23 +86,13 @@ export function ConditionSummary({ groups }: ConditionSummaryProps) {
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
-      const hasConditions = group.conditions.length > 0;
-      const hasEvents = (group.eventRules || []).some(r => r.eventName);
-
-      if (!hasConditions && !hasEvents) continue;
+      if (group.conditions.length === 0) continue;
 
       const condDescs: string[] = [];
 
-      // Attribute conditions
+      // Attribute / event conditions
       for (const c of group.conditions) {
         condDescs.push(describeCondition(c));
-      }
-
-      // Event rules within this group
-      for (const rule of group.eventRules || []) {
-        if (!rule.eventName) continue;
-        const action = rule.action === 'did' ? 'performed' : 'did not perform';
-        condDescs.push(`${action} "${rule.eventDisplayName || rule.eventName}"`);
       }
 
       const joinWord = group.groupOperator === 'OR' ? ' OR ' : ' AND ';

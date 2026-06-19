@@ -135,7 +135,7 @@ export default function ConditionRow({
       {/* Main condition row */}
       <div className="p-3 space-y-2">
         {/* Row 1: Field + Operator + Delete */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Expand toggle */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -162,7 +162,7 @@ export default function ConditionRow({
                 frequency: undefined,
               });
             }}
-            className="flex-1 min-w-[160px]"
+            className="flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[160px]"
           />
 
           {/* Operator selector */}
@@ -170,7 +170,7 @@ export default function ConditionRow({
             value={condition.operator}
             onValueChange={(op) => onChange({ ...condition, operator: op })}
           >
-            <SelectTrigger className="w-[130px] shrink-0">
+            <SelectTrigger className="flex-1 sm:flex-none w-auto sm:w-[130px] min-w-[110px]">
               <SelectValue placeholder="Operator" />
             </SelectTrigger>
             <SelectContent>

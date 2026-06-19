@@ -1,7 +1,14 @@
 import type { ConditionOperator } from '@/lib/types/segment';
 
 export type SubFilterPropertyType = 'text' | 'number' | 'date';
-export type SubFilterCategory = 'order' | 'campaign' | 'journey' | 'flow' | 'universal';
+export type SubFilterCategory =
+  | 'order'
+  | 'campaign'
+  | 'journey'
+  | 'flow'
+  | 'product_event'
+  | 'collection_event'
+  | 'universal';
 
 export interface SubFilterProperty {
   name: string;
@@ -195,6 +202,66 @@ export const SUB_FILTER_PROPERTIES: SubFilterProperty[] = [
     parentCategory: 'flow',
   },
 
+  // Product-event sub-filters (Product Viewed / Added to Cart / Viewed Specific Product)
+  {
+    name: 'product_title',
+    label: 'Product Title',
+    type: 'text',
+    parentCategory: 'product_event',
+    apiEndpoint: '/api/shopify/products',
+    valueField: 'title',
+    labelField: 'title',
+    searchable: true,
+  },
+  {
+    name: 'product_tags',
+    label: 'Product Tags',
+    type: 'text',
+    parentCategory: 'product_event',
+    apiEndpoint: '/api/shopify/tags',
+    valueField: 'tag',
+    labelField: 'tag',
+    searchable: true,
+  },
+  {
+    name: 'product_type',
+    label: 'Product Type',
+    type: 'text',
+    parentCategory: 'product_event',
+    apiEndpoint: '/api/shopify/product-types',
+    valueField: 'type',
+    labelField: 'type',
+    searchable: true,
+  },
+  {
+    name: 'vendor',
+    label: 'Vendor',
+    type: 'text',
+    parentCategory: 'product_event',
+    apiEndpoint: '/api/shopify/vendors',
+    valueField: 'name',
+    labelField: 'name',
+    searchable: true,
+  },
+  {
+    name: 'product_price',
+    label: 'Product Price',
+    type: 'number',
+    parentCategory: 'product_event',
+  },
+
+  // Collection-event sub-filters (Collection Viewed)
+  {
+    name: 'collection_title',
+    label: 'Collection Title',
+    type: 'text',
+    parentCategory: 'collection_event',
+    apiEndpoint: '/api/shopify/collections',
+    valueField: 'title',
+    labelField: 'title',
+    searchable: true,
+  },
+
   // Universal sub-filters (available on ALL conditions)
   { name: 'value', label: 'Value', type: 'text', parentCategory: 'universal' },
   { name: 'count', label: 'Count', type: 'number', parentCategory: 'universal' },
@@ -236,6 +303,16 @@ export const FIELD_TO_SUBFILTER_CATEGORY: Record<string, SubFilterCategory> = {
   flow_completed_specific: 'flow',
   flow_started_specific: 'flow',
   flow_dropout: 'flow',
+  // Shopify storefront product events
+  event_product_viewed: 'product_event',
+  viewed_product: 'product_event',
+  event_product_added_to_cart: 'product_event',
+  added_product_to_cart: 'product_event',
+  // Shopify order events (line-item backed — same shape as order sub-filters)
+  event_order_created: 'order',
+  event_order_paid: 'order',
+  // Shopify storefront collection events
+  event_collection_viewed: 'collection_event',
 };
 
 /** Get available sub-filter properties for a given parent field */

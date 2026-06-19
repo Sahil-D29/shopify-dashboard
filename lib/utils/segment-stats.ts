@@ -211,8 +211,50 @@ async function fetchAbandonedCheckoutEnrichment(
   return result;
 }
 
+/** Product metadata cache for backfilling storefront events that lack rich metadata. */
+interface ProductMeta { tags: string[]; type: string; vendor: string; price: number }
+const productMetaCache = new Map<string, { ts: number; map: Map<string, ProductMeta> }>();
+const PRODUCT_META_TTL = 5 * 60 * 1000; // 5 min
+
+function normalizeTags(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(t => String(t).trim()).filter(Boolean);
+  if (typeof raw === 'string') return raw.split(',').map(t => t.trim()).filter(Boolean);
+  return [];
+}
+
+/** Fetch (and cache) a store's product metadata map keyed by product id, for backfill. */
+async function getProductMetaMap(
+  storeId: string,
+  client?: ShopifyClient
+): Promise<Map<string, ProductMeta>> {
+  const cached = productMetaCache.get(storeId);
+  if (cached && Date.now() - cached.ts < PRODUCT_META_TTL) return cached.map;
+  const map = new Map<string, ProductMeta>();
+  if (!client) return map;
+  try {
+    const data = (await client.getProducts({ limit: 250 })) as { products?: Array<Record<string, unknown>> };
+    for (const p of data.products ?? []) {
+      const id = String((p as any).id ?? '');
+      if (!id) continue;
+      const variants = (p as any).variants as Array<{ price?: string | number }> | undefined;
+      const price = variants?.length ? Number(variants[0].price ?? 0) : 0;
+      map.set(id, {
+        tags: normalizeTags((p as any).tags),
+        type: String((p as any).product_type ?? ''),
+        vendor: String((p as any).vendor ?? ''),
+        price: Number.isFinite(price) ? price : 0,
+      });
+    }
+    productMetaCache.set(storeId, { ts: Date.now(), map });
+  } catch (err) {
+    console.warn('[SegmentStats] Failed to backfill product metadata:', err);
+  }
+  return map;
+}
+
 async function fetchStorefrontEventEnrichment(
-  storeId: string
+  storeId: string,
+  client?: ShopifyClient
 ): Promise<Map<string, StorefrontEventEnrichment>> {
   const result = new Map<string, StorefrontEventEnrichment>();
 
@@ -223,11 +265,22 @@ async function fetchStorefrontEventEnrichment(
       customerId: string;
       eventType: string;
       resourceId: string | null;
+      resourceTitle: string | null;
+      metadata: unknown;
+      createdAt: Date;
     }>>`
-      SELECT "customerId", "eventType", "resourceId"
+      SELECT "customerId", "eventType", "resourceId", "resourceTitle", "metadata", "createdAt"
       FROM "storefront_events"
       WHERE "storeId" = ${storeId} AND "customerId" IS NOT NULL
-    `.catch(() => [] as Array<{ customerId: string; eventType: string; resourceId: string | null }>);
+    `.catch(() => [] as Array<{ customerId: string; eventType: string; resourceId: string | null; resourceTitle: string | null; metadata: unknown; createdAt: Date }>);
+
+    // Determine whether any product event lacks rich metadata → backfill from Shopify.
+    const needsBackfill = rows.some(r =>
+      (r.eventType === 'product_viewed' || r.eventType === 'product_added_to_cart') &&
+      r.resourceId &&
+      !(r.metadata && typeof r.metadata === 'object' && (r.metadata as any).tags)
+    );
+    const productMeta = needsBackfill ? await getProductMetaMap(storeId, client) : new Map<string, ProductMeta>();
 
     for (const row of rows) {
       if (!row.customerId) continue;
@@ -239,9 +292,26 @@ async function fetchStorefrontEventEnrichment(
           productAddedToCart: false,
           addedToCartProductIds: [],
           collectionViewed: false,
+          viewedProducts: [],
+          addedToCartProducts: [],
+          viewedCollections: [],
         };
         result.set(row.customerId, entry);
       }
+
+      const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata as Record<string, unknown> : {};
+      const ts = row.createdAt ? new Date(row.createdAt).getTime() : Date.now();
+      const fallback = row.resourceId ? productMeta.get(row.resourceId) : undefined;
+
+      const buildProductRecord = () => ({
+        id: row.resourceId ?? '',
+        title: String(meta.title ?? row.resourceTitle ?? ''),
+        tags: normalizeTags(meta.tags).length ? normalizeTags(meta.tags) : (fallback?.tags ?? []),
+        type: String(meta.productType ?? meta.product_type ?? fallback?.type ?? ''),
+        vendor: String(meta.vendor ?? fallback?.vendor ?? ''),
+        price: Number(meta.price ?? fallback?.price ?? 0) || 0,
+        timestamp: ts,
+      });
 
       switch (row.eventType) {
         case 'product_viewed':
@@ -249,15 +319,22 @@ async function fetchStorefrontEventEnrichment(
           if (row.resourceId && !entry.viewedProductIds.includes(row.resourceId)) {
             entry.viewedProductIds.push(row.resourceId);
           }
+          entry.viewedProducts.push(buildProductRecord());
           break;
         case 'product_added_to_cart':
           entry.productAddedToCart = true;
           if (row.resourceId && !entry.addedToCartProductIds.includes(row.resourceId)) {
             entry.addedToCartProductIds.push(row.resourceId);
           }
+          entry.addedToCartProducts.push(buildProductRecord());
           break;
         case 'collection_viewed':
           entry.collectionViewed = true;
+          entry.viewedCollections.push({
+            id: row.resourceId ?? '',
+            title: String(meta.collectionTitle ?? meta.title ?? row.resourceTitle ?? ''),
+            timestamp: ts,
+          });
           break;
       }
     }
@@ -625,7 +702,7 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
 
   if (requiresStorefront && options.storeId) {
     fetches.push(
-      fetchStorefrontEventEnrichment(options.storeId).then(map => {
+      fetchStorefrontEventEnrichment(options.storeId, options.client).then(map => {
         storefrontMap = map;
       })
     );

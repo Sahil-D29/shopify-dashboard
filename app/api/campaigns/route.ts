@@ -7,17 +7,13 @@ import type {
   CampaignType,
 } from '@/lib/types/campaign';
 import type { CustomerSegment } from '@/lib/types/segment';
-import type {
-  ShopifyCustomer,
-  ShopifyCustomerListResponse,
-} from '@/lib/types/shopify-customer';
 import { prisma } from '@/lib/prisma';
 import {
   transformCampaign,
   transformCampaignToDb,
 } from '@/lib/utils/db-transformers';
 import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
-import { matchesGroups } from '@/lib/segments/evaluator';
+import { resolveSegmentCustomers } from '@/lib/segments/resolve-customers';
 import {
   filterByStoreId,
   ensureStoreId,
@@ -111,26 +107,14 @@ const calculateEstimatedReach = async (
 
   try {
     const client = await getShopifyClientAsync(request);
+    const storeId = (await getCurrentStoreId(request)) || undefined;
 
-    const selectedSegments = await prisma.segment.findMany({
-      where: {
-        id: { in: segmentIds },
-      },
+    // Enrichment-correct resolution — must match the preview count and the actual send.
+    const matchingCustomers = await resolveSegmentCustomers({
+      client,
+      storeId,
+      segmentIds,
     });
-
-    if (selectedSegments.length === 0) return fallback;
-
-    const customersResponse: ShopifyCustomerListResponse =
-      await client.getCustomers({ limit: 250 });
-
-    const customers = (customersResponse.customers ?? []) as ShopifyCustomer[];
-
-    const matchingCustomers = customers.filter((customer) =>
-      selectedSegments.every((segment) => {
-        const conditionGroups = (segment.filters as any)?.conditionGroups || [];
-        return matchesGroups(customer, conditionGroups);
-      }),
-    );
 
     return matchingCustomers.length || fallback;
   } catch (error) {

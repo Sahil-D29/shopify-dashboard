@@ -6,7 +6,7 @@ import { transformCampaign } from '@/lib/utils/db-transformers';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
 import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
-import { matchesGroups } from '@/lib/segments/evaluator';
+import { resolveSegmentCustomers } from '@/lib/segments/resolve-customers';
 import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
@@ -79,24 +79,15 @@ export async function POST(
 
     const whatsappConfig = whatsappValidation.config;
 
-    // Load segments from Prisma
-    const selectedSegments = campaign.segmentIds.length > 0
-      ? await prisma.segment.findMany({ where: { id: { in: campaign.segmentIds } } })
-      : [];
-
-    // Fetch customers from Shopify
+    // Resolve recipients with enrichment-correct segment matching (orders, storefront
+    // events, campaign history, RFM, sub-filters all evaluated — see resolveSegmentCustomers).
     const client = await getShopifyClientAsync(request);
-    const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-
-    // Filter by segments
-    const matchingCustomers = selectedSegments.length > 0
-      ? shopifyCustomers.filter((customer) =>
-          selectedSegments.every((segment) => {
-            const conditionGroups = (segment.filters as any)?.conditionGroups || [];
-            return matchesGroups(customer, conditionGroups);
-          }),
-        )
-      : shopifyCustomers;
+    const matchingCustomers = await resolveSegmentCustomers({
+      client,
+      storeId: storeId || undefined,
+      segmentIds: campaign.segmentIds,
+      forceRefresh: true,
+    });
 
     // Update campaign status to RUNNING
     await prisma.campaign.update({

@@ -1,6 +1,8 @@
 import type { JourneyDefinition, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 
 import { fetchShopifyCustomer } from './shopify';
+import { shopifyClient } from '@/lib/shopify/client';
+import { customerInSegment } from '@/lib/segments/resolve-customers';
 import { evaluateConditions } from './condition-evaluator';
 import { startJourneyExecution } from './executor';
 import {
@@ -57,6 +59,21 @@ const normaliseJoinLogic = (join: TriggerMeta['conditionJoin']): 'all' | 'any' =
 
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Resolve the internal Store.id from a Shopify shop domain (for segment enrichment). */
+async function resolveStoreId(shop?: string | null): Promise<string | undefined> {
+  if (!shop) return undefined;
+  try {
+    const { prisma } = await import('@/lib/prisma');
+    const store = await prisma.store.findUnique({
+      where: { shopifyDomain: shop },
+      select: { id: true },
+    });
+    return store?.id;
+  } catch {
+    return undefined;
+  }
+}
 
 const toEngineConditions = (value: unknown): EngineCondition[] =>
   Array.isArray(value)
@@ -116,6 +133,22 @@ async function triggerMatches(config: TriggerMeta, eventType: string, eventData:
   const payload = eventData.payload ?? {};
   const primaryCustomer = extractPrimaryCustomer(payload);
   const customer = primaryCustomer?.id ? await fetchShopifyCustomer(primaryCustomer.id) : null;
+
+  // Segment-membership gate: enroll only customers who are actually in the segment.
+  if (config.segmentId) {
+    if (!customer) return false;
+    try {
+      const storeId = await resolveStoreId(eventData.shop);
+      const inSegment = await customerInSegment(customer, config.segmentId, {
+        client: shopifyClient,
+        storeId,
+      });
+      if (!inSegment) return false;
+    } catch (err) {
+      console.error('[journey-engine] Segment membership check failed:', err);
+      return false;
+    }
+  }
 
   if (config.orderValueOperator && config.orderValueAmount) {
     const total = toNumber(

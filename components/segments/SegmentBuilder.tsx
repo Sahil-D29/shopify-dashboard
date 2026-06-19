@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { nanoid } from 'nanoid';
 import ConditionRow, { ConditionValue } from './ConditionRow';
-import { EventRuleRow, type EventRule } from './EventRuleRow';
 import { ConditionSummary } from './ConditionSummary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  Plus, Save, Zap, ChevronDown, ChevronRight, Trash2,
-  Users, TrendingUp, MapPin, Loader2, User,
+  Plus, Save, ChevronDown, ChevronRight, Trash2,
+  Users, TrendingUp, Loader2, User,
 } from 'lucide-react';
 import type { CustomerSegment } from '@/lib/types/segment';
 
@@ -19,21 +17,19 @@ export type Group = {
   id: string;
   groupOperator: 'AND' | 'OR';
   conditions: ConditionValue[];
-  eventRules: EventRule[];
 };
 
-// Input type accepts groups without eventRules (backward compat)
 type GroupInput = {
   id: string;
   groupOperator: 'AND' | 'OR';
   conditions: ConditionValue[];
-  eventRules?: EventRule[];
 };
 
 type PreviewData = {
   customerCount?: number;
   count?: number;
   totalValue?: number;
+  avgOrderValue?: number;
   averageOrderValue?: number;
   sampleCustomers?: Array<{ name?: string; email?: string; phone?: string }>;
 };
@@ -42,65 +38,51 @@ const createEmptyGroup = (): Group => ({
   id: crypto.randomUUID(),
   groupOperator: 'AND',
   conditions: [],
-  eventRules: [],
-});
-
-const createEmptyEventRule = (): EventRule => ({
-  id: nanoid(),
-  eventName: '',
-  eventDisplayName: undefined,
-  action: 'did',
-  conditions: [],
 });
 
 const normalizeGroups = (groups: GroupInput[] | undefined): Group[] =>
   groups && groups.length > 0
     ? groups.map(group => ({
-        ...group,
+        id: group.id,
+        groupOperator: group.groupOperator,
         conditions: group.conditions.map(condition => ({
           ...condition,
           value: condition.value ?? '',
         })),
-        eventRules: group.eventRules || [],
       }))
     : [createEmptyGroup()];
 
-// Support legacy format where eventRules were top-level
-const migrateEventRules = (
-  groups: Group[],
-  legacyEventRules?: EventRule[],
-): Group[] => {
-  if (!legacyEventRules || legacyEventRules.length === 0) return groups;
-  // Move legacy top-level event rules into the first group
-  const migrated = [...groups];
-  if (migrated.length === 0) migrated.push(createEmptyGroup());
-  migrated[0] = {
-    ...migrated[0],
-    eventRules: [...(migrated[0].eventRules || []), ...legacyEventRules],
-  };
-  return migrated;
+// Operators that don't require a value to be meaningful
+const NO_VALUE_OPERATORS = new Set([
+  'is_empty', 'is_not_empty', 'is_true', 'is_false',
+]);
+
+/** A condition counts toward the live preview only once it has a usable value. */
+const isConditionReady = (c: ConditionValue): boolean => {
+  if (NO_VALUE_OPERATORS.has(c.operator)) return true;
+  const v = c.value;
+  if (v === undefined || v === null) return false;
+  if (typeof v === 'string') return v.trim().length > 0;
+  if (Array.isArray(v)) return v.length > 0;
+  return true; // numbers, etc.
 };
 
 export default function SegmentBuilder({
   initialName = '',
   initialDescription = '',
   initialGroups,
-  initialEventRules,
   onSaved,
   segmentId,
 }: {
   initialName?: string;
   initialDescription?: string;
   initialGroups?: GroupInput[];
-  initialEventRules?: EventRule[];
   onSaved?: (segment: CustomerSegment) => void;
   segmentId?: string;
 }) {
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
-  const [groups, setGroups] = useState<Group[]>(() =>
-    migrateEventRules(normalizeGroups(initialGroups), initialEventRules),
-  );
+  const [groups, setGroups] = useState<Group[]>(() => normalizeGroups(initialGroups));
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -109,18 +91,21 @@ export default function SegmentBuilder({
   useEffect(() => {
     setName(initialName);
     setDescription(initialDescription);
-    setGroups(migrateEventRules(normalizeGroups(initialGroups), initialEventRules));
-  }, [initialName, initialDescription, initialGroups, initialEventRules]);
+    setGroups(normalizeGroups(initialGroups));
+  }, [initialName, initialDescription, initialGroups]);
 
-  // Collect all event rules from all groups (for API calls)
-  const allEventRules = useMemo(
-    () => groups.flatMap(g => g.eventRules).filter(r => r.eventName),
+  // Only groups/conditions that are actually ready drive the preview.
+  const readyGroups = useMemo(
+    () =>
+      groups
+        .map(g => ({ ...g, conditions: g.conditions.filter(isConditionReady) }))
+        .filter(g => g.conditions.length > 0),
     [groups],
   );
 
   const hasConditions = useMemo(
-    () => groups.some(g => g.conditions.length > 0) || allEventRules.length > 0,
-    [groups, allEventRules],
+    () => readyGroups.length > 0,
+    [readyGroups],
   );
 
   // Live preview with debounce
@@ -138,8 +123,7 @@ export default function SegmentBuilder({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            conditionGroups: groups,
-            eventRules: allEventRules,
+            conditionGroups: readyGroups,
             forceRefresh: true,
           }),
           signal: controller.signal,
@@ -162,7 +146,7 @@ export default function SegmentBuilder({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [groups, allEventRules, hasConditions]);
+  }, [readyGroups, hasConditions]);
 
   // Group actions
   const addGroup = () => setGroups(gs => [...gs, createEmptyGroup()]);
@@ -218,32 +202,6 @@ export default function SegmentBuilder({
       ),
     );
 
-  // Event rule actions (per group)
-  const addEventRule = (groupId: string) =>
-    setGroups(gs =>
-      gs.map(g =>
-        g.id === groupId
-          ? { ...g, eventRules: [...g.eventRules, createEmptyEventRule()] }
-          : g,
-      ),
-    );
-  const updateEventRule = (groupId: string, ruleId: string, updated: EventRule) =>
-    setGroups(gs =>
-      gs.map(g =>
-        g.id === groupId
-          ? { ...g, eventRules: g.eventRules.map(r => (r.id === ruleId ? updated : r)) }
-          : g,
-      ),
-    );
-  const removeEventRule = (groupId: string, ruleId: string) =>
-    setGroups(gs =>
-      gs.map(g =>
-        g.id === groupId
-          ? { ...g, eventRules: g.eventRules.filter(r => r.id !== ruleId) }
-          : g,
-      ),
-    );
-
   // Save
   const doSave = async () => {
     setIsSaving(true);
@@ -252,7 +210,6 @@ export default function SegmentBuilder({
         name,
         description,
         conditionGroups: groups,
-        eventRules: allEventRules,
       };
       const res = await fetch(segmentId ? `/api/segments/${segmentId}` : '/api/segments', {
         method: segmentId ? 'PUT' : 'POST',
@@ -278,9 +235,9 @@ export default function SegmentBuilder({
   const previewCount = previewData?.customerCount ?? previewData?.count ?? null;
 
   return (
-    <div className="flex gap-6 items-start">
+    <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
       {/* ─── Left Column: Builder ─── */}
-      <div className="flex-1 min-w-0 space-y-5">
+      <div className="w-full lg:flex-1 min-w-0 space-y-5">
         {/* Segment Details */}
         <Card className="border-border">
           <CardContent className="p-4 space-y-3">
@@ -315,9 +272,7 @@ export default function SegmentBuilder({
         <div className="space-y-4">
           {groups.map((group, groupIndex) => {
             const isCollapsed = collapsedGroups.has(group.id);
-            const totalItems = group.conditions.length + group.eventRules.length;
             const condCount = group.conditions.length;
-            const eventCount = group.eventRules.length;
 
             return (
               <div key={group.id}>
@@ -343,13 +298,9 @@ export default function SegmentBuilder({
                           )}
                           <span className="font-semibold">Group {groupIndex + 1}</span>
                           <span className="text-xs text-muted-foreground ml-1">
-                            {totalItems === 0 ? '(empty)' : (
-                              <>
-                                {condCount > 0 && `${condCount} condition${condCount !== 1 ? 's' : ''}`}
-                                {condCount > 0 && eventCount > 0 && ', '}
-                                {eventCount > 0 && `${eventCount} event${eventCount !== 1 ? 's' : ''}`}
-                              </>
-                            )}
+                            {condCount === 0
+                              ? '(empty)'
+                              : `${condCount} condition${condCount !== 1 ? 's' : ''}`}
                           </span>
                         </button>
                       </CollapsibleTrigger>
@@ -382,11 +333,12 @@ export default function SegmentBuilder({
                     <CollapsibleContent>
                       <CardContent className="p-4 space-y-3">
                         {/* Empty state */}
-                        {totalItems === 0 && (
+                        {condCount === 0 && (
                           <div className="text-center py-8 border border-dashed border-border rounded-lg bg-muted/10">
                             <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                             <p className="text-sm text-muted-foreground">
-                              No filters yet. Add a condition or event rule below.
+                              No conditions yet. Add one below — customer traits,
+                              order history, Shopify events and more.
                             </p>
                           </div>
                         )}
@@ -409,27 +361,7 @@ export default function SegmentBuilder({
                           </div>
                         ))}
 
-                        {/* Event rule rows (merged into group) */}
-                        {group.eventRules.map((rule, ruleIndex) => (
-                          <div key={rule.id}>
-                            {(group.conditions.length > 0 || ruleIndex > 0) && (
-                              <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground py-1.5">
-                                <div className="h-px flex-1 bg-border" />
-                                {group.groupOperator}
-                                <div className="h-px flex-1 bg-border" />
-                              </div>
-                            )}
-                            <EventRuleRow
-                              rule={rule}
-                              onChange={updated =>
-                                updateEventRule(group.id, rule.id, updated)
-                              }
-                              onRemove={() => removeEventRule(group.id, rule.id)}
-                            />
-                          </div>
-                        ))}
-
-                        {/* Action buttons */}
+                        {/* Action button */}
                         <div className="flex items-center gap-2 pt-2">
                           <Button
                             variant="outline"
@@ -439,15 +371,6 @@ export default function SegmentBuilder({
                           >
                             <Plus className="w-3.5 h-3.5 mr-1.5" />
                             Add Condition
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addEventRule(group.id)}
-                            className="text-xs h-9 border-primary/30 text-primary hover:bg-primary/5"
-                          >
-                            <Zap className="w-3.5 h-3.5 mr-1.5" />
-                            Add Event Rule
                           </Button>
                         </div>
                       </CardContent>
@@ -522,7 +445,7 @@ export default function SegmentBuilder({
                         </p>
                       </div>
                     )}
-                    {previewData.averageOrderValue != null && (
+                    {(previewData.avgOrderValue ?? previewData.averageOrderValue) != null && (
                       <div className="rounded-lg bg-muted/30 p-3">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                           <TrendingUp className="w-3 h-3" />
@@ -533,7 +456,7 @@ export default function SegmentBuilder({
                             style: 'currency',
                             currency: 'INR',
                             maximumFractionDigits: 0,
-                          }).format(previewData.averageOrderValue)}
+                          }).format((previewData.avgOrderValue ?? previewData.averageOrderValue) as number)}
                         </p>
                       </div>
                     )}
