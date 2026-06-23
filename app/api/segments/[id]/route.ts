@@ -71,19 +71,57 @@ export async function GET(
 
     const refresh = parseBoolean(request.nextUrl.searchParams.get('refresh'));
 
-    // Create Shopify client for stats and customer fetching
-    const client = await getShopifyClientAsync(request);
+    // Usage counts are fast DB queries — always computed.
+    const [campaignsUsing, activeCampaigns, journeysUsing, activeJourneys] = await Promise.all([
+      prisma.campaign.count({ where: { segmentId } }),
+      prisma.campaign.count({ where: { segmentId, status: { in: ['RUNNING', 'SCHEDULED'] as any } } }),
+      prisma.journey.count({ where: { storeId: segmentRow.storeId } }),
+      prisma.journey.count({ where: { storeId: segmentRow.storeId, status: 'ACTIVE' as any } }),
+    ]);
 
-    // Calculate stats via Shopify API (with 2-min cache)
+    const usage = { campaigns: campaignsUsing, activeCampaigns, journeys: journeysUsing, activeJourneys };
+
+    // FAST PATH: by default return stored stats instantly — no Shopify call. This is what the
+    // Edit page and the detail page's initial load use, so they never hang on a slow/unreachable
+    // Shopify API. Fresh stats + matching customers are computed only on ?refresh=true.
+    if (!refresh) {
+      return NextResponse.json({
+        segment: {
+          ...segment,
+          totalValue: segment.totalRevenue ?? 0,
+          lastUpdated: segment.lastCalculated ?? segment.updatedAt,
+          customers: [],
+          usingCachedStats: true,
+          usage,
+        },
+      });
+    }
+
+    // Refresh: compute live stats via Shopify (with timeout-guarded client) and matching customers.
+    const client = await getShopifyClientAsync(request);
     const stats = await calculateSegmentStats({
       client,
       segmentId: segment.id,
       conditionGroups: segment.conditionGroups,
-      forceRefresh: refresh,
+      forceRefresh: true,
       storeId: segmentRow.storeId,
     });
 
-    // Get matching customers for detail view
+    // If Shopify was unreachable, keep stored values rather than zeroing the segment.
+    if (stats.error) {
+      return NextResponse.json({
+        segment: {
+          ...segment,
+          totalValue: segment.totalRevenue ?? 0,
+          lastUpdated: segment.lastCalculated ?? segment.updatedAt,
+          customers: [],
+          usingCachedStats: true,
+          statsError: stats.error,
+          usage,
+        },
+      });
+    }
+
     let filteredCustomers: any[] = [];
     try {
       const { mapShopifyToUiCustomer } = await import('@/lib/segments/mapper');
@@ -92,17 +130,6 @@ export async function GET(
     } catch (error) {
       console.warn('[Segments][GET /:id] Failed to map customers:', error);
     }
-
-    const campaignsUsing = await prisma.campaign.count({ where: { segmentId } });
-    const activeCampaigns = await prisma.campaign.count({
-      where: { segmentId, status: { in: ['RUNNING', 'SCHEDULED'] as any } },
-    });
-    const journeysUsing = await prisma.journey.count({
-      where: { storeId: segmentRow.storeId },
-    });
-    const activeJourneys = await prisma.journey.count({
-      where: { storeId: segmentRow.storeId, status: 'ACTIVE' as any },
-    });
 
     return NextResponse.json({
       segment: {
@@ -116,12 +143,7 @@ export async function GET(
         lastCalculated: stats.lastUpdated, // Keep for backward compatibility
         customers: filteredCustomers.slice(0, 100), // Limit to 100 for detail view
         usingCachedStats: false,
-        usage: {
-          campaigns: campaignsUsing,
-          activeCampaigns,
-          journeys: journeysUsing,
-          activeJourneys,
-        },
+        usage,
       },
     });
   } catch (error) {

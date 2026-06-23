@@ -109,15 +109,33 @@ class ShopifyClient {
       hasAccessToken: !!this.config.accessToken,
     });
     
+    // Hard timeout so a stalled Shopify API can never hang a request (and the caller's
+    // route) indefinitely. 15s is generous for a single Admin API page.
+    const REQUEST_TIMEOUT_MS = 15000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'X-Shopify-Access-Token': this.config.accessToken,
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          headers: {
+            'X-Shopify-Access-Token': this.config.accessToken,
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+        });
+      } catch (fetchErr) {
+        if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+          const error = `Shopify request timed out after ${REQUEST_TIMEOUT_MS / 1000}s (${url}).`;
+          console.error('⏱️ Shopify timeout:', error);
+          throw new Error(error);
+        }
+        throw fetchErr;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       console.log('📡 Shopify API Response:', {
         status: response.status,
@@ -331,7 +349,15 @@ class ShopifyClient {
   async fetchAll<T = unknown>(resource: string, params?: Record<string, unknown>): Promise<T[]> {
     const items: T[] = [];
     let pageInfo: string | undefined = undefined;
+    // Defensive caps so pagination can never loop forever (each request is also timeout-guarded).
+    const MAX_PAGES = 100;
+    const DEADLINE = Date.now() + 60000; // 60s overall budget
+    let pages = 0;
     do {
+      if (pages++ >= MAX_PAGES || Date.now() > DEADLINE) {
+        console.warn(`[Shopify] fetchAll(${resource}) hit pagination cap (pages=${pages}) — returning partial results`);
+        break;
+      }
       const query = new URLSearchParams();
       const limit = params?.limit ?? 250;
       query.set('limit', String(limit));
