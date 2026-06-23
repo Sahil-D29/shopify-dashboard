@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Customer } from '@/lib/types/customer';
 import type { CustomerSegment } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
-import { matchesGroups } from '@/lib/segments/evaluator';
 import { mapShopifyToUiCustomer } from '@/lib/segments/mapper';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
@@ -101,23 +100,24 @@ export async function GET(
     if (!segment) {
       return NextResponse.json({ error: 'Segment not found' }, { status: 404 });
     }
-    const hasConditions = segment.conditionGroups?.some(group => (group.conditions?.length ?? 0) > 0) ?? false;
-
-    // Fetch customers from Shopify using authorized store context
+    // Resolve the matching audience via the shared, Contact-aware engine (Contacts ⋃ Shopify
+    // customers, deduped). This lists webhook/custom-event contacts too and never hangs on Shopify.
     const { getShopifyClientAsync } = await import('@/lib/shopify/api-helper');
+    const { calculateSegmentStats } = await import('@/lib/utils/segment-stats');
     const client = await getShopifyClientAsync(request);
-    const shopifyCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-
-    const matchedShopifyCustomers = !hasConditions || segment.name.toLowerCase() === 'all'
-      ? shopifyCustomers
-      : shopifyCustomers.filter(customer => {
-          try {
-            return matchesGroups(customer, segment.conditionGroups ?? []);
-          } catch (error) {
-            console.error('[Segments][Customers] Failed to evaluate customer', customer.id, error);
-            return false;
-          }
-        });
+    const stats = await calculateSegmentStats({
+      client,
+      segmentId: segment.id,
+      conditionGroups: segment.conditionGroups ?? [],
+      storeId: storeFilter.storeId || undefined,
+      forceRefresh: false,
+    });
+    let matchedShopifyCustomers = (stats.customers ?? []) as ShopifyCustomer[];
+    // Static/custom audiences are an explicit id list — filter the resolved audience to it.
+    if (segment.type === 'custom' && Array.isArray(segment.customerIds)) {
+      const ids = new Set(segment.customerIds.map(String));
+      matchedShopifyCustomers = matchedShopifyCustomers.filter(c => ids.has(String(c.id)));
+    }
 
     const uniqueCustomers = new Map<string, Customer>();
     matchedShopifyCustomers.forEach(customer => {

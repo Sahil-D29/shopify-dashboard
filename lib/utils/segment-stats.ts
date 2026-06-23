@@ -374,28 +374,42 @@ async function fetchStorefrontEventEnrichment(
   return result;
 }
 
+/**
+ * Custom-event data lives in `storefront_events` keyed by `customerId` (a Contact.id or Shopify
+ * id). It may be stored under the RAW event name (e.g. `hiu_tagged`, from webhook/other-source
+ * ingestion) OR the `custom:<name>` prefix (from the in-app events API). We match both, scoped to
+ * the event names the segment actually references, and index by the bare name so the evaluator's
+ * `custom_event:<name>` lookup resolves.
+ */
 async function fetchCustomEventEnrichment(
-  storeId: string
+  storeId: string,
+  eventNames: string[],
 ): Promise<Map<string, CustomEventEnrichment>> {
   const result = new Map<string, CustomEventEnrichment>();
+  if (!eventNames.length) return result;
 
   try {
     const { prisma } = await import('@/lib/prisma');
+    const { Prisma } = await import('@prisma/client');
+
+    // Accept both the raw name and the `custom:` prefixed form.
+    const wanted = Array.from(new Set(eventNames.flatMap(n => [n, `custom:${n}`])));
 
     const rows = await prisma.$queryRaw<Array<{
       customerId: string;
       eventType: string;
       metadata: unknown;
       createdAt: Date;
-    }>>`
+    }>>(Prisma.sql`
       SELECT "customerId", "eventType", "metadata", "createdAt"
       FROM "storefront_events"
-      WHERE "storeId" = ${storeId} AND "customerId" IS NOT NULL AND "eventType" LIKE 'custom:%'
-    `.catch(() => [] as Array<{ customerId: string; eventType: string; metadata: unknown; createdAt: Date }>);
+      WHERE "storeId" = ${storeId} AND "customerId" IS NOT NULL
+        AND "eventType" IN (${Prisma.join(wanted)})
+    `).catch(() => [] as Array<{ customerId: string; eventType: string; metadata: unknown; createdAt: Date }>);
 
     for (const row of rows) {
       if (!row.customerId) continue;
-      const name = row.eventType.slice('custom:'.length);
+      const name = row.eventType.replace(/^custom:/, ''); // bare name (matches `custom_event:<name>`)
       if (!name) continue;
 
       let entry = result.get(row.customerId);
@@ -418,6 +432,19 @@ async function fetchCustomEventEnrichment(
   }
 
   return result;
+}
+
+/** Collect the custom-event names (`custom_event:<name>` → `<name>`) referenced by the segment. */
+function customEventNames(conditionGroups: SegmentGroup[]): string[] {
+  const names = new Set<string>();
+  for (const g of conditionGroups || []) {
+    for (const c of g.conditions || []) {
+      if (typeof c.field === 'string' && c.field.startsWith('custom_event:')) {
+        names.add(c.field.slice('custom_event:'.length));
+      }
+    }
+  }
+  return Array.from(names);
 }
 
 async function fetchJourneyEnrichment(
@@ -696,6 +723,117 @@ function resolveContactEnrichment(
   return undefined;
 }
 
+/**
+ * A unified audience person: ShopifyCustomer-shaped, but may originate from a Contact (id is
+ * then the Contact UUID). `__eventKeys` holds every id this person is known by (shopify id +
+ * contact id) so event/enrichment maps keyed by either id attach to the merged person.
+ */
+type AudiencePerson = ShopifyCustomer & { __eventKeys: string[] };
+
+const normEmail = (s: unknown): string => (s ? String(s).trim().toLowerCase() : '');
+const normPhone = (s: unknown): string => (s ? String(s).replace(/[^\d]/g, '') : '');
+
+function mapContactToCustomer(ct: Record<string, any>): AudiencePerson {
+  const meta = (ct.metadata && typeof ct.metadata === 'object') ? ct.metadata : {};
+  const tags = Array.isArray(ct.tags) ? ct.tags.join(', ') : (typeof ct.tags === 'string' ? ct.tags : '');
+  const nameParts = typeof ct.name === 'string' ? ct.name.trim().split(/\s+/) : [];
+  const canonicalId = (ct.shopifyCustomerId || ct.id) as unknown as number;
+  return {
+    id: canonicalId,
+    email: ct.email ?? null,
+    first_name: ct.firstName ?? (nameParts[0] || null),
+    last_name: ct.lastName ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : null),
+    phone: ct.phone ?? null,
+    created_at: ct.createdAt instanceof Date ? ct.createdAt.toISOString() : new Date().toISOString(),
+    updated_at: ct.updatedAt instanceof Date ? ct.updatedAt.toISOString() : new Date().toISOString(),
+    orders_count: Number(meta.orders_count ?? 0),
+    total_spent: String(meta.total_spent ?? 0),
+    state: 'enabled',
+    verified_email: !!ct.email,
+    tags,
+    __eventKeys: [ct.shopifyCustomerId, ct.id].filter(Boolean).map(String),
+  };
+}
+
+/**
+ * Build the segment audience: the store's Contacts MERGED with Shopify customers, deduplicated
+ * by identity (shopifyCustomerId → email → phone). Shopify is fetched gracefully — if it times
+ * out / rate-limits / fails, the audience falls back to Contacts only (never throws/hangs).
+ */
+async function buildAudience(
+  storeId: string | undefined,
+  client: ShopifyClient,
+): Promise<{ people: AudiencePerson[]; shopifyError?: string }> {
+  // 1. Shopify customers (graceful)
+  let shopify: ShopifyCustomer[] = [];
+  let shopifyError: string | undefined;
+  try {
+    shopify = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
+  } catch (err) {
+    shopifyError = err instanceof Error ? err.message : String(err);
+    console.warn('[SegmentStats] Shopify customers unavailable, using Contacts only:', shopifyError);
+  }
+
+  // 2. Contacts (the webhook/other-source audience)
+  let contacts: Array<Record<string, any>> = [];
+  if (storeId) {
+    try {
+      const { prisma } = await import('@/lib/prisma');
+      contacts = await prisma.contact.findMany({ where: { storeId } });
+    } catch (err) {
+      console.warn('[SegmentStats] Failed to load contacts:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // 3. Merge/dedup
+  const index = new Map<string, AudiencePerson>(); // identity key -> person
+  const people: AudiencePerson[] = [];
+
+  const keysFor = (opts: { shopifyId?: unknown; email?: unknown; phone?: unknown }): string[] => {
+    const k: string[] = [];
+    if (opts.shopifyId) k.push('s:' + String(opts.shopifyId));
+    const e = normEmail(opts.email);
+    if (e) k.push('e:' + e);
+    const p = normPhone(opts.phone);
+    if (p) k.push('p:' + p);
+    return k;
+  };
+  const register = (person: AudiencePerson, keys: string[]) => {
+    people.push(person);
+    for (const key of keys) if (!index.has(key)) index.set(key, person);
+  };
+
+  // Seed with Shopify customers
+  for (const c of shopify) {
+    const person: AudiencePerson = { ...c, __eventKeys: [String(c.id)] };
+    register(person, keysFor({ shopifyId: c.id, email: c.email, phone: c.phone ?? c.default_address?.phone }));
+  }
+
+  // Merge contacts into matching Shopify person, or add as new
+  for (const ct of contacts) {
+    const keys = keysFor({ shopifyId: ct.shopifyCustomerId, email: ct.email, phone: ct.phone });
+    const match = keys.map(k => index.get(k)).find(Boolean);
+    if (match) {
+      // Merge: attach event keys + fill fields the Shopify side is missing
+      for (const ek of [ct.shopifyCustomerId, ct.id].filter(Boolean).map(String)) {
+        if (!match.__eventKeys.includes(ek)) match.__eventKeys.push(ek);
+      }
+      if (!match.phone && ct.phone) match.phone = ct.phone;
+      if (!match.email && ct.email) match.email = ct.email;
+      if (!match.first_name && ct.firstName) match.first_name = ct.firstName;
+      if ((!match.tags || match.tags.length === 0) && Array.isArray(ct.tags) && ct.tags.length) {
+        match.tags = ct.tags.join(', ');
+      }
+      // Index any new keys so later contacts dedup against this person too
+      for (const k of keys) if (!index.has(k)) index.set(k, match);
+    } else {
+      register(mapContactToCustomer(ct), keys);
+    }
+  }
+
+  return { people, shopifyError };
+}
+
 export async function calculateSegmentStats(options: SegmentStatsOptions): Promise<SegmentStats> {
   const cacheKey = getCacheKey(options);
   const cached = statsCache.get(cacheKey);
@@ -711,27 +849,18 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
 
   const conditionGroups = options.conditionGroups || [];
 
-  let sourceCustomers: ShopifyCustomer[];
+  let sourceCustomers: AudiencePerson[];
+  let audienceShopifyError: string | undefined;
   if (options.customers) {
-    sourceCustomers = options.customers;
+    // Caller-supplied pool (e.g. journey single-customer check) — use as-is.
+    sourceCustomers = options.customers.map(c => ({
+      ...c,
+      __eventKeys: (c as AudiencePerson).__eventKeys ?? [String(c.id)],
+    }));
   } else {
-    try {
-      sourceCustomers = await options.client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-    } catch (err) {
-      // Shopify unreachable / invalid credentials — degrade gracefully instead of throwing,
-      // so the preview shows a clear message and Save never hangs/errors on stats.
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn('[SegmentStats] Failed to fetch customers:', message);
-      return {
-        customerCount: 0,
-        totalValue: 0,
-        totalOrders: 0,
-        avgOrderValue: 0,
-        lastUpdated: now,
-        customers: [],
-        error: message,
-      };
-    }
+    const built = await buildAudience(options.storeId, options.client);
+    sourceCustomers = built.people;
+    audienceShopifyError = built.shopifyError;
   }
 
   const hasConditions = conditionGroups.length > 0 && conditionGroups.some(group => (group.conditions || []).length > 0);
@@ -838,7 +967,7 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
 
   if (requiresCustomEvents && options.storeId) {
     fetches.push(
-      fetchCustomEventEnrichment(options.storeId).then(map => {
+      fetchCustomEventEnrichment(options.storeId, customEventNames(conditionGroups)).then(map => {
         customEventMap = map;
       })
     );
@@ -857,6 +986,19 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
         try {
           const custEmail = (customer.email || '').toLowerCase();
           const custId = String(customer.id);
+          // Every id this person is known by (shopify id + contact id) — events/enrichment
+          // keyed by EITHER id must attach to the merged person.
+          const eventKeys = (customer as AudiencePerson).__eventKeys?.length
+            ? (customer as AudiencePerson).__eventKeys
+            : [custId];
+          const lookupByKeys = <V>(m: Map<string, V> | null): V | undefined => {
+            if (!m) return undefined;
+            for (const k of eventKeys) {
+              const v = m.get(k);
+              if (v !== undefined) return v;
+            }
+            return undefined;
+          };
 
           const enrichment: CustomerEnrichment = {};
 
@@ -864,7 +1006,7 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
             enrichment.orders = ordersByCustomer.get(custEmail) || [];
           }
           if (campaignLogMap) {
-            enrichment.campaignLogs = campaignLogMap.get(custId);
+            enrichment.campaignLogs = lookupByKeys(campaignLogMap);
           }
           if (abandonedMap) {
             enrichment.abandonedCheckouts = abandonedMap.get(custEmail);
@@ -873,22 +1015,22 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
             enrichment.rfm = rfmMap.get(customer.id);
           }
           if (storefrontMap) {
-            enrichment.storefrontEvents = storefrontMap.get(custId);
+            enrichment.storefrontEvents = lookupByKeys(storefrontMap);
           }
           if (journeyMap) {
-            enrichment.journeys = journeyMap.get(custId);
+            enrichment.journeys = lookupByKeys(journeyMap);
           }
           if (flowMap) {
-            enrichment.flows = flowMap.get(custId);
+            enrichment.flows = lookupByKeys(flowMap);
           }
           if (conversationMap) {
-            enrichment.conversations = conversationMap.get(custId);
+            enrichment.conversations = lookupByKeys(conversationMap);
           }
           if (contactMap) {
             enrichment.contact = resolveContactEnrichment(contactMap, customer);
           }
           if (customEventMap) {
-            enrichment.customEvents = customEventMap.get(custId);
+            enrichment.customEvents = lookupByKeys(customEventMap);
           }
 
           return matchesGroups(customer, conditionGroups, enrichment);
@@ -910,6 +1052,10 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
     avgOrderValue,
     lastUpdated: now,
     customers: filteredCustomers.slice(0, options.sampleLimit ?? filteredCustomers.length),
+    // Only flag an error when the result is actually degraded — i.e. the segment relies on
+    // Shopify order data but Shopify was unreachable. Contact/custom-event segments are
+    // unaffected by a Shopify outage and should not show an error.
+    ...(audienceShopifyError && requiresOrders ? { error: audienceShopifyError } : {}),
   };
 
   statsCache.set(cacheKey, {

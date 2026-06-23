@@ -413,9 +413,15 @@ export default function SegmentBuilder({
                 ) : hasConditions && previewData?.error ? (
                   <div className="py-2">
                     <Users className="w-8 h-8 text-amber-500/40 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-foreground">Couldn&apos;t reach Shopify</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {/rate limit/i.test(previewData.error) ? 'Shopify is busy' : 'Preview unavailable'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Reconnect your store in Settings to preview matching customers.
+                      {/rate limit/i.test(previewData.error)
+                        ? 'Shopify is rate-limiting requests. Try again in a moment.'
+                        : /credential|reconfigure|invalid/i.test(previewData.error)
+                          ? 'Reconnect your store in Settings to preview matching customers.'
+                          : previewData.error}
                     </p>
                   </div>
                 ) : hasConditions && previewCount != null ? (

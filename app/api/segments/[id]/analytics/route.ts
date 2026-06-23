@@ -4,7 +4,7 @@ import type { CustomerSegment } from '@/lib/types/segment';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { requireStoreAccess, filterByStoreId } from '@/lib/tenant/api-helpers';
 import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
-import { matchesGroups } from '@/lib/segments/evaluator';
+import { calculateSegmentStats } from '@/lib/utils/segment-stats';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -57,25 +57,22 @@ export async function GET(
       );
     }
 
-    // Fetch customers
+    // Resolve the matching audience via the shared, Contact-aware engine (Contacts ⋃ Shopify
+    // customers, deduped) — no direct Shopify customer fetch here, so it works for
+    // webhook/custom-event contacts and never hangs on Shopify.
     const client = await getShopifyClientAsync(request);
-    let customers: ShopifyCustomer[] = [];
-    try {
-      customers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-    } catch (error) {
-      console.error('Error fetching customers for analytics:', error);
-    }
-
-    // Filter customers by segment
-    let matchingCustomers: ShopifyCustomer[];
-    if (segment.type === 'custom' && segment.customerIds) {
-      matchingCustomers = customers.filter(c => 
-        segment.customerIds?.includes(String(c.id))
-      );
-    } else {
-      matchingCustomers = customers.filter(customer =>
-        matchesGroups(customer, segment.conditionGroups || [])
-      );
+    const stats = await calculateSegmentStats({
+      client,
+      segmentId: segment.id,
+      conditionGroups: segment.conditionGroups || [],
+      storeId,
+      forceRefresh: false,
+    });
+    let matchingCustomers = (stats.customers || []) as ShopifyCustomer[];
+    // Static/custom audiences are an explicit id list — filter the resolved audience to it.
+    if (segment.type === 'custom' && Array.isArray(segment.customerIds)) {
+      const ids = new Set(segment.customerIds.map(String));
+      matchingCustomers = matchingCustomers.filter(c => ids.has(String(c.id)));
     }
 
     // Calculate analytics

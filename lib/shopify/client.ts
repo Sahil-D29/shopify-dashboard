@@ -80,7 +80,7 @@ class ShopifyClient {
     this.baseUrl = `https://${this.config.shop}/admin/api/${SHOPIFY_API_VERSION}`;
   }
 
-  async requestRaw(endpoint: string, options: RequestInit = {}) {
+  async requestRaw(endpoint: string, options: RequestInit = {}, _attempt = 0): Promise<Response> {
     // Resolve token lazily via Client Credentials Grant if no static token was provided
     if (this.tokenProvider && !this.config.accessToken) {
       try {
@@ -168,11 +168,18 @@ class ShopifyClient {
           console.error('❌ Failed to read Shopify error response:', textError);
         }
         
-        // Handle rate limiting (429 Too Many Requests)
+        // Handle rate limiting (429) — wait (respecting Retry-After) and retry a few times.
         if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After') || '60';
-          const error = `Shopify API rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`;
-          console.error('⏱️ Rate limit error:', error);
+          const MAX_RATE_LIMIT_RETRIES = 3;
+          const retryAfter = Number(response.headers.get('Retry-After')) || 2;
+          if (_attempt < MAX_RATE_LIMIT_RETRIES) {
+            const waitMs = Math.min(Math.max(retryAfter, 1) * 1000, 5000);
+            console.warn(`⏳ Shopify 429 — retry ${_attempt + 1}/${MAX_RATE_LIMIT_RETRIES} in ${waitMs}ms (${url})`);
+            await new Promise((r) => setTimeout(r, waitMs));
+            return this.requestRaw(endpoint, options, _attempt + 1);
+          }
+          const error = 'Shopify API rate limit exceeded. Please try again in a moment.';
+          console.error('⏱️ Rate limit error (retries exhausted):', error);
           throw new Error(error);
         }
         
