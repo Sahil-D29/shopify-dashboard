@@ -156,6 +156,21 @@ export async function GET(
       growthTrend,
     };
 
+    // Persist the freshly computed count/stats (best-effort) so the list + detail tiles
+    // reflect the real audience without requiring a manual Force Sync.
+    void prisma.segment.update({
+      where: { id: segmentId },
+      data: {
+        customerCount: analytics.customerCount,
+        filters: {
+          ...((row?.filters ?? {}) as Record<string, unknown>),
+          totalRevenue: analytics.totalRevenue,
+          averageOrderValue: analytics.averageOrderValue,
+          lastCalculated: Date.now(),
+        },
+      },
+    }).catch(() => {});
+
     return NextResponse.json({ analytics });
   } catch (error) {
     console.error('Error calculating segment analytics:', error);

@@ -230,7 +230,7 @@ export default function SegmentDetailPage() {
                 <CardContent className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-muted-foreground" />
                   <div className="text-2xl font-bold">
-                    {(segmentDetail?.customerCount || 0).toLocaleString()}
+                    {((analytics?.totalCustomers ?? segmentDetail?.customerCount) || 0).toLocaleString()}
                   </div>
                 </CardContent>
               </Card>
