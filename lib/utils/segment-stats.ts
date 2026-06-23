@@ -434,6 +434,37 @@ async function fetchCustomEventEnrichment(
   return result;
 }
 
+/**
+ * Whether the segment needs the Shopify customer list. Pure contact / custom-event / engagement
+ * segments don't (their data lives on Contacts + storefront_events), so we skip the slow,
+ * rate-limited Shopify fetch for them.
+ */
+function fieldIsNonShopify(field: string): boolean {
+  return (
+    field.startsWith('custom_event:') ||
+    field.startsWith('contact_') ||
+    field.startsWith('wa_') ||
+    field.startsWith('chat_') ||
+    field.startsWith('campaign_') ||
+    field.startsWith('journey_') ||
+    field.startsWith('flow_') ||
+    field.startsWith('whatsapp_') ||
+    [
+      'event_product_viewed', 'viewed_product', 'event_product_added_to_cart',
+      'added_product_to_cart', 'event_product_removed_from_cart', 'event_collection_viewed',
+      'event_active_on_site', 'event_product_searched', 'event_cart_abandoned',
+      'in_segment', 'in_journey', 'accepts_marketing',
+    ].includes(field)
+  );
+}
+function needsShopifyCustomers(conditionGroups: SegmentGroup[]): boolean {
+  const hasAny = (conditionGroups || []).some(g => (g.conditions || []).length > 0);
+  if (!hasAny) return true; // "all customers" style → include Shopify
+  return (conditionGroups || []).some(g =>
+    (g.conditions || []).some(c => !fieldIsNonShopify(c.field))
+  );
+}
+
 /** Collect the custom-event names (`custom_event:<name>` → `<name>`) referenced by the segment. */
 function customEventNames(conditionGroups: SegmentGroup[]): string[] {
   const names = new Set<string>();
@@ -763,15 +794,19 @@ function mapContactToCustomer(ct: Record<string, any>): AudiencePerson {
 async function buildAudience(
   storeId: string | undefined,
   client: ShopifyClient,
+  opts: { needShopify: boolean } = { needShopify: true },
 ): Promise<{ people: AudiencePerson[]; shopifyError?: string }> {
-  // 1. Shopify customers (graceful)
+  // 1. Shopify customers (graceful) — only when the segment actually needs Shopify customer/
+  //    order data. Pure contact/custom-event segments skip this entirely (fast, no rate-limit).
   let shopify: ShopifyCustomer[] = [];
   let shopifyError: string | undefined;
-  try {
-    shopify = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-  } catch (err) {
-    shopifyError = err instanceof Error ? err.message : String(err);
-    console.warn('[SegmentStats] Shopify customers unavailable, using Contacts only:', shopifyError);
+  if (opts.needShopify) {
+    try {
+      shopify = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
+    } catch (err) {
+      shopifyError = err instanceof Error ? err.message : String(err);
+      console.warn('[SegmentStats] Shopify customers unavailable, using Contacts only:', shopifyError);
+    }
   }
 
   // 2. Contacts (the webhook/other-source audience)
@@ -858,7 +893,9 @@ export async function calculateSegmentStats(options: SegmentStatsOptions): Promi
       __eventKeys: (c as AudiencePerson).__eventKeys ?? [String(c.id)],
     }));
   } else {
-    const built = await buildAudience(options.storeId, options.client);
+    const built = await buildAudience(options.storeId, options.client, {
+      needShopify: needsShopifyCustomers(conditionGroups),
+    });
     sourceCustomers = built.people;
     audienceShopifyError = built.shopifyError;
   }
