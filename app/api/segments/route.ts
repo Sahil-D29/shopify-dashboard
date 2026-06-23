@@ -129,6 +129,30 @@ export async function GET(request: NextRequest) {
 
     const filteredSegments = search ? segments.filter(segment => matchesSearch(segment, search)) : segments;
 
+    // Map a segment to its stored (DB) stats — instant, no Shopify call.
+    const withStoredStats = (segment: CustomerSegment) => ({
+      ...segment,
+      customerCount: segment.customerCount ?? 0,
+      totalValue: segment.totalRevenue ?? 0,
+      totalRevenue: segment.totalRevenue ?? 0,
+      averageOrderValue: segment.averageOrderValue ?? 0,
+      lastUpdated: segment.lastCalculated ?? segment.updatedAt ?? Date.now(),
+      usingCachedStats: true,
+    });
+
+    // FAST PATH: by default the list loads instantly from stored stats. Fresh stats are
+    // computed only on explicit refresh (Force Sync / Refresh stats), which fetches Shopify.
+    if (!refresh) {
+      return NextResponse.json({
+        success: true,
+        segments: filteredSegments.slice(0, limit).map(withStoredStats),
+        total: filteredSegments.length,
+        search,
+        fetchedAt: Date.now(),
+        cached: true,
+      });
+    }
+
     // Create Shopify client once for all segment stats calculations
     let shopifyClient: ShopifyClient | null = null;
     try {
@@ -149,6 +173,9 @@ export async function GET(request: NextRequest) {
             forceRefresh: refresh,
             storeId: storeFilter.storeId || undefined,
           });
+
+          // Graceful stats may carry an error (e.g. Shopify creds invalid) — keep stored values.
+          if (stats.error) return withStoredStats(segment);
 
           const updatedSegment = {
             ...segment,
@@ -176,14 +203,7 @@ export async function GET(request: NextRequest) {
           return updatedSegment;
         } catch (statsError) {
           console.warn(`[Segments][GET] Failed to calculate stats for segment ${segment.id}:`, getErrorMessage(statsError));
-          return {
-            ...segment,
-            customerCount: segment.customerCount ?? 0,
-            totalValue: segment.totalRevenue ?? 0,
-            averageOrderValue: segment.averageOrderValue ?? 0,
-            lastUpdated: segment.lastCalculated ?? Date.now(),
-            usingCachedStats: true,
-          };
+          return withStoredStats(segment);
         }
       }),
     );

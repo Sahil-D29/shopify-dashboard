@@ -211,9 +211,20 @@ export async function getSyncStatus(): Promise<SegmentSyncStatus> {
         nextRun: undefined,
       };
     }
-    
+
+    // Self-heal a stuck "Syncing…" state: if a previous sync set isRunning=true but never
+    // reset it (crash/timeout), treat it as not running once the record is stale.
+    const STALE_AFTER = 5 * 60 * 1000; // 5 minutes
+    let isRunning = dbStatus.isRunning;
+    if (isRunning && dbStatus.updatedAt && Date.now() - dbStatus.updatedAt.getTime() > STALE_AFTER) {
+      isRunning = false;
+      prisma.segmentSyncStatus
+        .update({ where: { id: SYNC_STATUS_ID }, data: { isRunning: false } })
+        .catch(() => {});
+    }
+
     return {
-      isRunning: dbStatus.isRunning,
+      isRunning,
       lastRun: dbStatus.lastRun ? dbStatus.lastRun.getTime() : undefined,
       nextRun: dbStatus.nextRun ? dbStatus.nextRun.getTime() : undefined,
       results: dbStatus.results

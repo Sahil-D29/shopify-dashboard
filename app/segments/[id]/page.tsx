@@ -100,8 +100,22 @@ export default function SegmentDetailPage() {
       try {
         const res = await fetch(`/api/segments/${segmentId}/analytics`);
         if (!res.ok) throw new Error('Failed to load analytics');
-        const data: AnalyticsResponse = await res.json();
-        if (!isCancelled) setAnalytics(data);
+        // The API returns { analytics: { customerCount, totalRevenue, revenueTrend: [{date,revenue}], ... } }.
+        // Map it into the shape this page renders, with safe defaults (prevents toLocaleString crashes).
+        const raw = ((await res.json())?.analytics ?? {}) as Record<string, any>;
+        const rev: Array<{ date?: string; revenue?: number }> = Array.isArray(raw.revenueTrend) ? raw.revenueTrend : [];
+        const transformed: AnalyticsResponse = {
+          totalCustomers: Number(raw.customerCount ?? 0),
+          growthRate: Number(raw.growthTrend ?? raw.growthRate ?? 0),
+          revenueTrend: {
+            labels: rev.map(r => String(r.date ?? '')),
+            data: rev.map(r => Number(r.revenue ?? 0)),
+          },
+          customerGrowth: { labels: [], data: [] },
+          topProducts: { labels: [], data: [] },
+          orderDistribution: Array.isArray(raw.customerDistribution) ? raw.customerDistribution : [],
+        };
+        if (!isCancelled) setAnalytics(transformed);
       } catch {
         if (!isCancelled) setAnalytics(null);
       } finally {
@@ -269,7 +283,7 @@ export default function SegmentDetailPage() {
               </CardHeader>
               <CardContent className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-muted-foreground" />
-                <div className="text-2xl font-bold">{analytics.totalCustomers.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{(analytics.totalCustomers ?? 0).toLocaleString()}</div>
               </CardContent>
             </Card>
 
@@ -323,7 +337,7 @@ export default function SegmentDetailPage() {
                   {analytics.customerGrowth.labels.map((label, i) => (
                     <div key={label} className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{label}</span>
-                      <span className="font-medium">{analytics.customerGrowth.data[i].toLocaleString('en-IN')}</span>
+                      <span className="font-medium">{(analytics.customerGrowth.data[i] ?? 0).toLocaleString('en-IN')}</span>
                     </div>
                   ))}
                 </div>

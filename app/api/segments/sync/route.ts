@@ -42,18 +42,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Run sync
-    const results = await syncAllSegments(request);
+    try {
+      // Run sync
+      const results = await syncAllSegments(request);
 
-    return NextResponse.json({
-      success: true,
-      results,
-      syncedAt: Date.now(),
-    });
+      return NextResponse.json({
+        success: true,
+        results,
+        syncedAt: Date.now(),
+      });
+    } finally {
+      // Always clear the running flag so the "Syncing…" chip never gets stuck.
+      await prisma.segmentSyncStatus
+        .update({ where: { id: 'singleton' }, data: { isRunning: false } })
+        .catch(() => {});
+    }
   } catch (error) {
     console.error('Error syncing segments:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to sync segments',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
