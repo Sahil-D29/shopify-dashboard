@@ -140,6 +140,7 @@ See `docs/ENV_VARIABLES.md` for full reference (Shopify, WhatsApp, Razorpay, Str
 6. **Prisma:** Uses Neon adapter — `DATABASE_URL` must be pooled connection string
 
 ## Per-Feature Docs
+- `docs/SEGMENTS.md` — **Segments architecture & gotchas** (Contact-centric audience, custom-event resolution, Shopify rate-limit/timeout handling). Read before touching segments.
 - `docs/ARCHITECTURE.md` — System design, data flow, patterns
 - `docs/AUTH.md` — Authentication & authorization
 - `docs/BILLING.md` — Payment flow (Razorpay + Stripe)
