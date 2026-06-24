@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Send, CheckCircle2, XCircle, Loader2, Search, MessageSquare, Link2 } from "lucide-react";
+import { Send, CheckCircle2, XCircle, Loader2, MessageSquare, Link2, LayoutGrid } from "lucide-react";
 import { MobilePreview } from "@/components/journeys/MobilePreview";
 import { WhatsAppMessageEditor } from "./WhatsAppMessageEditor";
+import TemplatePickerModal from "@/components/campaigns/TemplatePickerModal";
 import { UTMBuilder } from "@/components/journeys/builder/utm/UTMBuilder";
 import type { WhatsAppTemplate, WhatsAppActionConfig, WhatsAppBodyField, VariableMapping } from "@/lib/types/whatsapp-config";
-import { normalizeVariableToken } from "@/lib/whatsapp/template-utils";
 import { cn } from "@/lib/utils";
 
 interface UnifiedWhatsAppConfigProps {
@@ -52,22 +51,12 @@ export function UnifiedWhatsAppConfig({
     );
   };
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const [testStatus, setTestStatus] = useState<null | 'sending' | 'success' | 'error'>(null);
   const [testResult, setTestResult] = useState<{ messageId?: string; error?: string } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
-
-  const filteredTemplates = useMemo(() => {
-    if (!searchQuery.trim()) return templates;
-    const query = searchQuery.toLowerCase();
-    return templates.filter(t =>
-      t.name.toLowerCase().includes(query) ||
-      t.category.toLowerCase().includes(query) ||
-      t.body?.toLowerCase().includes(query)
-    );
-  }, [templates, searchQuery]);
 
   const handleSendTest = async () => {
     if (!testPhone || !onSendTest) return;
@@ -116,48 +105,9 @@ export function UnifiedWhatsAppConfig({
               <MessageSquare className="h-3.5 w-3.5 text-[#D4A574]" />
               Template
             </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#B9AA9F]" />
-              <Input
-                placeholder="Search templates..."
-                value={searchQuery}
-                onChange={event => setSearchQuery(event.target.value)}
-                className="h-9 border-[#E8E4DE] pl-9 text-sm focus-visible:ring-[#D4A574]"
-              />
-            </div>
-            <Select
-              value={selectedTemplate?.id || ""}
-              onValueChange={value => {
-                const template = filteredTemplates.find(t => t.id === value);
-                if (template) onTemplateSelect(template);
-              }}
-              disabled={templatesLoading}
-            >
-              <SelectTrigger className="h-9 w-full border-[#E8E4DE] text-sm focus:ring-[#D4A574]">
-                <SelectValue placeholder={templatesLoading ? "Loading..." : "Choose a template"} />
-              </SelectTrigger>
-              <SelectContent className="max-h-[260px]">
-                {filteredTemplates.length ? (
-                  filteredTemplates.map(template => (
-                    <SelectItem key={template.id} value={template.id} className="py-2">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium leading-tight">{template.name}</span>
-                        <span className="text-[11px] text-[#8B7F76]">
-                          {template.category} &middot; {template.language.toUpperCase()}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))
-                ) : (
-                  <div className="px-2 py-6 text-center text-sm text-[#8B7F76]">
-                    {templatesLoading ? "Loading templates..." : "No templates found"}
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
 
-            {/* Selected template info pill */}
             {selectedTemplate ? (
+              /* Selected template info pill + Change */
               <div className="flex items-center gap-2 rounded-lg border border-[#E8E4DE] bg-[#FAF9F6] px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-[#4A4139] truncate">{selectedTemplate.name}</p>
@@ -175,8 +125,44 @@ export function UnifiedWhatsAppConfig({
                 >
                   {selectedTemplate.status}
                 </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickerOpen(true)}
+                  className="h-8 shrink-0 border-[#E8E4DE] text-xs"
+                >
+                  Change
+                </Button>
               </div>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                disabled={templatesLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#E8E4DE] bg-[#FAF9F6] px-4 py-4 text-sm font-medium text-[#7D6248] transition-colors hover:border-[#D4A574] hover:bg-[#F3EDE6] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {templatesLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-[#D4A574]" /> Loading templates…
+                  </>
+                ) : (
+                  <>
+                    <LayoutGrid className="h-4 w-4 text-[#D4A574]" /> Choose Template
+                  </>
+                )}
+              </button>
+            )}
+
+            <TemplatePickerModal
+              key={pickerOpen ? `open-${selectedTemplate?.id ?? "none"}` : "closed"}
+              open={pickerOpen}
+              onClose={() => setPickerOpen(false)}
+              templates={templates}
+              templatesLoading={templatesLoading}
+              selectedTemplateId={selectedTemplate?.id ?? null}
+              onSelect={onTemplateSelect}
+            />
           </section>
 
           {/* Variable Mapping */}

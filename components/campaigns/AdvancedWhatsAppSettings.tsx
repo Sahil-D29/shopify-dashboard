@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Settings, Clock, Route, TestTube } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings, Clock, TestTube } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { WhatsAppMessageEditor } from "@/components/journeys/nodes/whatsapp/WhatsAppMessageEditor";
 import { EnhancedDeliverySettings } from "@/components/journeys/nodes/whatsapp/EnhancedDeliverySettings";
-import { ExitPathsConfig } from "@/components/journeys/nodes/whatsapp/ExitPathsConfig";
 import { Step5TestValidate } from "@/components/journeys/nodes/whatsapp/Step5TestValidate";
 import type { WhatsAppActionConfig, WhatsAppTemplate, WhatsAppBodyField, VariableMapping } from "@/lib/types/whatsapp-config";
 import { cn } from "@/lib/utils";
@@ -31,14 +29,9 @@ export function AdvancedWhatsAppSettings({
   config,
   selectedTemplate,
   bodyFields,
-  variableMappings,
   variablePreview,
   onConfigChange,
-  onBodyFieldChange,
-  onVariableMappingsChange,
   onSendTest,
-  dataSources = [],
-  triggerContext = "generic",
   className,
   storageKey = "whatsapp-advanced-settings-collapsed",
 }: AdvancedWhatsAppSettingsProps) {
@@ -48,7 +41,7 @@ export function AdvancedWhatsAppSettings({
     if (stored === null) return false;
     return stored === "open";
   });
-  const [activeTab, setActiveTab] = useState("variables");
+  const [activeTab, setActiveTab] = useState("delivery");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -68,13 +61,6 @@ export function AdvancedWhatsAppSettings({
     const next = { ...(config.failureHandling ?? {}), [field]: value } as WhatsAppActionConfig['failureHandling'];
     onConfigChange({ failureHandling: next });
   };
-
-  const handleBodyFieldChange = (fieldId: string, value: string) => {
-    const next = bodyFields.map((f) => (f.id === fieldId ? { ...f, value } : f));
-    onBodyFieldChange(next);
-  };
-
-  const availableBranches = ['default', 'reorder-flow', 'support-flow', 'reminder-path'];
 
   return (
     <div
@@ -101,16 +87,16 @@ export function AdvancedWhatsAppSettings({
                   Advanced WhatsApp Settings
                 </h3>
                 <span className="hidden shrink-0 rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[11px] font-medium text-[#7D6248] sm:inline-block">
-                  4 settings
+                  2 settings
                 </span>
               </div>
               <p className="break-words text-xs leading-relaxed text-[#8B7F76] sm:text-sm">
-                Configure delivery rules, exit paths, and validation settings
+                Configure delivery rules and validate before sending
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span className="inline-block shrink-0 rounded-full bg-[#F5F3EE] px-2 py-0.5 text-[11px] font-medium text-[#7D6248] sm:hidden">
-                4
+                2
               </span>
               {isOpen ? (
                 <ChevronUp className="h-5 w-5 text-[#7D6248]" />
@@ -123,15 +109,7 @@ export function AdvancedWhatsAppSettings({
         <CollapsibleContent className="mt-3 border-t border-[#F0EBE3] pt-4">
           <div className="rounded-xl border border-[#E8E4DE] bg-[#FAF9F6] p-3 sm:p-4 md:p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 gap-1 rounded-xl bg-white/70 p-1 lg:grid-cols-4">
-                <TabsTrigger
-                  value="variables"
-                  className="flex flex-1 items-center justify-center gap-1.5 text-[11px] sm:gap-2 sm:text-xs lg:text-sm"
-                  title="Variables & Media"
-                >
-                  <Settings className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-                  <span className="truncate">Variables & Media</span>
-                </TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 gap-1 rounded-xl bg-white/70 p-1">
                 <TabsTrigger
                   value="delivery"
                   className="flex flex-1 items-center justify-center gap-1.5 text-[11px] sm:gap-2 sm:text-xs lg:text-sm"
@@ -139,14 +117,6 @@ export function AdvancedWhatsAppSettings({
                 >
                   <Clock className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
                   <span className="truncate">Delivery Rules</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="exitPaths"
-                  className="flex flex-1 items-center justify-center gap-1.5 text-[11px] sm:gap-2 sm:text-xs lg:text-sm"
-                  title="Exit Paths"
-                >
-                  <Route className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-                  <span className="truncate">Exit Paths</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="preview"
@@ -159,41 +129,6 @@ export function AdvancedWhatsAppSettings({
               </TabsList>
 
               <div className="mt-5 max-h-[500px] overflow-y-auto overflow-x-hidden pr-1">
-                <TabsContent value="variables" className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="min-w-0">
-                      <h4 className="mb-1 break-words text-sm font-semibold leading-tight text-[#4A4139] sm:text-base">
-                        Variable Mapping & Personalization
-                      </h4>
-                      <p className="break-words text-xs leading-relaxed text-[#8B7F76] sm:text-sm">
-                        Map template variables to customer data and configure media attachments.
-                      </p>
-                    </div>
-                    {selectedTemplate ? (
-                      <div className="min-w-0">
-                        <WhatsAppMessageEditor
-                          template={selectedTemplate}
-                          bodyFields={bodyFields}
-                          onBodyFieldChange={handleBodyFieldChange}
-                          onInsertVariable={() => undefined}
-                          variableMappings={variableMappings}
-                          onVariableMappingsChange={onVariableMappingsChange}
-                          variableErrors={{}}
-                          dataSources={dataSources}
-                          triggerContext={triggerContext}
-                          useEnhancedMapper={true}
-                        />
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-dashed border-[#E8E4DE] bg-white p-4 text-center">
-                        <p className="break-words text-sm leading-relaxed text-[#8B7F76]">
-                          Select a template first to configure variables
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
                 <TabsContent value="delivery" className="space-y-4">
                   <EnhancedDeliverySettings
                     sendWindow={config.sendWindow}
@@ -204,20 +139,6 @@ export function AdvancedWhatsAppSettings({
                     onFailureHandlingChange={handleFailureHandlingChange}
                     skipIfOptedOut={config.skipIfOptedOut}
                     onOptOutChange={(value) => onConfigChange({ skipIfOptedOut: value })}
-                    validationErrors={[]}
-                  />
-                </TabsContent>
-
-                <TabsContent value="exitPaths" className="space-y-4">
-                  <ExitPathsConfig
-                    config={config.exitPaths || {}}
-                    onChange={(exitPaths) => onConfigChange({ exitPaths })}
-                    availableBranches={availableBranches}
-                    templateButtons={(selectedTemplate?.buttons ?? []).map((b) => ({
-                      id: b.id,
-                      type: b.type,
-                      text: b.text ?? b.label ?? '',
-                    }))}
                     validationErrors={[]}
                   />
                 </TabsContent>

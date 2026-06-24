@@ -14,7 +14,6 @@ import {
   FlaskConical,
   MessageSquare,
   Plus,
-  RefreshCw,
   Repeat,
   Sparkles,
   Target,
@@ -38,6 +37,7 @@ import type { CustomerSegment } from '@/lib/types/segment';
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 import { UnifiedWhatsAppConfig } from '@/components/journeys/nodes/whatsapp/UnifiedWhatsAppConfig';
 import { AdvancedWhatsAppSettings } from '@/components/campaigns/AdvancedWhatsAppSettings';
+import TemplatePickerModal from '@/components/campaigns/TemplatePickerModal';
 import SegmentBuilder from '@/components/segments/SegmentBuilder';
 import {
   Dialog,
@@ -75,6 +75,8 @@ interface ABTestVariant {
   name: string;
   percentage: number;
   messageContent: CampaignMessageContent;
+  templateId?: string;
+  templateName?: string;
 }
 
 interface ABTestConfig {
@@ -127,22 +129,9 @@ interface SegmentListResponse {
   error?: string;
 }
 
-interface TemplateListResponse {
-  templates?: WhatsAppTemplateWithComponents[];
-  error?: string;
-}
-
-interface WhatsAppTemplateWithComponents extends WhatsAppTemplate {
-  components?: TemplateComponent[];
-}
-
 interface ApiErrorPayload {
   error?: string;
   message?: string;
-}
-
-interface TemplateSelectorProps {
-  onSelectTemplate: (template: WhatsAppTemplateWithComponents) => void;
 }
 
 const stepFlow = [
@@ -171,10 +160,6 @@ const TRIGGER_EVENTS: Array<{ value: TriggerEvent; label: string; desc: string }
 ];
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-type TemplateComponent =
-  | { type: 'BODY' | 'body'; text?: string; [key: string]: unknown }
-  | { type: string; [key: string]: unknown };
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
@@ -451,7 +436,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
         {currentStep === 2 && (
           <StepAudience campaignData={campaignData} setCampaignData={setCampaignData} segments={segments} loadingSegments={loadingSegments} estimatedReach={estimatedReach} onCreateSegment={loadSegments} />
         )}
-        {currentStep === 3 && <StepMessage campaignData={campaignData} setCampaignData={setCampaignData} TemplateSelector={TemplateSelector} />}
+        {currentStep === 3 && <StepMessage campaignData={campaignData} setCampaignData={setCampaignData} />}
         {currentStep === 4 && <StepSchedule campaignData={campaignData} setCampaignData={setCampaignData} />}
         {currentStep === 5 && <StepReview campaignData={campaignData} estimatedReach={estimatedReach} selectedSegments={selectedSegments} />}
       </div>
@@ -669,7 +654,7 @@ function StepAudience({ campaignData, setCampaignData, segments, loadingSegments
 /* ═══════════════════════════════════════════
    Step 3 — Message + A/B Testing
    ═══════════════════════════════════════════ */
-function StepMessage({ campaignData, setCampaignData, TemplateSelector: _TemplateSelector }: { campaignData: CampaignFormData; setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>>; TemplateSelector: React.ComponentType<TemplateSelectorProps> }) {
+function StepMessage({ campaignData, setCampaignData }: { campaignData: CampaignFormData; setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>> }) {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
@@ -677,6 +662,7 @@ function StepMessage({ campaignData, setCampaignData, TemplateSelector: _Templat
   const [variableMappings, setVariableMappings] = useState<any[]>(campaignData.whatsappConfig?.variableMappings || []);
   const [variablePreview, setVariablePreview] = useState<Record<string, string>>({});
   const [showABTest, setShowABTest] = useState(campaignData.abTest?.enabled ?? false);
+  const [abPickerVariantId, setAbPickerVariantId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -737,25 +723,47 @@ function StepMessage({ campaignData, setCampaignData, TemplateSelector: _Templat
     const updated = variants.map((v, i) => ({ ...v, percentage: i === variants.length - 1 ? 100 - perEach * (variants.length - 1) : perEach }));
     setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, variants: updated } }));
   };
+  const setVariantTemplate = (variantId: string, template: WhatsAppTemplate) => {
+    const variants = (campaignData.abTest?.variants ?? []).map(v =>
+      v.id === variantId
+        ? { ...v, templateId: template.id, templateName: template.name, messageContent: { ...v.messageContent, body: template.body || template.content || '' } }
+        : v,
+    );
+    setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, variants } }));
+  };
+  const toggleABTest = () => {
+    const next = !showABTest;
+    setShowABTest(next);
+    if (next && !campaignData.abTest) {
+      setCampaignData(p => ({ ...p, abTest: { enabled: true, variants: [{ id: 'variant_a', name: 'Variant A', percentage: 50, messageContent: { body: '' } }, { id: 'variant_b', name: 'Variant B', percentage: 50, messageContent: { body: '' } }], winnerCriteria: 'OPEN_RATE', testDuration: 24 } }));
+    } else if (!next && campaignData.abTest) {
+      setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, enabled: false } }));
+    }
+  };
+  const abVariantForPicker = campaignData.abTest?.variants.find(v => v.id === abPickerVariantId) ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-5">
       <h3 className="text-xl font-bold text-gray-900">Create Your WhatsApp Message</h3>
 
-      <UnifiedWhatsAppConfig templates={templates} templatesLoading={templatesLoading} selectedTemplate={selectedTemplate} config={whatsappConfig} bodyFields={bodyFields} variableMappings={variableMappings} variablePreview={variablePreview} onTemplateSelect={handleTemplateSelect} onBodyFieldChange={(f) => { setBodyFields(f); handleConfigChange({ bodyFields: f }); }} onVariableMappingsChange={(m) => { setVariableMappings(m); handleConfigChange({ variableMappings: m }); }} onSendTest={handleSendTest} dataSources={[]} triggerContext="generic" validationErrors={[]} />
+      {/* ─── Primary Message card ─── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-blue-600" />
+          <h4 className="font-semibold text-gray-900">Message</h4>
+        </div>
+        <UnifiedWhatsAppConfig templates={templates} templatesLoading={templatesLoading} selectedTemplate={selectedTemplate} config={whatsappConfig} bodyFields={bodyFields} variableMappings={variableMappings} variablePreview={variablePreview} onTemplateSelect={handleTemplateSelect} onBodyFieldChange={(f) => { setBodyFields(f); handleConfigChange({ bodyFields: f }); }} onVariableMappingsChange={(m) => { setVariableMappings(m); handleConfigChange({ variableMappings: m }); }} onSendTest={handleSendTest} dataSources={[]} triggerContext="generic" validationErrors={[]} />
+      </div>
 
+      {/* ─── Advanced (Delivery + Validate) ─── */}
       <AdvancedWhatsAppSettings config={whatsappConfig} selectedTemplate={selectedTemplate} bodyFields={bodyFields} variableMappings={variableMappings} variablePreview={variablePreview} onConfigChange={handleConfigChange} onBodyFieldChange={(f) => { setBodyFields(f); handleConfigChange({ bodyFields: f }); }} onVariableMappingsChange={(m) => { setVariableMappings(m); handleConfigChange({ variableMappings: m }); }} onSendTest={handleSendTest} dataSources={[]} triggerContext="generic" />
 
-      {/* ─── A/B Testing ─── */}
+      {/* ─── A/B Variants ─── */}
       <div className="rounded-xl border border-gray-200 bg-gray-50">
-        <button type="button" onClick={() => {
-          const next = !showABTest;
-          setShowABTest(next);
-          if (next && !campaignData.abTest) setCampaignData(p => ({ ...p, abTest: { enabled: true, variants: [{ id: 'variant_a', name: 'Variant A', percentage: 50, messageContent: { body: '' } }, { id: 'variant_b', name: 'Variant B', percentage: 50, messageContent: { body: '' } }], winnerCriteria: 'OPEN_RATE', testDuration: 24 } }));
-        }} className="flex w-full items-center justify-between p-4 text-left">
+        <button type="button" onClick={toggleABTest} className="flex w-full items-center justify-between p-4 text-left">
           <div className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5 text-purple-600" />
-            <span className="font-semibold text-gray-900">A/B Testing</span>
+            <span className="font-semibold text-gray-900">Create A/B Variants?</span>
             {campaignData.abTest?.enabled && <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">{campaignData.abTest.variants.length} variants</span>}
           </div>
           {showABTest ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
@@ -763,57 +771,71 @@ function StepMessage({ campaignData, setCampaignData, TemplateSelector: _Templat
 
         {showABTest && campaignData.abTest && (
           <div className="border-t border-gray-200 p-4 space-y-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={campaignData.abTest.enabled} onChange={e => setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, enabled: e.target.checked } }))} className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
-              <span className="text-sm font-medium text-gray-700">Enable A/B testing</span>
-            </label>
+            <p className="text-xs text-gray-500">Test different templates against each other. Traffic is split among variants; the winning variant is sent to the remaining recipients.</p>
 
-            {campaignData.abTest.enabled && (
-              <>
-                <div className="space-y-3">
-                  {campaignData.abTest.variants.map((variant, idx) => (
-                    <div key={variant.id} className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-900">{variant.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{variant.percentage}% traffic</span>
-                          {campaignData.abTest!.variants.length > 2 && <button type="button" onClick={() => removeVariant(variant.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
-                        </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {campaignData.abTest.variants.map(variant => {
+                const variantTemplate = variant.templateId ? templates.find(t => t.id === variant.templateId) ?? null : null;
+                return (
+                  <div key={variant.id} className="flex flex-col rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-900">{variant.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">{variant.percentage}%</span>
+                        {campaignData.abTest!.variants.length > 2 && <button type="button" onClick={() => removeVariant(variant.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
-                      <Textarea value={variant.messageContent.body} onChange={e => {
-                        const updated = [...campaignData.abTest!.variants];
-                        updated[idx] = { ...updated[idx], messageContent: { ...updated[idx].messageContent, body: e.target.value } };
-                        setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, variants: updated } }));
-                      }} placeholder={`Message for ${variant.name}...`} rows={2} className="text-sm" />
                     </div>
-                  ))}
-                </div>
-
-                {campaignData.abTest.variants.length < 3 && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="mr-1 h-3.5 w-3.5" /> Add Variant</Button>}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label className="mb-1 block text-sm">Winner Criteria</Label>
-                    <select value={campaignData.abTest.winnerCriteria} onChange={e => setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, winnerCriteria: e.target.value as ABTestConfig['winnerCriteria'] } }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
-                      <option value="OPEN_RATE">Open Rate</option>
-                      <option value="CLICK_RATE">Click Rate</option>
-                      <option value="CONVERSION_RATE">Conversion Rate</option>
-                    </select>
+                    {variantTemplate ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium text-gray-900">{variantTemplate.name}</p>
+                          <p className="line-clamp-2 text-[11px] leading-relaxed text-gray-500">{variantTemplate.body || variantTemplate.content || 'No preview'}</p>
+                        </div>
+                        <button type="button" onClick={() => setAbPickerVariantId(variant.id)} className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-800">Change</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setAbPickerVariantId(variant.id)} className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-3 text-sm font-medium text-gray-600 transition-colors hover:border-purple-400 hover:bg-purple-50">
+                        <MessageSquare className="h-4 w-4 text-purple-500" /> Choose template
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <Label className="mb-1 block text-sm">Test Duration (hours)</Label>
-                    <Input type="number" min={1} max={168} value={campaignData.abTest.testDuration} onChange={e => setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, testDuration: parseInt(e.target.value) || 24 } }))} className="text-sm" />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">Traffic will be split among variants during the test period. The winning variant will be sent to remaining recipients.</p>
-              </>
-            )}
+                );
+              })}
+            </div>
+
+            {campaignData.abTest.variants.length < 3 && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="mr-1 h-3.5 w-3.5" /> Add Variant</Button>}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label className="mb-1 block text-sm">Winner Criteria</Label>
+                <select value={campaignData.abTest.winnerCriteria} onChange={e => setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, winnerCriteria: e.target.value as ABTestConfig['winnerCriteria'] } }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
+                  <option value="OPEN_RATE">Open Rate</option>
+                  <option value="CLICK_RATE">Click Rate</option>
+                  <option value="CONVERSION_RATE">Conversion Rate</option>
+                </select>
+              </div>
+              <div>
+                <Label className="mb-1 block text-sm">Test Duration (hours)</Label>
+                <Input type="number" min={1} max={168} value={campaignData.abTest.testDuration} onChange={e => setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, testDuration: parseInt(e.target.value) || 24 } }))} className="text-sm" />
+              </div>
+            </div>
           </div>
         )}
       </div>
 
       {/* ─── Follow-Up Messages ─── */}
       <FollowUpSection campaignData={campaignData} setCampaignData={setCampaignData} />
+
+      {/* A/B per-variant template picker */}
+      <TemplatePickerModal
+        key={abPickerVariantId ?? 'ab-closed'}
+        open={abPickerVariantId !== null}
+        onClose={() => setAbPickerVariantId(null)}
+        templates={templates}
+        templatesLoading={templatesLoading}
+        selectedTemplateId={abVariantForPicker?.templateId ?? null}
+        onSelect={(template) => { if (abPickerVariantId) setVariantTemplate(abPickerVariantId, template); }}
+      />
     </div>
   );
 }
@@ -1009,7 +1031,7 @@ function StepReview({ campaignData, selectedSegments, estimatedReach }: { campai
           { label: 'Variants', value: `${campaignData.abTest.variants.length} variants` },
           { label: 'Winner Criteria', value: campaignData.abTest.winnerCriteria.replace(/_/g, ' ') },
           { label: 'Test Duration', value: `${campaignData.abTest.testDuration} hours` },
-          ...campaignData.abTest.variants.map(v => ({ label: v.name, value: `${v.percentage}% — ${(v.messageContent.body || 'No content').slice(0, 40)}${(v.messageContent.body || '').length > 40 ? '...' : ''}` })),
+          ...campaignData.abTest.variants.map(v => ({ label: v.name, value: `${v.percentage}% — ${v.templateName || (v.messageContent.body ? `${v.messageContent.body.slice(0, 40)}${v.messageContent.body.length > 40 ? '...' : ''}` : 'No template')}` })),
         ]} />
       )}
 
@@ -1083,46 +1105,6 @@ function FollowUpSection({ campaignData, setCampaignData }: { campaignData: Camp
           />
         </div>
       )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════
-   Template Selector
-   ═══════════════════════════════════════════ */
-function TemplateSelector({ onSelectTemplate }: TemplateSelectorProps) {
-  const [templates, setTemplates] = useState<WhatsAppTemplateWithComponents[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-
-  const loadTemplates = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      const res = await fetch('/api/templates/whatsapp', { cache: 'no-store' });
-      const payload = (await res.json().catch(() => ({}))) as TemplateListResponse;
-      if (!res.ok) throw new Error(payload.error ?? 'Failed to load templates');
-      setTemplates(payload.templates ?? []);
-    } catch (err) { setError(getErrorMessage(err, 'Failed to load templates')); } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { void loadTemplates(); }, [loadTemplates]);
-
-  if (loading) return (<div className="rounded-xl border border-gray-200 bg-gray-50 p-6"><div className="flex items-center justify-center gap-3 py-8"><RefreshCw className="h-6 w-6 animate-spin text-blue-600" /><span className="text-gray-600">Loading approved templates...</span></div></div>);
-  if (error) return (<div className="rounded-xl border border-red-200 bg-red-50 p-6"><p className="mb-4 text-red-800">{error}</p><Button variant="outline" size="sm" onClick={loadTemplates}><RefreshCw className="mr-2 h-4 w-4" /> Retry</Button></div>);
-  if (templates.length === 0) return (<div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6"><p className="mb-2 font-semibold text-yellow-800">No approved templates available.</p><p className="mb-4 text-sm text-yellow-700">Create and approve templates in WhatsApp Manager to use them here.</p><a href="https://business.facebook.com/wa/manage/message-templates/" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">Open WhatsApp Manager →</a></div>);
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <Label className="text-base font-semibold">Select Approved Template (Optional)</Label>
-        <Button variant="outline" size="sm" onClick={loadTemplates}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
-      </div>
-      <select value={selectedTemplate} onChange={e => { setSelectedTemplate(e.target.value); const t = templates.find(x => x.id === e.target.value); if (t) onSelectTemplate(t); }} className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base focus:border-transparent focus:ring-2 focus:ring-blue-500">
-        <option value="">Select a template…</option>
-        {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.language}) — {t.category}</option>)}
-      </select>
-      {selectedTemplate && <div className="mt-3 flex items-center gap-2 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" /><span>Template selected: {templates.find(x => x.id === selectedTemplate)?.name}</span></div>}
     </div>
   );
 }
