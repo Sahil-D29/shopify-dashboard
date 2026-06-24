@@ -723,6 +723,13 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
     const updated = variants.map((v, i) => ({ ...v, percentage: i === variants.length - 1 ? 100 - perEach * (variants.length - 1) : perEach }));
     setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, variants: updated } }));
   };
+  const setVariantPercentage = (variantId: string, value: number) => {
+    const pct = Math.max(0, Math.min(100, Math.round(value)));
+    const variants = (campaignData.abTest?.variants ?? []).map(v =>
+      v.id === variantId ? { ...v, percentage: pct } : v,
+    );
+    setCampaignData(p => ({ ...p, abTest: { ...p.abTest!, variants } }));
+  };
   const setVariantTemplate = (variantId: string, template: WhatsAppTemplate) => {
     const variants = (campaignData.abTest?.variants ?? []).map(v =>
       v.id === variantId
@@ -781,7 +788,18 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-gray-900">{variant.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">{variant.percentage}%</span>
+                        <div className="flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={variant.percentage}
+                            onChange={e => setVariantPercentage(variant.id, parseInt(e.target.value, 10) || 0)}
+                            className="w-10 bg-transparent text-right text-xs font-semibold text-purple-700 focus:outline-none"
+                            aria-label={`${variant.name} traffic percentage`}
+                          />
+                          <span className="text-xs font-medium text-purple-700">%</span>
+                        </div>
                         {campaignData.abTest!.variants.length > 2 && <button type="button" onClick={() => removeVariant(variant.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
                     </div>
@@ -802,6 +820,16 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
                 );
               })}
             </div>
+
+            {(() => {
+              const total = campaignData.abTest.variants.reduce((s, v) => s + (v.percentage || 0), 0);
+              return (
+                <div className={`flex items-center gap-2 text-xs ${total === 100 ? 'text-gray-500' : 'text-amber-600'}`}>
+                  <span className="font-medium">Total split: {total}%</span>
+                  {total !== 100 && <span>— traffic should add up to 100%</span>}
+                </div>
+              );
+            })()}
 
             {campaignData.abTest.variants.length < 3 && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="mr-1 h-3.5 w-3.5" /> Add Variant</Button>}
 

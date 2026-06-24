@@ -10,7 +10,16 @@ interface MobilePreviewProps {
   variableValues?: Record<string, string>;
 }
 
-const whatsappGreen = '#25D366';
+const whatsappHeaderGreen = '#008069';
+// Authentic WhatsApp light-mode chat wallpaper: warm beige with a faint doodle tile.
+const chatBg = '#efeae2';
+const chatWallpaper =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'%3E%3Cg fill='none' stroke='%23d6ccc0' stroke-width='1.3' stroke-linecap='round' opacity='0.55'%3E%3Cpath d='M14 20c3-4 9-4 12 0'/%3E%3Ccircle cx='66' cy='18' r='4.5'/%3E%3Cpath d='M22 58h12M28 52v12'/%3E%3Cpath d='M58 64c2.5-3.5 7-3.5 9.5 0'/%3E%3Cpath d='M70 44c-3 0-5 2-5 5'/%3E%3Cpath d='M12 78c2-3 6-3 8 0'/%3E%3C/g%3E%3C/svg%3E\")";
+const chatAreaStyle = {
+  backgroundColor: chatBg,
+  backgroundImage: chatWallpaper,
+  backgroundSize: '90px 90px',
+} as const;
 
 // Helper function to get the best matching value for a template variable
 const getVariableValue = (
@@ -159,7 +168,7 @@ export function MobilePreview({ template, variableValues }: MobilePreviewProps) 
       <div className="mx-auto flex items-center justify-center">
         {/* Empty state with premium phone frame styling */}
         <div className="relative rounded-[28px] border-[12px] border-[#1a1a1a] bg-[#1a1a1a] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
-          <div className="flex h-[520px] w-[280px] items-center justify-center rounded-[16px] bg-[#ece5dd]">
+          <div className="flex h-[520px] w-[280px] items-center justify-center rounded-[16px]" style={chatAreaStyle}>
             <p className="w-3/4 text-center text-sm text-gray-500">
               Select a template to preview how it renders in WhatsApp.
             </p>
@@ -176,7 +185,7 @@ export function MobilePreview({ template, variableValues }: MobilePreviewProps) 
         {/* Outer phone frame - premium dark bezel with depth and inner shadow */}
         <div className="relative rounded-[28px] border-[12px] border-[#1a1a1a] bg-[#1a1a1a] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5),inset_0_0_0_1px_rgba(255,255,255,0.1)]">
           {/* Inner screen area with proper aspect ratio (tall, modern phone ~9:19.5) */}
-          <div className="relative overflow-hidden rounded-[16px] bg-[#ece5dd] w-full" style={{ aspectRatio: '9/19.5', minHeight: '520px' }}>
+          <div className="relative w-full overflow-hidden rounded-[16px]" style={{ aspectRatio: '9/19.5', minHeight: '520px', backgroundColor: chatBg }}>
             {/* Notch/Dynamic Island area */}
             <div className="relative h-[32px] bg-[#1a1a1a]">
               <div className="absolute left-1/2 top-[6px] h-[5px] w-[140px] -translate-x-1/2 rounded-full bg-[#2a2a2a]" />
@@ -185,9 +194,9 @@ export function MobilePreview({ template, variableValues }: MobilePreviewProps) 
 
             {/* WhatsApp header bar */}
             <div className="relative bg-white">
-              <div 
-                className="flex items-center gap-3 rounded-t-[12px] px-5 py-3.5 shadow-sm" 
-                style={{ backgroundColor: whatsappGreen }}
+              <div
+                className="flex items-center gap-3 rounded-t-[12px] px-5 py-3.5 shadow-sm"
+                style={{ backgroundColor: whatsappHeaderGreen }}
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white transition-opacity hover:bg-white/30">
                   <ChevronLeft className="h-4 w-4" />
@@ -201,7 +210,7 @@ export function MobilePreview({ template, variableValues }: MobilePreviewProps) 
             </div>
 
             {/* Message content area with proper spacing */}
-            <div className="space-y-5 px-5 py-6 min-h-[400px]">
+            <div className="space-y-5 px-5 py-6 min-h-[400px]" style={chatAreaStyle}>
               {/* Media header */}
               {template.header?.type === 'IMAGE' ? (
                 <div className="flex h-48 items-center justify-center overflow-hidden rounded-2xl bg-gray-200 shadow-sm">

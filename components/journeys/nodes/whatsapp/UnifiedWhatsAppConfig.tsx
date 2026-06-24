@@ -180,6 +180,7 @@ export function UnifiedWhatsAppConfig({
                 dataSources={dataSources}
                 triggerContext={triggerContext}
                 useEnhancedMapper={true}
+                showPreview={false}
               />
             </section>
           ) : null}

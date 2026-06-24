@@ -39,6 +39,9 @@ interface WhatsAppMessageEditorProps {
   disableStatic?: boolean;
   triggerContext?: 'generic' | 'order' | 'product';
   useEnhancedMapper?: boolean;
+  /** When false, the editor's built-in live preview is hidden (use when the
+   *  parent already renders its own preview, e.g. the campaign wizard). */
+  showPreview?: boolean;
 }
 
 interface VariableInsertMenuProps {
@@ -58,6 +61,7 @@ export function WhatsAppMessageEditor({
   disableStatic,
   triggerContext = 'generic',
   useEnhancedMapper = true,
+  showPreview = true,
 }: WhatsAppMessageEditorProps) {
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [openPickerFor, setOpenPickerFor] = useState<string | null>(null);
@@ -154,7 +158,7 @@ export function WhatsAppMessageEditor({
       </div>
 
       {useEnhancedMapper ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={cn("grid grid-cols-1 gap-6", showPreview && "lg:grid-cols-2")}>
           {/* Left: Variable Mapping */}
           <div className="space-y-4">
             <div>
@@ -171,10 +175,12 @@ export function WhatsAppMessageEditor({
             </div>
           </div>
 
-          {/* Right: Live Preview */}
-          <div className="sticky top-0">
-            <EnhancedWhatsAppPreview template={template} mappings={variableMappings} />
-          </div>
+          {/* Right: Live Preview (hidden when the parent renders its own) */}
+          {showPreview ? (
+            <div className="sticky top-0">
+              <EnhancedWhatsAppPreview template={template} mappings={variableMappings} />
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-2">
