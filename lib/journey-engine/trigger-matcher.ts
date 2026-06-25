@@ -314,7 +314,7 @@ function extractTriggerConfig(node: JourneyNode): TriggerMeta {
   };
 }
 
-async function canEnterJourney(journey: JourneyDefinition, customerId: string): Promise<boolean> {
+export async function canEnterJourney(journey: JourneyDefinition, customerId: string): Promise<boolean> {
   const settings = (journey.settings as Record<string, unknown>) || {};
   const allowReentry = typeof settings.allowReentry === 'boolean' ? settings.allowReentry : false;
   const cooldownDays = typeof settings.reentryCooldownDays === 'number' ? settings.reentryCooldownDays : typeof settings.reentryCooldown === 'number' ? settings.reentryCooldown : 0;

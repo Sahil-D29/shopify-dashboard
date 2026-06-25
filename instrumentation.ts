@@ -17,11 +17,13 @@ export async function register() {
   globalRef.__campaignCronStarted = true;
 
   const { runCampaignWorkerStep } = await import('@/jobs/campaign.worker');
+  const { runJourneyTriggerTick } = await import('@/lib/journeys/trigger-scheduler');
 
   const TICK_MS = 60_000; // every minute
   const MAX_PER_TICK = 10; // drain up to N queued campaigns per tick
 
   const tick = async () => {
+    // Campaigns: drain the send queue.
     try {
       for (let i = 0; i < MAX_PER_TICK; i++) {
         const result = await runCampaignWorkerStep();
@@ -30,6 +32,13 @@ export async function register() {
       }
     } catch (error) {
       console.error('[campaign-cron] tick failed:', error);
+    }
+
+    // Journeys: evaluate Segment-Joined triggers and enroll new members.
+    try {
+      await runJourneyTriggerTick();
+    } catch (error) {
+      console.error('[journey-cron] tick failed:', error);
     }
   };
 
