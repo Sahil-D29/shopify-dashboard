@@ -8,7 +8,6 @@ import { prisma } from '@/lib/prisma';
 import { graphUrl } from '@/lib/whatsapp/graph';
 import { logError } from '@/lib/logger';
 import { sendEmail } from '@/lib/email';
-import { matchesGroups } from '@/lib/segments/evaluator';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { SegmentGroup } from '@/lib/types/segment';
 import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
@@ -180,13 +179,12 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
   const delayBetweenMessages = SPEED_DELAY_MS[sendingSpeed] ?? SPEED_DELAY_MS.MEDIUM;
 
   try {
-    if (!store?.shopifyDomain || !store?.accessToken) {
-      throw new Error('Store or access token missing');
-    }
-
+    // Build a Shopify client best-effort. The audience engine below merges the
+    // store's Contacts with Shopify customers and degrades gracefully when
+    // Shopify is unavailable, so a WhatsApp-only store still resolves recipients.
     const client = new ShopifyClient({
-      shop: store.shopifyDomain,
-      accessToken: store.accessToken,
+      shop: store?.shopifyDomain ?? '',
+      accessToken: store?.accessToken ?? '',
     });
 
     // Multi-segment support: use segmentIds array if available, fallback to single segmentId
@@ -197,36 +195,41 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
         ? [campaign.segmentId]
         : [];
 
-    // Load all selected segments
+    // Resolve the audience via the shared, Contact-aware engine (Contacts ⋃
+    // Shopify customers, deduped). Recipients can come from any source — webhook
+    // contacts, custom events, or Shopify — and the segment filters are applied
+    // the same way the segment preview applies them.
+    const { calculateSegmentStats } = await import('@/lib/utils/segment-stats');
     const segments = allSegmentIds.length > 0
       ? await prisma.segment.findMany({ where: { id: { in: allSegmentIds } } })
       : [];
 
-    const hasSegmentFilters = segments.length > 0 && segments.some(
-      s => {
-        const groups = (s.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
-        return groups.length > 0;
+    let matchingCustomers: ShopifyCustomer[];
+    if (allSegmentIds.length === 0) {
+      // No segment selected → whole audience (all contacts + customers).
+      const stats = await calculateSegmentStats({ client, storeId, conditionGroups: [], forceRefresh: false });
+      matchingCustomers = (stats.customers ?? []) as ShopifyCustomer[];
+    } else {
+      // Resolve each segment to its members, then intersect (a recipient must be
+      // in ALL selected segments — matches the prior AND semantics).
+      const pool = new Map<string, ShopifyCustomer>();
+      let matchedIds: Set<string> | null = null;
+      for (const segId of allSegmentIds) {
+        const seg = segments.find(s => s.id === segId);
+        const conditionGroups = (seg?.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
+        const stats = await calculateSegmentStats({ client, storeId, segmentId: segId, conditionGroups, forceRefresh: false });
+        const members = (stats.customers ?? []) as ShopifyCustomer[];
+        members.forEach(c => pool.set(String(c.id), c));
+        const ids = new Set<string>(members.map(c => String(c.id)));
+        if (matchedIds === null) {
+          matchedIds = ids;
+        } else {
+          const prev: Set<string> = matchedIds;
+          matchedIds = new Set<string>(Array.from(prev).filter(id => ids.has(id)));
+        }
       }
-    );
-
-    // Fetch all customers
-    const rawCustomers = await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-
-    // Filter: customer must match ALL selected segments (AND logic)
-    const matchingCustomers = !hasSegmentFilters
-      ? rawCustomers
-      : rawCustomers.filter((c) => {
-          return segments.every((segment) => {
-            if (segment.name?.toLowerCase() === 'all') return true;
-            const conditionGroups = (segment.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
-            if (conditionGroups.length === 0) return true;
-            try {
-              return matchesGroups(c, conditionGroups);
-            } catch {
-              return false;
-            }
-          });
-        });
+      matchingCustomers = matchedIds ? Array.from(pool.values()).filter(c => matchedIds!.has(String(c.id))) : [];
+    }
 
     let sent = 0;
     let delivered = 0;
