@@ -39,6 +39,7 @@ import type { JourneyNodeData } from './nodes';
 import { TriggerConfigPanel } from './trigger/TriggerConfigPanel';
 import { TriggerConfigErrorBoundary } from './trigger/TriggerConfigErrorBoundary';
 import { CatalogEventSelect } from './trigger/CatalogEventSelect';
+import { TriggerFilterBuilder, type TriggerFilter } from './trigger/TriggerFilterBuilder';
 import { TriggerConfig } from '../trigger/TriggerConfig';
 import type { TriggerConfigState } from '../trigger/types';
 import { configToState, stateToConfig } from '../trigger/stateMappers';
@@ -510,6 +511,21 @@ export function JourneyNodeInspector({
                     The journey enrolls the customer when this event fires — from Shopify,
                     WhatsApp, your storefront, or your custom events.
                   </p>
+                  <TriggerFilterBuilder
+                    eventId={String(meta.webhookEvent ?? '')}
+                    filters={Array.isArray(meta.conditions) ? (meta.conditions as TriggerFilter[]) : []}
+                    join={meta.conditionJoin === 'any' ? 'any' : 'all'}
+                    onChange={(filters, joinValue) => {
+                      // Set both in one update — handleMetaChange spreads current
+                      // meta per call, so two sequential calls would clobber.
+                      if (!node.id) return;
+                      onUpdate?.(node.id, {
+                        ...(node.data.meta || {}),
+                        conditions: filters,
+                        conditionJoin: joinValue,
+                      });
+                    }}
+                  />
                 </div>
               ) : null}
 
