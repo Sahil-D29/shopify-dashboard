@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
       template_id,
       template_name,
       template_language,
+      template_category,
       phone,
       variables = {},
       body_fields = [],
@@ -234,7 +235,27 @@ export async function POST(request: NextRequest) {
     }
 
     const templates = getTemplates();
-    const template = ensureTemplate(templates, template_id, template_name);
+    let template = ensureTemplate(templates, template_id, template_name);
+
+    // Real templates (Meta-synced / DB drafts) don't live in the in-memory
+    // sample store, so the lookup misses for them. The client only surfaces
+    // approved templates for selection and already passes the template's
+    // identity, so synthesize a minimal template from the request and let the
+    // Meta API be the source of truth for approval/delivery.
+    if (!template && template_name) {
+      template = {
+        id: template_id ?? template_name,
+        name: template_name,
+        category: template_category ?? '',
+        language: template_language,
+        status: 'APPROVED',
+        content: '',
+        body: '',
+        variables: Object.keys(variables ?? {}),
+        hasMediaHeader: false,
+        hasButtons: false,
+      } as WhatsAppTemplate;
+    }
 
     if (!template) {
       const message = ERROR_MESSAGES.TEMPLATE_NOT_FOUND;
