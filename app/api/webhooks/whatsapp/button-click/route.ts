@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { prisma } from '@/lib/prisma';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 
 interface ButtonClickPayload {
@@ -75,6 +77,22 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             console.error('[Button Click] CampaignLog update error:', err);
             // Non-fatal: don't break webhook processing
+          }
+
+          // ─── Journey trigger: WhatsApp button clicked ────────
+          try {
+            await matchAndExecuteJourneys('whatsapp_button_clicked', {
+              shop: null,
+              payload: {
+                phone: normalizePhone(phoneNumber),
+                buttonId,
+                buttonText: buttonText ?? '',
+                text: buttonText ?? '',
+              },
+              receivedAt: new Date().toISOString(),
+            });
+          } catch (journeyErr) {
+            console.error('[Button Click] Journey trigger dispatch failed:', journeyErr);
           }
 
           // Find enrollment by original message ID

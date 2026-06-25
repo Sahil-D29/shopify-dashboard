@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { prisma } from '@/lib/prisma';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 
 interface DLRPayload {
@@ -109,6 +111,19 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             console.error('[DLR] CampaignLog update error:', err);
             // Non-fatal: don't break webhook processing
+          }
+
+          // ─── Journey trigger: campaign/message opened (read receipt) ────────
+          if (messageStatus === 'read' && recipient_id) {
+            try {
+              await matchAndExecuteJourneys('campaign_opened', {
+                shop: null,
+                payload: { phone: normalizePhone(recipient_id), channel: 'whatsapp' },
+                receivedAt: new Date().toISOString(),
+              });
+            } catch (journeyErr) {
+              console.error('[DLR] Journey trigger dispatch failed:', journeyErr);
+            }
           }
 
           // Find journey enrollment with this message ID

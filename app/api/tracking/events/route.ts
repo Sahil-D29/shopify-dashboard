@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
+
+/** Map storefront tracking event names to canonical journey catalog ids. */
+const STOREFRONT_TO_CATALOG: Record<string, string> = {
+  search_submitted: 'searched_product',
+  active_on_site: 'browse_abandonment',
+};
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +92,32 @@ export async function POST(request: NextRequest) {
         metadata: (normalizeMetadata(metadata) ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       },
     });
+
+    // ─── Journey trigger: storefront event ────────
+    // Only when we can identify the visitor (id / email / phone); anonymous
+    // sessions just record the event. Best-effort, non-fatal.
+    const meta = (normalizeMetadata(metadata) ?? {}) as Record<string, unknown>;
+    const visitorEmail = typeof meta.email === 'string' ? meta.email : undefined;
+    const visitorPhone = typeof meta.phone === 'string' ? meta.phone : undefined;
+    if (customerId || visitorEmail || visitorPhone) {
+      const catalogId = STOREFRONT_TO_CATALOG[eventType] ?? eventType;
+      try {
+        await matchAndExecuteJourneys(catalogId, {
+          shop: null,
+          payload: {
+            customer_id: customerId || undefined,
+            email: visitorEmail,
+            phone: visitorPhone,
+            resourceId: resourceId || undefined,
+            resourceTitle: resourceTitle || undefined,
+            storeId,
+          },
+          receivedAt: new Date().toISOString(),
+        });
+      } catch (journeyErr) {
+        console.error('[Tracking] Journey trigger dispatch failed:', journeyErr);
+      }
+    }
 
     return json({ success: true });
   } catch (error) {

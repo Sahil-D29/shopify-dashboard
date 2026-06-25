@@ -3,6 +3,7 @@ import type { JourneyDefinition, JourneyNode, JourneyNodeData } from '@/lib/type
 import { fetchShopifyCustomer } from './shopify';
 import { shopifyClient } from '@/lib/shopify/client';
 import { customerInSegment } from '@/lib/segments/resolve-customers';
+import { normalizeEventName } from '@/lib/journeys/event-catalog';
 import { evaluateConditions } from './condition-evaluator';
 import { startJourneyExecution } from './executor';
 import {
@@ -125,8 +126,11 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
 }
 
 async function triggerMatches(config: TriggerMeta, eventType: string, eventData: EventPayload): Promise<boolean> {
-  const expectedEvent = (config.webhookEvent || config.triggerType || '').toLowerCase();
-  if (expectedEvent && expectedEvent !== eventType.toLowerCase()) {
+  // Normalize both sides to canonical catalog ids so a trigger stored as a
+  // catalog id (`order_placed`) matches a Shopify topic dispatch (`orders/create`),
+  // and legacy triggers stored as raw topics keep working.
+  const expectedEvent = normalizeEventName(config.webhookEvent || config.triggerType || '');
+  if (expectedEvent && expectedEvent !== normalizeEventName(eventType)) {
     return false;
   }
 

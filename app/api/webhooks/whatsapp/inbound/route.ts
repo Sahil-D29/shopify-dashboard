@@ -4,6 +4,7 @@ import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { prisma } from '@/lib/prisma';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send-message';
+import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 import type { JourneyDefinition } from '@/lib/types/journey';
 
 interface InboundMessagePayload {
@@ -218,6 +219,24 @@ export async function handleInboundPayload(body: InboundMessagePayload) {
                   where: { id: contact.id },
                   data: { optInStatus: 'OPTED_IN', optInAt: new Date() },
                 });
+              }
+
+              // ─── Journey trigger: WhatsApp reply received ────────
+              // Enrolls the contact into any journey triggered on this event.
+              try {
+                await matchAndExecuteJourneys('whatsapp_reply_received', {
+                  shop: null,
+                  payload: {
+                    phone: normalizedPhone,
+                    customerId: contact.id,
+                    email: contact.email ?? undefined,
+                    text: text?.body ?? '',
+                    storeId,
+                  },
+                  receivedAt: new Date().toISOString(),
+                });
+              } catch (journeyErr) {
+                console.error('[Inbound] Journey trigger dispatch failed:', journeyErr);
               }
             }
           } catch (err) {
