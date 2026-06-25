@@ -402,17 +402,29 @@ export async function POST(request: NextRequest) {
 
     // Immediate campaigns: run the worker inline so the user gets instant
     // feedback (sent counts, or a FAILED status with the reason) instead of a
-    // campaign that silently stays on RUNNING. Best-effort — never blocks the
-    // response from succeeding.
+    // campaign that silently stays on RUNNING.
+    let sendError: string | undefined;
     if (status === 'RUNNING') {
       try {
         const { runCampaignWorkerStep } = await import('@/jobs/campaign.worker');
         for (let i = 0; i < 3; i++) {
           const result = await runCampaignWorkerStep();
+          if (result.error && result.campaignId === dbCampaign.id) {
+            sendError = result.error;
+            break;
+          }
           if (!result.processed) break;
         }
       } catch (runError) {
+        sendError = runError instanceof Error ? runError.message : String(runError);
         console.error('[API] Inline campaign run failed:', runError);
+      }
+      // Surface setup/send problems instead of leaving the campaign on RUNNING
+      // (there is no cron to retry, so a silent RUNNING never resolves).
+      if (sendError) {
+        await prisma.campaign
+          .update({ where: { id: dbCampaign.id }, data: { status: 'FAILED' } })
+          .catch(() => {});
       }
     }
 
@@ -427,7 +439,7 @@ export async function POST(request: NextRequest) {
 
     const campaign = transformCampaign(refreshed ?? dbCampaign);
 
-    return NextResponse.json({ campaign, success: true });
+    return NextResponse.json({ campaign, success: true, sendError });
   } catch (error) {
     console.error('[API] Error creating campaign:', error);
     return NextResponse.json(

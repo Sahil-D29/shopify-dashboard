@@ -310,9 +310,13 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(campaignData),
       });
-      const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+      const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & { sendError?: string };
       if (!response.ok) throw new Error(payload.error ?? payload.message ?? 'Unable to save campaign');
-      toast.success(isEditMode ? 'Campaign updated successfully' : 'Campaign launched successfully');
+      if (payload.sendError) {
+        toast.error(`Campaign saved, but sending failed: ${payload.sendError}`);
+      } else {
+        toast.success(isEditMode ? 'Campaign updated successfully' : 'Campaign launched successfully');
+      }
       onComplete();
     } catch (error) {
       console.error('Failed to launch campaign', error);
