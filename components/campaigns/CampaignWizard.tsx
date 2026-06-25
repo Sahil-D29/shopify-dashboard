@@ -297,6 +297,8 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
     setCurrentStep(prev => { if (prev > 1) return prev - 1; router.push('/campaigns'); return prev; });
   };
 
+  const [savingDraft, setSavingDraft] = useState(false);
+
   const handleLaunch = async () => {
     try {
       const url = isEditMode ? `/api/campaigns/${campaignId}` : '/api/campaigns';
@@ -313,6 +315,33 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
     } catch (error) {
       console.error('Failed to launch campaign', error);
       toast.error(getErrorMessage(error, `Failed to ${isEditMode ? 'update' : 'create'} campaign`));
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!campaignData.name.trim()) {
+      toast.error('Add a campaign name before saving a draft');
+      setCurrentStep(1);
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      const url = isEditMode ? `/api/campaigns/${campaignId}` : '/api/campaigns';
+      const method = isEditMode ? 'PUT' : 'POST';
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...campaignData, status: 'DRAFT' }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+      if (!response.ok) throw new Error(payload.error ?? payload.message ?? 'Unable to save draft');
+      toast.success('Saved as draft');
+      onComplete();
+    } catch (error) {
+      console.error('Failed to save draft', error);
+      toast.error(getErrorMessage(error, 'Failed to save draft'));
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -451,14 +480,26 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
             <span key={step.number} className={`h-2 rounded-full transition-all ${currentStep === step.number ? 'w-8 bg-blue-600' : currentStep > step.number ? 'w-4 bg-green-500' : 'w-2 bg-gray-300'}`} />
           ))}
         </div>
-        <Button
-          onClick={currentStep === steps.length ? handleLaunch : handleNext}
-          size="lg"
-          className="bg-blue-600 hover:bg-blue-700"
-          disabled={loadingCampaign || (currentStep === 1 && !campaignData.name.trim()) || (currentStep === 2 && campaignData.segmentIds.length === 0) || (currentStep === 3 && !campaignData.messageContent.body.trim())}
-        >
-          {loadingCampaign ? 'Loading...' : currentStep === steps.length ? (isEditMode ? 'Update Campaign' : 'Launch Campaign') : (<>Continue <ChevronRight className="ml-2 h-4 w-4" /></>)}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleSaveDraft}
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={savingDraft || loadingCampaign || !campaignData.name.trim()}
+            title={!campaignData.name.trim() ? 'Add a campaign name first' : 'Save this campaign as a draft'}
+          >
+            {savingDraft ? 'Saving…' : 'Save as Draft'}
+          </Button>
+          <Button
+            onClick={currentStep === steps.length ? handleLaunch : handleNext}
+            size="lg"
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={loadingCampaign || (currentStep === 1 && !campaignData.name.trim()) || (currentStep === 2 && campaignData.segmentIds.length === 0) || (currentStep === 3 && !campaignData.messageContent.body.trim())}
+          >
+            {loadingCampaign ? 'Loading...' : currentStep === steps.length ? (isEditMode ? 'Update Campaign' : 'Launch Campaign') : (<>Continue <ChevronRight className="ml-2 h-4 w-4" /></>)}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -693,8 +734,24 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
   };
   const handleConfigChange = (updates: any) => setCampaignData(p => ({ ...p, whatsappConfig: { ...p.whatsappConfig, ...updates } }));
   const handleSendTest = async (phone: string) => {
-    const res = await fetch('/api/whatsapp/send-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templateId: selectedTemplate?.id, phoneNumber: phone, variables: variablePreview }) });
-    if (!res.ok) throw new Error('Failed to send test');
+    if (!selectedTemplate) throw new Error('Select a template first');
+    const res = await fetch('/api/whatsapp/send-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_id: selectedTemplate.id,
+        template_name: selectedTemplate.name,
+        template_language: selectedTemplate.language,
+        template_category: selectedTemplate.category,
+        phone,
+        variables: variablePreview,
+        body_fields: bodyFields,
+      }),
+    });
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { userMessage?: string; error?: string };
+      throw new Error(payload.userMessage ?? payload.error ?? 'Failed to send test');
+    }
   };
 
   const whatsappConfig: any = {

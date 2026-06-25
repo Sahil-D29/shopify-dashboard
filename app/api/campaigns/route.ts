@@ -40,6 +40,7 @@ interface CampaignCreatePayload {
   tags?: string[];
   labels?: string[];
   useSmartTiming?: boolean;
+  status?: string;
 }
 
 const loadCampaigns = async (storeId?: string): Promise<Campaign[]> => {
@@ -248,8 +249,11 @@ export async function POST(request: NextRequest) {
     );
 
     const scheduleType = data.scheduleType ?? 'IMMEDIATE';
+    // An explicit DRAFT (Save as Draft) always wins over the schedule-derived status.
     const status =
-      scheduleType === 'IMMEDIATE'
+      data.status === 'DRAFT'
+        ? 'DRAFT'
+        : scheduleType === 'IMMEDIATE'
         ? 'RUNNING'
         : data.scheduledAt
         ? 'SCHEDULED'
@@ -305,7 +309,7 @@ export async function POST(request: NextRequest) {
           ? new Date(data.scheduledAt)
           : null,
         executedAt:
-          scheduleType === 'IMMEDIATE' ? new Date() : null,
+          status === 'RUNNING' && scheduleType === 'IMMEDIATE' ? new Date() : null,
         // Audience & Delivery
         estimatedReach,
         sendingSpeed: data.sendingSpeed ?? 'MEDIUM',
