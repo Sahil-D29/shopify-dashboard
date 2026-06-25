@@ -115,6 +115,8 @@ interface CampaignFormData {
     exitPaths?: any;
     mediaUrl?: string;
     useDynamicMedia?: boolean;
+    templateName?: string;
+    templateLanguage?: string;
   };
   followUpSteps?: FollowUpStep[];
 }
@@ -730,7 +732,18 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
 
   const handleTemplateSelect = (template: WhatsAppTemplate) => {
     setSelectedTemplate(template);
-    setCampaignData(p => ({ ...p, templateId: template.id, messageContent: { ...p.messageContent, body: template.body || template.content || '' } }));
+    setCampaignData(p => ({
+      ...p,
+      templateId: template.id,
+      messageContent: { ...p.messageContent, body: template.body || template.content || '' },
+      // Persist the template identity so the send worker can deliver the approved
+      // template (free text is rejected by WhatsApp outside the 24h window).
+      whatsappConfig: {
+        ...p.whatsappConfig,
+        templateName: template.name,
+        templateLanguage: template.language,
+      },
+    }));
   };
   const handleConfigChange = (updates: any) => setCampaignData(p => ({ ...p, whatsappConfig: { ...p.whatsappConfig, ...updates } }));
   const handleSendTest = async (phone: string) => {

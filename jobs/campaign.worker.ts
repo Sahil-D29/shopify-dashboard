@@ -89,6 +89,52 @@ async function sendWhatsAppText(phone: string, body: string, storeId: string): P
   }
 }
 
+async function sendWhatsAppTemplate(
+  phone: string,
+  templateName: string,
+  language: string,
+  storeId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const config = await prisma.whatsAppConfig.findUnique({ where: { storeId } });
+  if (!config?.phoneNumberId || !config?.accessToken) {
+    return { success: false, error: 'WhatsApp not configured' };
+  }
+  const formatted = phone.replace(/[\s\-+()]/g, '');
+  if (!formatted) return { success: false, error: 'Invalid phone' };
+
+  let accessToken = config.accessToken;
+  try {
+    const { isEncrypted, decrypt } = await import('@/lib/encryption');
+    if (isEncrypted(accessToken)) accessToken = decrypt(accessToken);
+  } catch {
+    // use as-is
+  }
+
+  try {
+    const res = await fetch(
+      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, accessToken),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: formatted,
+          type: 'template',
+          template: { name: templateName, language: { code: language || 'en' } },
+        }),
+      },
+    );
+    const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string } };
+    if (res.ok && data.messages?.[0]?.id) return { success: true };
+    return { success: false, error: data.error?.message ?? 'Send failed' };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 export async function runCampaignWorkerStep(): Promise<{ processed: number; campaignId?: string; error?: string }> {
@@ -122,6 +168,12 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
   };
   const body = messageTemplate.body ?? messageTemplate.messageContent?.body ?? '';
   const subject = messageTemplate.subject ?? messageTemplate.messageContent?.subject ?? '';
+
+  // Prefer sending the approved WhatsApp template (required outside the 24h
+  // session window). Falls back to free text only when no template was chosen.
+  const waConfig = (campaign as { whatsappConfig?: { templateName?: string; templateLanguage?: string } | null }).whatsappConfig ?? null;
+  const templateName = waConfig?.templateName ?? messageTemplate.templateName ?? '';
+  const templateLanguage = waConfig?.templateLanguage ?? messageTemplate.language ?? 'en';
 
   // Rate-limiting delay based on sendingSpeed
   const sendingSpeed = (campaign as any).sendingSpeed ?? 'MEDIUM';
@@ -243,7 +295,9 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
           failed++;
           continue;
         }
-        const result = await sendWhatsAppText(phone, personalizedBody, storeId);
+        const result = templateName
+          ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
+          : await sendWhatsAppText(phone, personalizedBody, storeId);
         if (result.success) {
           await logSuccess();
           sent++;
@@ -324,6 +378,11 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
         where: { id: candidate.id },
         data: { status: 'FAILED', lastError: message, retryCount },
       });
+      // Reflect the failure on the campaign itself so the user sees FAILED
+      // instead of a campaign stuck on RUNNING with no explanation.
+      await prisma.campaign
+        .update({ where: { id: candidate.campaignId }, data: { status: 'FAILED' } })
+        .catch(() => {});
       await logError({
         message: `Campaign ${candidate.campaignId} failed after ${maxRetries} retries`,
         stack: e instanceof Error ? e.stack : undefined,

@@ -382,7 +382,50 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const campaign = transformCampaign(dbCampaign);
+    // Enqueue the campaign for delivery. Without a queue item the send worker
+    // has nothing to process, which is why campaigns previously sat on RUNNING
+    // with 0 sent and no error.
+    if (status === 'RUNNING' || status === 'SCHEDULED') {
+      try {
+        await prisma.campaignQueueItem.create({
+          data: {
+            campaignId: dbCampaign.id,
+            storeId,
+            scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : new Date(),
+            status: 'PENDING',
+          },
+        });
+      } catch (enqueueError) {
+        console.error('[API] Failed to enqueue campaign:', enqueueError);
+      }
+    }
+
+    // Immediate campaigns: run the worker inline so the user gets instant
+    // feedback (sent counts, or a FAILED status with the reason) instead of a
+    // campaign that silently stays on RUNNING. Best-effort — never blocks the
+    // response from succeeding.
+    if (status === 'RUNNING') {
+      try {
+        const { runCampaignWorkerStep } = await import('@/jobs/campaign.worker');
+        for (let i = 0; i < 3; i++) {
+          const result = await runCampaignWorkerStep();
+          if (!result.processed) break;
+        }
+      } catch (runError) {
+        console.error('[API] Inline campaign run failed:', runError);
+      }
+    }
+
+    const refreshed = await prisma.campaign.findUnique({
+      where: { id: dbCampaign.id },
+      include: {
+        segment: true,
+        store: true,
+        creator: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    const campaign = transformCampaign(refreshed ?? dbCampaign);
 
     return NextResponse.json({ campaign, success: true });
   } catch (error) {
