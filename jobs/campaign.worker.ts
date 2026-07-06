@@ -11,6 +11,7 @@ import { sendEmail } from '@/lib/email';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { SegmentGroup } from '@/lib/types/segment';
 import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { isWhatsAppSandbox } from '@/lib/whatsapp/sandbox';
 
 const currentPeriod = (): string => {
   const now = new Date();
@@ -235,6 +236,10 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
     let delivered = 0;
     let failed = 0;
 
+    // Sandbox: simulate sends when the store has no WhatsApp connection, so the
+    // campaign completes with delivery counts and can be demoed without a WABA.
+    const sandbox = await isWhatsAppSandbox(storeId);
+
     for (const customer of matchingCustomers) {
       const customerId = String(customer.id);
       const personalizedBody = personalizeBody(body, customer);
@@ -298,9 +303,11 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
           failed++;
           continue;
         }
-        const result = templateName
-          ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
-          : await sendWhatsAppText(phone, personalizedBody, storeId);
+        const result = sandbox
+          ? { success: true as const, error: undefined }
+          : templateName
+            ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
+            : await sendWhatsAppText(phone, personalizedBody, storeId);
         if (result.success) {
           await logSuccess();
           sent++;

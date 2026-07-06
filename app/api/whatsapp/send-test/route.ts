@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from "@/lib/config/whatsapp-config-resolver";
 import { graphUrl } from "@/lib/whatsapp/graph";
 import { getCurrentStoreId } from "@/lib/tenant/api-helpers";
+import { isWhatsAppSandbox } from "@/lib/whatsapp/sandbox";
 import type {
   WhatsAppTemplate,
   WhatsAppTemplateBodyParameter,
@@ -232,6 +233,19 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       );
+    }
+
+    // Sandbox: simulate the test send (and skip template-approval checks) when
+    // the store has no WhatsApp connection, so the flow can be demoed without a WABA.
+    const sandboxStoreId = await getCurrentStoreId(request);
+    if (await isWhatsAppSandbox(sandboxStoreId)) {
+      return NextResponse.json({
+        success: true,
+        sandbox: true,
+        message:
+          'Test message simulated — Sandbox mode is active because WhatsApp is not connected. Connect a WhatsApp Business Account in Settings to send real messages.',
+        data: { phone: formattedPhone, template_name, template_language },
+      });
     }
 
     const templates = getTemplates();

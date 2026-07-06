@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 import CampaignCard from '@/components/campaigns/CampaignCard';
+import { SandboxBanner } from '@/components/whatsapp/SandboxBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/useToast';
@@ -177,6 +178,7 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
+      <SandboxBanner />
       {/* Header */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
         <div className="flex items-center justify-between flex-wrap gap-4">

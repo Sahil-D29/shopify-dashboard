@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SandboxBanner } from '@/components/whatsapp/SandboxBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -191,6 +192,7 @@ export default function WhatsAppSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <SandboxBanner />
       <div className="flex items-center gap-3">
         <ShieldCheck className="h-8 w-8" />
         <div>
