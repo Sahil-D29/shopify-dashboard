@@ -5,12 +5,12 @@ in the Partner Dashboard submission.
 
 ## Test credentials
 
-- App URL: https://app.dorza.io
-- Email: `<REVIEW_LOGIN_EMAIL>`
-- Password: `<REVIEW_LOGIN_PASSWORD>`
+- App URL: https://app.dorza.io (sign in at https://app.dorza.io/auth/signin)
+- Email: `appreview@dorza.io`
+- Password: `Dorza-Review!2026`
 
-(Replace with the reviewer login you provide. This account should already have the review
-Shopify store connected, or the reviewer can connect one from Settings → Shopify.)
+(Dedicated reviewer account — login verified working. Install the app on your development
+store / connect the store as usual; the account grants access to the full feature set.)
 
 ## No WhatsApp account needed — Sandbox mode
 
