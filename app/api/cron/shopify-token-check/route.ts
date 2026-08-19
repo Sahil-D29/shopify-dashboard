@@ -1,15 +1,13 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { runShopifyTokenCheck } from '@/jobs/shopify-token.worker';
+import { verifyCronSecret } from '@/lib/cron-auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret');
-  const expected = process.env.CRON_SECRET;
-  if (expected && secret !== expected) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = verifyCronSecret(req);
+  if (authError) return authError;
 
   try {
     const result = await runShopifyTokenCheck();

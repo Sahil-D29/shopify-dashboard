@@ -4,13 +4,12 @@ export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processScheduledCrossSells } from '@/lib/email/cross-sell';
+import { verifyCronSecret } from '@/lib/cron-auth';
 
 export async function GET(request: NextRequest) {
-  const secret = request.nextUrl.searchParams.get('secret');
-  const expected = process.env.CRON_SECRET;
-  if (expected && secret !== expected) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = verifyCronSecret(request);
+  if (authError) return authError;
+
   try {
     const result = await processScheduledCrossSells();
     return NextResponse.json({ ok: true, ...result });

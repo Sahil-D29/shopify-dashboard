@@ -3,23 +3,18 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkExpiringSubscriptions, markReminderSent } from '@/lib/billing/reminders';
+import { verifyCronSecret } from '@/lib/cron-auth';
 
 /**
  * Cron endpoint to send payment expiry reminders.
  * Should be called daily via external cron service (e.g., Render cron, Vercel cron).
- * Optionally protected via CRON_SECRET header.
+ * Protected via CRON_SECRET.
  */
 export async function GET(request: NextRequest) {
-  try {
-    // Optional: verify cron secret for security
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-      const authHeader = request.headers.get('authorization');
-      if (authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    }
+  const authError = verifyCronSecret(request);
+  if (authError) return authError;
 
+  try {
     // Find subscriptions expiring within 3 days
     const expiringSubscriptions = await checkExpiringSubscriptions(3);
 

@@ -1,29 +1,23 @@
 /**
  * Cron endpoint for processing campaign follow-ups.
  *
- * Call this every 5 minutes via:
+ * Call this every 10 minutes via:
  *   - Vercel Cron (vercel.json)
  *   - External cron service (e.g., cron-job.org)
  *   - Render background worker
  *
- * Security: Requires CRON_SECRET header to prevent unauthorized access.
+ * Security: Requires CRON_SECRET to prevent unauthorized access.
  */
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runFollowUpWorkerStep } from '@/jobs/campaign-followup.worker';
+import { verifyCronSecret } from '@/lib/cron-auth';
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized triggers
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get('authorization');
-    const secretParam = request.nextUrl.searchParams.get('secret');
-    if (authHeader !== `Bearer ${cronSecret}` && secretParam !== cronSecret) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  const authError = verifyCronSecret(request);
+  if (authError) return authError;
 
   try {
     const result = await runFollowUpWorkerStep();
