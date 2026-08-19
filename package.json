@@ -7,8 +7,9 @@
   },
   "scripts": {
     "dev": "next dev --turbo -p 3002",
-    "build": "npx prisma generate && npx prisma db push && next build",
-    "start": "next start -p ${PORT:-3000}"
+    "build": "npx prisma generate && next build",
+    "start": "next start -p ${PORT:-3000}",
+    "db:push": "npx prisma db push"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",

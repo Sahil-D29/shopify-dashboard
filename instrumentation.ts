@@ -11,6 +11,11 @@ export async function register() {
   // Only the Node.js runtime can run the worker (it uses Prisma, fetch, etc.).
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
+  if (process.env.INTERNAL_CRON_ENABLED !== 'true') {
+    console.log('[campaign-cron] internal scheduler disabled');
+    return;
+  }
+
   // Guard against double-registration (HMR in dev, repeated calls).
   const globalRef = globalThis as typeof globalThis & { __campaignCronStarted?: boolean };
   if (globalRef.__campaignCronStarted) return;
