@@ -1,16 +1,35 @@
 /**
- * Centralised app branding + per-store sidebar feature flags.
+ * Centralized app branding, per-store sidebar feature flags, and global
+ * super-admin sidebar visibility rules.
  *
- * Two records persisted in Postgres:
- *   - AppSettings (id="singleton")  → global product name, support info
- *   - StoreFeatureFlags             → per-store disabled sidebar items
- *
- * The defaults below are returned when the row doesn't exist yet (first
- * deploy, before the admin has saved anything). All callers should
- * tolerate the defaults and not block rendering on the DB call failing.
+ * Defaults are intentionally permissive: missing rows show all sidebar items.
+ * Runtime callers should tolerate DB failures and keep rendering.
  */
 
 import { prisma } from '@/lib/prisma';
+import {
+  ALL_SIDEBAR_KEYS,
+  SIDEBAR_CATALOG,
+  SIDEBAR_ITEMS,
+  expandDisabledSidebarItems,
+  isSidebarItemKey,
+  normalizeSidebarKeys,
+  type SidebarItemKey,
+} from '@/lib/sidebar-catalog';
+
+export {
+  ALL_SIDEBAR_KEYS,
+  SIDEBAR_CATALOG,
+  SIDEBAR_ITEMS,
+  expandDisabledSidebarItems,
+  getFirstVisibleSidebarHref,
+  getSidebarKeyForPath,
+  isSidebarItemKey,
+  normalizeSidebarKeys,
+  type SidebarCatalogItem,
+  type SidebarGroup,
+  type SidebarItemKey,
+} from '@/lib/sidebar-catalog';
 
 export interface AppSettingsValue {
   appName: string;
@@ -82,38 +101,6 @@ export async function saveAppSettings(
   return getAppSettings();
 }
 
-// ─── Sidebar feature flags ─────────────────────────────────────────────
-
-export const SIDEBAR_ITEMS = {
-  dashboard: 'Dashboard',
-  chat: 'Live Chat',
-  customers: 'Customers',
-  segments: 'Segments',
-  contacts: 'Contacts',
-  templates: 'Templates',
-  campaigns: 'Campaigns',
-  email_marketing: 'Email Marketing (parent)',
-  email_campaigns: '— Email · Campaigns',
-  email_templates: '— Email · Templates',
-  email_analytics: '— Email · Analytics',
-  email_subscribers: '— Email · Subscribers',
-  email_domains: '— Email · Domains',
-  email_ab_tests: '— Email · A/B Tests',
-  email_back_in_stock: '— Email · Back-in-Stock',
-  email_cross_sell: '— Email · Cross-Sell',
-  journeys: 'Journeys',
-  flows: 'Flows',
-  analytics: 'Analytics',
-  orders: 'Orders',
-  products: 'Products',
-  abandoned_carts: 'Abandoned Carts',
-  settings: 'Settings',
-  billing: 'Billing',
-} as const;
-
-export type SidebarItemKey = keyof typeof SIDEBAR_ITEMS;
-export const ALL_SIDEBAR_KEYS = Object.keys(SIDEBAR_ITEMS) as SidebarItemKey[];
-
 export interface StoreFeatureFlagsValue {
   storeId: string;
   disabledItems: SidebarItemKey[];
@@ -128,9 +115,7 @@ export async function getStoreFeatureFlags(storeId: string): Promise<StoreFeatur
     if (!row) return { storeId, disabledItems: [], notes: '', fullAccess: false };
     return {
       storeId,
-      disabledItems: (row.disabledItems ?? []).filter((k): k is SidebarItemKey =>
-        (ALL_SIDEBAR_KEYS as readonly string[]).includes(k),
-      ),
+      disabledItems: normalizeSidebarKeys(row.disabledItems),
       notes: row.notes ?? '',
       fullAccess: row.fullAccess ?? false,
     };
@@ -146,9 +131,7 @@ export async function saveStoreFeatureFlags(
   updatedBy?: string | null,
 ): Promise<StoreFeatureFlagsValue> {
   const disabledItems = Array.isArray(patch.disabledItems)
-    ? patch.disabledItems.filter((k): k is SidebarItemKey =>
-        (ALL_SIDEBAR_KEYS as readonly string[]).includes(k),
-      )
+    ? normalizeSidebarKeys(patch.disabledItems)
     : undefined;
   const data: any = {};
   if (disabledItems !== undefined) data.disabledItems = disabledItems;
@@ -170,17 +153,131 @@ export async function saveStoreFeatureFlags(
   return getStoreFeatureFlags(storeId);
 }
 
-// ─── Plan-based gating ─────────────────────────────────────────────────
+export type SidebarVisibilityModeValue = 'EVERYONE' | 'HIDDEN' | 'SELECTED';
 
-// Items never hidden by plan gating, so a restricted plan can't lock a user
+export interface SidebarVisibilityRuleValue {
+  itemKey: SidebarItemKey;
+  mode: SidebarVisibilityModeValue;
+  allowedStoreIds: string[];
+  allowedUserIds: string[];
+  notes: string;
+  updatedBy: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const SIDEBAR_VISIBILITY_MODES = new Set<SidebarVisibilityModeValue>([
+  'EVERYONE',
+  'HIDDEN',
+  'SELECTED',
+]);
+
+export function isSidebarVisibilityMode(value: unknown): value is SidebarVisibilityModeValue {
+  return typeof value === 'string' && SIDEBAR_VISIBILITY_MODES.has(value as SidebarVisibilityModeValue);
+}
+
+export async function getSidebarVisibilityRules(): Promise<SidebarVisibilityRuleValue[]> {
+  try {
+    const rows = await prisma.sidebarVisibilityRule.findMany({
+      orderBy: { itemKey: 'asc' },
+    });
+
+    return rows
+      .filter(row => isSidebarItemKey(row.itemKey))
+      .map(row => ({
+        itemKey: row.itemKey as SidebarItemKey,
+        mode: row.mode as SidebarVisibilityModeValue,
+        allowedStoreIds: row.allowedStoreIds ?? [],
+        allowedUserIds: row.allowedUserIds ?? [],
+        notes: row.notes ?? '',
+        updatedBy: row.updatedBy ?? null,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      }));
+  } catch (error) {
+    console.warn('[app-config] Failed to load SidebarVisibilityRule, defaulting to everyone:', error);
+    return [];
+  }
+}
+
+export async function saveSidebarVisibilityRules(
+  rules: Array<Partial<SidebarVisibilityRuleValue> & { itemKey?: string; mode?: string }>,
+  updatedBy?: string | null,
+): Promise<SidebarVisibilityRuleValue[]> {
+  const validRules = rules
+    .filter(rule => typeof rule.itemKey === 'string' && isSidebarItemKey(rule.itemKey))
+    .map(rule => ({
+      itemKey: rule.itemKey as SidebarItemKey,
+      mode: isSidebarVisibilityMode(rule.mode) ? rule.mode : 'EVERYONE',
+      allowedStoreIds: Array.isArray(rule.allowedStoreIds)
+        ? rule.allowedStoreIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [],
+      allowedUserIds: Array.isArray(rule.allowedUserIds)
+        ? rule.allowedUserIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [],
+      notes: typeof rule.notes === 'string' ? rule.notes : '',
+    }));
+
+  const uniqueRules = new Map<SidebarItemKey, (typeof validRules)[number]>();
+  for (const rule of validRules) uniqueRules.set(rule.itemKey, rule);
+
+  const operations = Array.from(uniqueRules.values()).map(rule =>
+    prisma.sidebarVisibilityRule.upsert({
+      where: { itemKey: rule.itemKey },
+      create: {
+        itemKey: rule.itemKey,
+        mode: rule.mode,
+        allowedStoreIds: rule.allowedStoreIds,
+        allowedUserIds: rule.allowedUserIds,
+        notes: rule.notes || null,
+        updatedBy: updatedBy ?? null,
+      },
+      update: {
+        mode: rule.mode,
+        allowedStoreIds: rule.allowedStoreIds,
+        allowedUserIds: rule.allowedUserIds,
+        notes: rule.notes || null,
+        updatedBy: updatedBy ?? null,
+      },
+    }),
+  );
+
+  if (operations.length > 0) {
+    await prisma.$transaction(operations);
+  }
+
+  return getSidebarVisibilityRules();
+}
+
+export async function getGlobalVisibilityDisabledItems(
+  storeId?: string | null,
+  userId?: string | null,
+): Promise<SidebarItemKey[]> {
+  const rules = await getSidebarVisibilityRules();
+  const disabled = new Set<SidebarItemKey>();
+
+  for (const rule of rules) {
+    if (rule.mode === 'EVERYONE') continue;
+    if (rule.mode === 'HIDDEN') {
+      disabled.add(rule.itemKey);
+      continue;
+    }
+
+    const storeAllowed = Boolean(storeId && rule.allowedStoreIds.includes(storeId));
+    const userAllowed = Boolean(userId && rule.allowedUserIds.includes(userId));
+    if (!storeAllowed && !userAllowed) disabled.add(rule.itemKey);
+  }
+
+  return expandDisabledSidebarItems(disabled);
+}
+
+// Items never hidden by plan gating, so a restricted plan cannot lock a user
 // out of upgrading or managing their store.
 const PLAN_GATING_ALWAYS_ON: SidebarItemKey[] = ['dashboard', 'settings', 'billing'];
 
 /**
- * Sidebar items disabled by the store's PLAN (vs. per-store admin overrides).
- * If the active plan's `enabledFeatures` is non-empty, every key not in that
- * list (minus the always-on items) is disabled. Empty list / no plan / inactive
- * subscription = no plan gating (backward compatible).
+ * Sidebar items disabled by the store's active plan feature list. Empty list,
+ * no plan, or inactive subscription means no plan-based hiding.
  */
 async function getPlanDisabledItems(storeId: string): Promise<SidebarItemKey[]> {
   try {
@@ -188,21 +285,17 @@ async function getPlanDisabledItems(storeId: string): Promise<SidebarItemKey[]> 
       where: { storeId },
       select: { planId: true, status: true },
     });
-    // Only gate while the plan is actually active; otherwise don't hide anything
-    // (the user needs full nav to re-subscribe).
     if (!sub || sub.status !== 'ACTIVE') return [];
 
     const plan = await prisma.planFeature.findUnique({
       where: { planId: sub.planId },
       select: { enabledFeatures: true },
     });
-    const enabled = (plan?.enabledFeatures ?? []).filter((k): k is SidebarItemKey =>
-      (ALL_SIDEBAR_KEYS as readonly string[]).includes(k),
-    );
-    if (enabled.length === 0) return []; // empty = all allowed
+    const enabled = normalizeSidebarKeys(plan?.enabledFeatures ?? []);
+    if (enabled.length === 0) return [];
 
     const allowed = new Set<SidebarItemKey>([...enabled, ...PLAN_GATING_ALWAYS_ON]);
-    return ALL_SIDEBAR_KEYS.filter(k => !allowed.has(k));
+    return ALL_SIDEBAR_KEYS.filter(key => !allowed.has(key));
   } catch (error) {
     console.warn('[app-config] plan gating lookup failed, no plan gating:', error);
     return [];
@@ -210,27 +303,29 @@ async function getPlanDisabledItems(storeId: string): Promise<SidebarItemKey[]> 
 }
 
 /**
- * Effective disabled sidebar items for a store = plan gating ∪ per-store admin
- * overrides. This is what the runtime sidebar should consume. The admin feature
- * editor continues to use {@link getStoreFeatureFlags} (raw per-store overrides).
+ * Effective disabled sidebar items for a store/user = global visibility rules,
+ * per-store admin overrides, and active-plan feature gating.
  */
-export async function getEffectiveDisabledItems(storeId: string): Promise<SidebarItemKey[]> {
-  const [storeFlags, planGated] = await Promise.all([
+export async function getEffectiveDisabledItems(
+  storeId: string,
+  userId?: string | null,
+): Promise<SidebarItemKey[]> {
+  const [storeFlags, planGated, globalHidden] = await Promise.all([
     getStoreFeatureFlags(storeId),
     getPlanDisabledItems(storeId),
+    getGlobalVisibilityDisabledItems(storeId, userId),
   ]);
-  return Array.from(new Set<SidebarItemKey>([...storeFlags.disabledItems, ...planGated]));
+
+  return expandDisabledSidebarItems([
+    ...storeFlags.disabledItems,
+    ...planGated,
+    ...globalHidden,
+  ]);
 }
 
-// ─── Subscription gating ───────────────────────────────────────────────
-
 /**
- * Sidebar items that are LOCKED (shown greyed + lock → Billing) because the store
- * has no valid active subscription. Everything except dashboard/settings/billing
- * is locked. Bypassed when super admin sets the store's `fullAccess` flag.
- *
- * Kept separate from disabled items: disabled = admin-hidden (removed), locked =
- * upsell (visible but gated).
+ * Sidebar items that are locked because the store has no valid active
+ * subscription. Hidden items are removed earlier by disabledItems.
  */
 export async function getLockedItems(storeId: string): Promise<SidebarItemKey[]> {
   try {
@@ -238,7 +333,9 @@ export async function getLockedItems(storeId: string): Promise<SidebarItemKey[]>
     if (flags.fullAccess) return [];
     const { hasValidActiveSubscription } = await import('@/lib/subscription');
     if (await hasValidActiveSubscription(storeId)) return [];
-    return ALL_SIDEBAR_KEYS.filter(k => !PLAN_GATING_ALWAYS_ON.includes(k));
+    return expandDisabledSidebarItems(
+      ALL_SIDEBAR_KEYS.filter(key => !PLAN_GATING_ALWAYS_ON.includes(key)),
+    );
   } catch (error) {
     console.warn('[app-config] lock computation failed, nothing locked:', error);
     return [];

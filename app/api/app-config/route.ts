@@ -2,9 +2,14 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAppSettings } from '@/lib/app-config';
+import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { getStoreFeatureFlags, getEffectiveDisabledItems, getLockedItems } from '@/lib/app-config';
+import {
+  getAppSettings,
+  getStoreFeatureFlags,
+  getEffectiveDisabledItems,
+  getLockedItems,
+} from '@/lib/app-config';
 
 /**
  * Public app config + per-store feature flags for the current session.
@@ -21,10 +26,12 @@ import { getStoreFeatureFlags, getEffectiveDisabledItems, getLockedItems } from 
  */
 export async function GET(request: NextRequest) {
   try {
-    const [settings, storeId] = await Promise.all([
+    const [settings, storeId, session] = await Promise.all([
       getAppSettings(),
       getCurrentStoreId(request).catch(() => null),
+      auth().catch(() => null),
     ]);
+    const userId = session?.user?.id ?? null;
     // Runtime sidebar consumes the EFFECTIVE disabled list (plan gating ∪
     // per-store admin overrides). The admin editor uses the raw per-store flags.
     const flags = storeId
@@ -34,8 +41,9 @@ export async function GET(request: NextRequest) {
               storeId,
               disabledItems: [] as string[],
               notes: '',
+              fullAccess: false,
             })),
-            getEffectiveDisabledItems(storeId).catch(() => [] as string[]),
+            getEffectiveDisabledItems(storeId, userId).catch(() => [] as string[]),
             getLockedItems(storeId).catch(() => [] as string[]),
           ]);
           return { storeId, disabledItems: effectiveDisabled, lockedItems, notes: base.notes };
@@ -65,7 +73,7 @@ export async function GET(request: NextRequest) {
           primaryColor: '#1a1a2e',
           accentColor: '#e94560',
         },
-        featureFlags: { storeId: null, disabledItems: [], notes: '' },
+        featureFlags: { storeId: null, disabledItems: [], lockedItems: [], notes: '' },
       },
       { status: 200 },
     );

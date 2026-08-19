@@ -3,26 +3,9 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
-import { Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useAppConfig } from '@/components/providers/AppConfigProvider';
-
-// Maps a route prefix to its sidebar feature key, for the subscription gate.
-// Dashboard (/), Settings, Billing are intentionally absent (never locked).
-const ROUTE_KEY: { prefix: string; key: string }[] = [
-  { prefix: '/chat', key: 'chat' },
-  { prefix: '/customers', key: 'customers' },
-  { prefix: '/segments', key: 'segments' },
-  { prefix: '/contacts', key: 'contacts' },
-  { prefix: '/templates', key: 'templates' },
-  { prefix: '/campaigns', key: 'campaigns' },
-  { prefix: '/email', key: 'email_marketing' },
-  { prefix: '/journeys', key: 'journeys' },
-  { prefix: '/flows', key: 'flows' },
-  { prefix: '/analytics', key: 'analytics' },
-  { prefix: '/orders', key: 'orders' },
-  { prefix: '/products', key: 'products' },
-  { prefix: '/abandoned-carts', key: 'abandoned_carts' },
-];
+import { getFirstVisibleSidebarHref, getSidebarKeyForPath } from '@/lib/sidebar-catalog';
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,16 +16,25 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const isBuilderPage = /^\/(journeys|flows)\/[^/]+\/builder/.test(pathname ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Defense-in-depth: if the current route maps to a subscription-locked feature,
-  // bounce to Billing (the sidebar already shows it locked, this stops direct URLs).
+  // Defense-in-depth: hidden direct URLs redirect away; visible but locked
+  // features still redirect to Billing.
   useEffect(() => {
+    if (!pathname) return;
+    const matchKey = getSidebarKeyForPath(pathname);
+    if (!matchKey) return;
+
+    const hidden = new Set(featureFlags.disabledItems || []);
+    if (hidden.has(matchKey)) {
+      const target = getFirstVisibleSidebarHref(hidden) ?? '/';
+      if (target !== pathname) router.replace(target);
+      return;
+    }
+
     const locked = new Set(featureFlags.lockedItems || []);
-    if (locked.size === 0 || !pathname) return;
-    const match = ROUTE_KEY.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'));
-    if (match && locked.has(match.key)) {
+    if (locked.has(matchKey) && pathname !== '/billing') {
       router.replace('/billing');
     }
-  }, [pathname, featureFlags.lockedItems, router]);
+  }, [pathname, featureFlags.disabledItems, featureFlags.lockedItems, router]);
 
   // Close sidebar when route changes on mobile
   useEffect(() => {

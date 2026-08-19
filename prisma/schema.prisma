@@ -150,6 +150,12 @@ enum QueueStatus {
   FAILED
 }
 
+enum SidebarVisibilityMode {
+  EVERYONE
+  HIDDEN
+  SELECTED
+}
+
 // ============================================
 // CONTACTS & CHAT ENUMS
 // ============================================
@@ -1743,5 +1749,22 @@ model StoreFeatureFlags {
 
   @@index([storeId])
   @@map("store_feature_flags")
+}
+
+/// Global super-admin visibility rules for merchant app sidebar items.
+/// Missing row = EVERYONE, so existing stores/users keep full visibility by default.
+model SidebarVisibilityRule {
+  id              String                @id @default(uuid())
+  itemKey         String                @unique
+  mode            SidebarVisibilityMode @default(EVERYONE)
+  allowedStoreIds String[]              @default([])
+  allowedUserIds  String[]              @default([])
+  notes           String?
+  updatedBy       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([itemKey])
+  @@map("sidebar_visibility_rules")
 }
 

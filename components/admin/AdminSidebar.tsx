@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Bell,
   Workflow,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -78,6 +79,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
       { name: 'Notifications', href: '/admin/notifications', icon: Bell },
+      { name: 'Sidebar Visibility', href: '/admin/sidebar-visibility', icon: SlidersHorizontal },
       { name: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },
