@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { UserRole, UserStatus } from '@prisma/client';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 
 export interface WhatsAppServerConfig {
   wabaId: string;
@@ -23,11 +24,22 @@ export interface WhatsAppServerConfig {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    let storeId = searchParams.get('storeId') || await getCurrentStoreId(request);
+    const requestedStoreId = searchParams.get('storeId');
+    let storeId = requestedStoreId || await getCurrentStoreId(request);
+
+    const session = await auth();
+    if (storeId) {
+      if (!session?.user?.id) {
+        return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      }
+      const hasAccess = await validateTenantAccess(session.user.id, storeId);
+      if (!hasAccess) {
+        return NextResponse.json({ success: false, message: 'Access denied to this store' }, { status: 403 });
+      }
+    }
 
     if (!storeId) {
       // No store in query (e.g. "No stores" in UI). Resolve current user's first store.
-      const session = await auth();
       if (!session?.user?.id) {
         return NextResponse.json(
           { success: false, message: 'Store ID is required' },
@@ -117,7 +129,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    let storeId = body?.storeId;
+    let storeId = typeof body?.storeId === 'string' ? body.storeId : null;
+    let session: any = null;
+
+    if (storeId) {
+      session = await auth();
+      if (!session?.user?.id) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized. Please sign in again.' },
+          { status: 401 }
+        );
+      }
+
+      const hasAccess = await validateTenantAccess(session.user.id, storeId);
+      if (!hasAccess) {
+        return NextResponse.json(
+          { success: false, message: 'Access denied to this store' },
+          { status: 403 }
+        );
+      }
+    }
+
     if (!storeId) {
       // Require a valid database so we can create/find user and default store (Neon adapter needs DATABASE_URL)
       const dbUrl = process.env.DATABASE_URL;
@@ -132,9 +164,8 @@ export async function POST(request: NextRequest) {
       }
 
       // No store selected (e.g. "No stores" / Shopify not configured yet). Get or create a default store for the current user.
-      let session;
       try {
-        session = await auth();
+        session = session ?? await auth();
       } catch (authError) {
         console.error('[WhatsApp Config] auth() error:', authError);
         return NextResponse.json(
@@ -285,6 +316,22 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: 'Store ID is required' },
         { status: 400 }
+      );
+    }
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized. Please sign in again.' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess = await validateTenantAccess(session.user.id, storeId);
+    if (!hasAccess) {
+      return NextResponse.json(
+        { success: false, message: 'Access denied to this store' },
+        { status: 403 }
       );
     }
 

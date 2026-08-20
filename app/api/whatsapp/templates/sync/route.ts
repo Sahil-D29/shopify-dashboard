@@ -5,13 +5,6 @@ import { graphUrl, getAppSecretProof } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
-import fs from 'fs/promises';
-import path from 'path';
-
-interface SyncRequestBody {
-  wabaId?: string;
-  accessToken?: string;
-}
 
 type MetaComponentType = 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
 
@@ -52,33 +45,6 @@ interface MetaTemplatesResponse {
     code?: number;
     error_subcode?: number;
   };
-}
-
-interface ServerConfig {
-  wabaId?: string;
-  accessToken?: string;
-}
-
-function parseRequestBody(body: unknown): SyncRequestBody {
-  if (!body || typeof body !== 'object') {
-    return {};
-  }
-  const payload = body as SyncRequestBody;
-  return {
-    wabaId: payload.wabaId,
-    accessToken: payload.accessToken,
-  };
-}
-
-// Read WhatsApp config from server-side JSON file
-async function getServerConfig(): Promise<ServerConfig | null> {
-  try {
-    const configPath = path.join(process.cwd(), 'data', 'whatsapp-config.json');
-    const data = await fs.readFile(configPath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return null;
-  }
 }
 
 function extractVariables(text: string): string[] {
@@ -155,17 +121,16 @@ export async function POST(request: NextRequest) {
     // Try to get credentials from multiple sources
     let wabaId: string | undefined;
     let accessToken: string | undefined;
+    const storeId = await getCurrentStoreId(request);
 
     // 1. Try request body first (from frontend config)
-    const payload = parseRequestBody(await request.json().catch(() => ({})));
-    wabaId = payload.wabaId;
-    accessToken = payload.accessToken;
+    const payload: { wabaId?: string; accessToken?: string } = {};
 
-    // 2. Try headers (X-WhatsApp-Config)
-    if ((!wabaId || !accessToken) && request.headers.get('X-WhatsApp-Config')) {
+    // 2. Legacy client-provided credentials are disabled.
+    if (false && (!wabaId || !accessToken)) {
       try {
-        const configHeader = request.headers.get('X-WhatsApp-Config');
-        if (configHeader) {
+        const configHeader = '';
+        if (configHeader.length > 0) {
           const config = JSON.parse(configHeader) as { wabaId?: string; accessToken?: string };
           wabaId = wabaId ?? config.wabaId;
           accessToken = accessToken ?? config.accessToken;
@@ -176,8 +141,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Try server-side config file
-    if (!wabaId || !accessToken) {
-      const serverConfig = await getServerConfig();
+    if (false && (!wabaId || !accessToken)) {
+      const serverConfig = {} as { wabaId?: string; accessToken?: string };
       if (serverConfig) {
         wabaId = wabaId ?? serverConfig.wabaId;
         accessToken = accessToken ?? serverConfig.accessToken;
@@ -188,7 +153,6 @@ export async function POST(request: NextRequest) {
     // 3b. Resolve from the saved per-store WhatsApp connection (Embedded Signup, DB)
     if (!wabaId || !accessToken) {
       try {
-        const storeId = await getCurrentStoreId(request);
         const resolved = await resolveWhatsAppConfig(storeId);
         if (resolved.valid) {
           wabaId = wabaId ?? resolved.config.wabaId;
@@ -204,9 +168,8 @@ export async function POST(request: NextRequest) {
     accessToken = accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
 
     console.log('🔍 Sync credentials check:', {
-      fromBody: Boolean(payload.wabaId && payload.accessToken),
-      fromHeader: Boolean(request.headers.get('X-WhatsApp-Config')),
-      fromServerConfig: Boolean(await getServerConfig()),
+      fromStoreConfig: Boolean(storeId && wabaId && accessToken),
+      fromEnvOnly: Boolean(!storeId && wabaId && accessToken),
       fromEnv: Boolean(process.env.WHATSAPP_BUSINESS_ACCOUNT_ID && (process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN)),
       hasWabaId: Boolean(wabaId),
       hasAccessToken: Boolean(accessToken),

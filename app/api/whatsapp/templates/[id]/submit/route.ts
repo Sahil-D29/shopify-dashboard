@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { auth } from '@/lib/auth';
+import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 import { TemplateValidator } from '@/lib/utils/template-validator';
 import { getDraftById, deleteDraft } from '@/lib/whatsapp/template-drafts';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
 interface SubmitRequestBody {
-  wabaId?: string;
-  accessToken?: string;
   storeId?: string;
 }
 
@@ -267,8 +267,6 @@ function parseRequestBody(body: unknown): SubmitRequestBody {
 
   const payload = body as SubmitRequestBody;
   return {
-    wabaId: payload.wabaId,
-    accessToken: payload.accessToken,
     storeId: payload.storeId,
   };
 }
@@ -297,7 +295,19 @@ export async function POST(
   try {
     const { id } = await params;
     const requestBody = parseRequestBody(await request.json().catch(() => ({})));
-    const storeId = requestBody.storeId ?? (await getCurrentStoreId(request));
+    let storeId = await getCurrentStoreId(request);
+
+    if (requestBody.storeId) {
+      const session = await auth();
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      const hasAccess = await validateTenantAccess(session.user.id, requestBody.storeId);
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this store' }, { status: 403 });
+      }
+      storeId = requestBody.storeId;
+    }
 
     const template = await getDraftById(storeId, id);
     if (!template) {
@@ -338,8 +348,8 @@ export async function POST(
     // values passed in the request body.
     const resolved = await resolveWhatsAppConfig(storeId);
 
-    const wabaId = requestBody.wabaId ?? (resolved.valid ? resolved.config.wabaId : undefined);
-    const accessToken = requestBody.accessToken ?? (resolved.valid ? resolved.config.accessToken : undefined);
+    const wabaId = resolved.valid ? resolved.config.wabaId : undefined;
+    const accessToken = resolved.valid ? resolved.config.accessToken : undefined;
 
     if (!wabaId || !accessToken) {
       return NextResponse.json(

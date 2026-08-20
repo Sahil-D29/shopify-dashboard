@@ -34,17 +34,34 @@ export async function validateStoreAccess(
   storeId: string
 ): Promise<boolean> {
   try {
-    const { readStoreRegistry } = await import('@/lib/store-registry');
-    const stores = await readStoreRegistry();
-    
-    const store = stores.find(s => s.id === storeId);
-    if (!store || store.status !== 'active') {
+    const { prisma } = await import('@/lib/prisma');
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
       return false;
     }
 
-    // TODO: Check user permissions from user data
-    // For now, if store exists and is active, allow access
-    return true;
+    const store = await prisma.store.findFirst({
+      where: {
+        id: storeId,
+        isActive: true,
+        ...(user.role === 'SUPER_ADMIN'
+          ? {}
+          : {
+              OR: [
+                { ownerId: userId },
+                { members: { some: { userId, status: 'ACTIVE' } } },
+              ],
+            }),
+      },
+      select: { id: true },
+    });
+
+    return Boolean(store);
   } catch (error) {
     console.error('Error validating store access:', error);
     return false;

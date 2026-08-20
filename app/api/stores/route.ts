@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getStoresForUser, createStoreForUser } from '@/lib/store-registry';
 import { auth } from '@/lib/auth';
+import { createTrackingKey } from '@/lib/tracking-auth';
 
 /**
  * GET /api/stores
@@ -16,9 +17,17 @@ export async function GET() {
     }
 
     const stores = await getStoresForUser(session.user.id);
+    const storesWithTracking = stores.map(store => {
+      try {
+        return { ...store, trackingKey: createTrackingKey(store.id) };
+      } catch {
+        return store;
+      }
+    });
+
     return NextResponse.json({
-      stores,
-      total: stores.length,
+      stores: storesWithTracking,
+      total: storesWithTracking.length,
     });
   } catch (error) {
     console.error('Error fetching stores:', error);

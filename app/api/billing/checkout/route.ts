@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured } from '@/lib/razorpay';
 import { createCheckoutSession } from '@/lib/stripe';
 import { isShopifyBilledStore, buildManagedPricingUrl } from '@/lib/shopify-billing';
@@ -31,7 +32,12 @@ export async function POST(request: NextRequest) {
     // Resolve storeId: try tenant middleware (header/cookie/query), then fall back to request body
     let storeId = await getCurrentStoreId(request);
     if (!storeId && body.storeId) {
-      storeId = body.storeId;
+      const bodyStoreId = String(body.storeId);
+      const hasAccess = await validateTenantAccess(session.user.id, bodyStoreId);
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this store' }, { status: 403 });
+      }
+      storeId = bodyStoreId;
     }
     if (!storeId) {
       return NextResponse.json(

@@ -612,20 +612,16 @@ export default function WhatsAppActionModal({
     const fetchTemplates = async () => {
       try {
         // First, trigger sync if configured
-        const { WhatsAppConfigManager } = await import('@/lib/whatsapp-config');
-        const cfg = WhatsAppConfigManager.getConfig();
-        if (cfg?.wabaId && cfg?.accessToken) {
-          try {
-            await fetch('/api/whatsapp/templates/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ wabaId: cfg.wabaId, accessToken: cfg.accessToken }),
-              signal: controller.signal,
-            });
-            console.log('[WhatsAppActionModal] Template sync triggered');
-          } catch (syncError) {
-            console.warn('[WhatsAppActionModal] Sync failed, continuing with cached templates', syncError);
-          }
+        try {
+          await fetch('/api/whatsapp/templates/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+            signal: controller.signal,
+          });
+          console.log('[WhatsAppActionModal] Template sync triggered');
+        } catch (syncError) {
+          console.warn('[WhatsAppActionModal] Sync failed, continuing with cached templates', syncError);
         }
         
         const params = new URLSearchParams();

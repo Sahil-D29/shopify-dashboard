@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
+import { getTrackingSecret, verifyTrackingKey } from '@/lib/tracking-auth';
 
 /** Map storefront tracking event names to canonical journey catalog ids. */
 const STOREFRONT_TO_CATALOG: Record<string, string> = {
@@ -9,14 +10,34 @@ const STOREFRONT_TO_CATALOG: Record<string, string> = {
   active_on_site: 'browse_abandonment',
 };
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 120;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Tracking-Key',
 };
 
 const json = (body: unknown, status = 200) =>
   NextResponse.json(body, { status, headers: CORS_HEADERS });
+
+function isRateLimited(request: NextRequest, storeId: string): boolean {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = forwardedFor || request.headers.get('x-real-ip') || 'unknown';
+  const key = `${storeId}:${ip}`;
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  bucket.count += 1;
+  return bucket.count > RATE_LIMIT_MAX;
+}
 
 /**
  * Normalize the free-form metadata into a known shape so segment sub-filters
@@ -50,8 +71,17 @@ function normalizeMetadata(metadata: unknown): Record<string, unknown> | null {
  */
 export async function POST(request: NextRequest) {
   try {
+    const contentLength = Number(request.headers.get('content-length') ?? '0');
+    if (contentLength > 64 * 1024) {
+      return json({ error: 'Payload too large' }, 413);
+    }
+
+    if (!getTrackingSecret() && process.env.NODE_ENV === 'production') {
+      return json({ error: 'Tracking is not configured' }, 500);
+    }
+
     const body = await request.json();
-    const { storeId, customerId, sessionId, eventType, resourceId, resourceTitle, metadata } = body;
+    const { storeId, customerId, sessionId, eventType, resourceId, resourceTitle, metadata, trackingKey } = body;
 
     if (!storeId || !sessionId || !eventType) {
       return json(
@@ -74,11 +104,33 @@ export async function POST(request: NextRequest) {
     // Verify store exists
     const store = await prisma.store.findUnique({
       where: { id: storeId },
-      select: { id: true },
+      select: { id: true, shopifyDomain: true },
     });
 
     if (!store) {
       return json({ error: 'Invalid storeId' }, 404);
+    }
+
+    if (isRateLimited(request, storeId)) {
+      return json({ error: 'Too many requests' }, 429);
+    }
+
+    const submittedKey = request.headers.get('x-tracking-key') ?? trackingKey;
+    if (!verifyTrackingKey(storeId, submittedKey)) {
+      return json({ error: 'Invalid tracking key' }, 401);
+    }
+
+    const origin = request.headers.get('origin') ?? request.headers.get('referer');
+    if (origin && store.shopifyDomain) {
+      try {
+        const originHost = new URL(origin).hostname.toLowerCase();
+        const shopHost = store.shopifyDomain.toLowerCase();
+        if (originHost.endsWith('.myshopify.com') && originHost !== shopHost) {
+          return json({ error: 'Origin does not match store' }, 403);
+        }
+      } catch {
+        return json({ error: 'Invalid origin' }, 400);
+      }
     }
 
     await prisma.storefrontEvent.create({
@@ -133,7 +185,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Tracking-Key',
     },
   });
 }

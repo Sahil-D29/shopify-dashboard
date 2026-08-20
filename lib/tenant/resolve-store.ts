@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getStoreIdFromRequest } from './tenant-utils';
+import { validateTenantAccess } from './tenant-middleware';
+import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getDecryptedToken } from '@/lib/shopify-token';
 import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
@@ -28,6 +30,12 @@ export async function resolveStore(request: NextRequest): Promise<ResolvedStore 
 
   if (storeId) {
     try {
+      const session = await auth();
+      if (!session?.user?.id || !(await validateTenantAccess(session.user.id, storeId))) {
+        console.warn('[resolveStore] Store access denied for selected store');
+        return null;
+      }
+
       const store = await prisma.store.findUnique({
         where: { id: storeId },
         select: { id: true, shopifyDomain: true, accessToken: true, isActive: true },

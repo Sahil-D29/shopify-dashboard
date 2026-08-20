@@ -80,7 +80,17 @@ export async function GET(request: NextRequest) {
 
     // ── 2. Verify HMAC signature ─────────────────────────────────────────
     // This proves the request actually came from Shopify
-    if (hmac && SHOPIFY_API_SECRET) {
+    if (!SHOPIFY_API_SECRET) {
+      console.error('[OAuth Callback] Missing SHOPIFY_API_SECRET');
+      return NextResponse.redirect(`${baseUrl}/auth/signin?error=app_not_configured`);
+    }
+
+    if (!hmac) {
+      console.error('[OAuth Callback] Missing HMAC');
+      return NextResponse.redirect(`${baseUrl}/auth/signin?error=missing_hmac`);
+    }
+
+    {
       const params = new URLSearchParams(searchParams);
       params.delete('hmac');
       params.delete('signature');
@@ -109,8 +119,6 @@ export async function GET(request: NextRequest) {
         console.error('[OAuth Callback] HMAC comparison error:', e);
         return NextResponse.redirect(`${baseUrl}/auth/signin?error=hmac_error`);
       }
-    } else {
-      console.warn('[OAuth Callback] No HMAC or no API secret — skipping verification');
     }
 
     // ── 3. State verification (soft — cookies may not survive redirect) ──

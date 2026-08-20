@@ -57,13 +57,16 @@ const toJourneyEnrollments = (): JourneyEnrollment[] => {
 };
 
 function verifyWebhookSignature(body: string, signature: string | null, secret: string): boolean {
-  if (!signature || !secret) return true;
+  if (!signature || !secret) return false;
 
   try {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(body);
     const expectedSignature = hmac.digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expectedSignature, 'utf8'));
+    const expected = Buffer.from(expectedSignature, 'utf8');
+    const actual = Buffer.from(signature, 'utf8');
+    if (expected.length !== actual.length) return false;
+    return crypto.timingSafeEqual(actual, expected);
   } catch (error) {
     console.error('[WhatsApp Webhook] Signature verification error:', error);
     return false;

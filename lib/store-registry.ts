@@ -11,6 +11,7 @@ export interface Store {
   usersCount?: number;
   messagesCount?: number;
   lastSync?: string;
+  trackingKey?: string;
   settings?: {
     timezone?: string;
     currency?: string;
@@ -65,6 +66,15 @@ export async function writeStoreRegistry(stores: Store[]): Promise<void> {
 // Get stores the user has access to (owner or member)
 export async function getStoresForUser(userId: string): Promise<Store[]> {
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+
+    if (user?.role === 'SUPER_ADMIN' && user.status === 'ACTIVE') {
+      return await readStoreRegistry();
+    }
+
     const stores = await prisma.store.findMany({
       where: {
         OR: [

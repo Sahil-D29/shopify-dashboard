@@ -226,17 +226,6 @@ export async function GET(request: NextRequest) {
     let wabaId: string | undefined;
     let accessToken: string | undefined;
 
-    try {
-      const configHeader = request.headers.get('X-WhatsApp-Config');
-      if (configHeader) {
-        const config = JSON.parse(configHeader) as { wabaId?: string; accessToken?: string };
-        wabaId = config.wabaId;
-        accessToken = config.accessToken;
-      }
-    } catch {
-      // Ignore parse errors
-    }
-
     // Resolve the store + its saved WhatsApp connection (Embedded Signup).
     let storeId: string | null = null;
     try {

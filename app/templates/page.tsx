@@ -57,17 +57,10 @@ export default function TemplatesPage() {
   const { currentStore } = useTenant();
 
   const buildStoreAwareHeaders = useCallback((): Record<string, string> => {
-    const config = WhatsAppConfigManager.getConfig();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    if (config?.wabaId && config?.accessToken) {
-      headers['X-WhatsApp-Config'] = JSON.stringify({
-        wabaId: config.wabaId,
-        accessToken: config.accessToken,
-      });
-    }
     if (currentStore?.id) headers['x-store-id'] = currentStore.id;
 
     return headers;
@@ -141,22 +134,10 @@ export default function TemplatesPage() {
 
     // Auto-sync in background after initial load
     const timer = setTimeout(() => {
-      const cfg = WhatsAppConfigManager.getConfig();
       setSyncing(true);
       
       const headers = buildStoreAwareHeaders();
-      let body: string;
-
-      if (cfg?.wabaId && cfg?.accessToken) {
-        body = JSON.stringify({ wabaId: cfg.wabaId, accessToken: cfg.accessToken });
-        headers['X-WhatsApp-Config'] = JSON.stringify({
-          wabaId: cfg.wabaId,
-          accessToken: cfg.accessToken,
-        });
-      } else {
-        // Try with env vars (API route will handle)
-        body = JSON.stringify({});
-      }
+      const body = JSON.stringify({});
       
       fetch('/api/whatsapp/templates/sync', {
         method: 'POST',
@@ -255,20 +236,14 @@ export default function TemplatesPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      // Get config from localStorage (if configured in Settings)
-      const cfg = WhatsAppConfigManager.getConfig();
-      
       // Prepare headers and body
       const headers = buildStoreAwareHeaders();
-      let body: string;
+      let body = JSON.stringify({});
 
-      if (cfg?.wabaId && cfg?.accessToken) {
+      if (false) {
         // Use config from Settings page
-        body = JSON.stringify({ wabaId: cfg.wabaId, accessToken: cfg.accessToken });
-        headers['X-WhatsApp-Config'] = JSON.stringify({
-          wabaId: cfg.wabaId,
-          accessToken: cfg.accessToken,
-        });
+        body = JSON.stringify({});
+        headers['Content-Type'] = 'application/json';
         console.log('📤 Syncing with config from Settings page');
       } else {
         // Try to sync without credentials - API will use env vars as fallback

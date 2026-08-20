@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 import { getMonthlyMessageCosts } from '@/lib/billing/message-cost';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const queryStoreId = searchParams.get('storeId');
-    const storeId = queryStoreId || await getCurrentStoreId(request);
+    let storeId = await getCurrentStoreId(request);
+
+    if (queryStoreId) {
+      const hasAccess = await validateTenantAccess(session.user.id, queryStoreId);
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this store' }, { status: 403 });
+      }
+      storeId = queryStoreId;
+    }
 
     if (!storeId) {
       return NextResponse.json(

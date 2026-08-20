@@ -95,17 +95,38 @@ export async function validateTenantAccess(
   try {
     // Lazy import to avoid Edge Runtime issues
     // This function should only be called from API routes, not middleware
-    const { readStoreRegistry } = await import('@/lib/store-registry');
-    const stores = await readStoreRegistry();
-    
-    const store = stores.find(s => s.id === storeId);
-    if (!store || store.status !== 'active') {
+    const { prisma } = await import('@/lib/prisma');
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
       return false;
     }
 
-    // For now, if store exists and is active, allow access
-    // Later, can check user permissions from user data
-    return true;
+    if (user.role === 'SUPER_ADMIN') {
+      const store = await prisma.store.findFirst({
+        where: { id: storeId, isActive: true },
+        select: { id: true },
+      });
+      return Boolean(store);
+    }
+
+    const store = await prisma.store.findFirst({
+      where: {
+        id: storeId,
+        isActive: true,
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId, status: 'ACTIVE' } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    return Boolean(store);
   } catch (error) {
     console.error('Error validating tenant access:', error);
     return false;

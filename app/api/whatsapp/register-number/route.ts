@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 
 /**
  * Register a WhatsApp phone number for Cloud API sending.
@@ -25,7 +26,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({} as { pin?: string; storeId?: string }));
     const providedPin = typeof body?.pin === 'string' ? body.pin.replace(/\D/g, '') : '';
 
-    const storeId = body?.storeId || (await getCurrentStoreId(request));
+    let storeId = await getCurrentStoreId(request);
+    if (body?.storeId) {
+      const bodyStoreId = String(body.storeId);
+      const hasAccess = await validateTenantAccess(session.user.id, bodyStoreId);
+      if (!hasAccess) {
+        return NextResponse.json({ success: false, error: 'Access denied to this store' }, { status: 403 });
+      }
+      storeId = bodyStoreId;
+    }
     const resolved = await resolveWhatsAppConfig(storeId);
     if (!resolved.valid) {
       return NextResponse.json(

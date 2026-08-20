@@ -7,7 +7,14 @@ import { auth } from '@/lib/auth';
  * Used in API routes to get tenant context
  */
 export async function getCurrentStoreId(request: Request | NextRequest): Promise<string | null> {
-  return await getTenantStoreId(request as Request);
+  const storeId = await getTenantStoreId(request as Request);
+  if (!storeId) return null;
+
+  const session = await auth();
+  if (!session?.user?.id) return null;
+
+  const hasAccess = await validateTenantAccess(session.user.id, storeId);
+  return hasAccess ? storeId : null;
 }
 
 /**
@@ -37,14 +44,16 @@ export async function requireStoreAccess(
     throw new Error('Unauthorized');
   }
   
-  const storeId = await requireStoreId(request);
-  
+  const storeId = await getTenantStoreId(request as Request);
+  if (!storeId) {
+    throw new Error('Store ID is required');
+  }
+
   const hasAccess = await validateTenantAccess(session.user.id, storeId);
-  
   if (!hasAccess) {
     throw new Error('Access denied to this store');
   }
-  
+
   return storeId;
 }
 

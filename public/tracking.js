@@ -3,7 +3,7 @@
  * Embed in your Shopify theme to track product views, add-to-cart, and collection views.
  *
  * Usage: Add to theme.liquid before </body>:
- * <script src="https://YOUR_APP_URL/tracking.js" data-store-id="YOUR_STORE_ID"></script>
+ * <script src="https://YOUR_APP_URL/tracking.js" data-store-id="YOUR_STORE_ID" data-tracking-key="YOUR_TRACKING_KEY"></script>
  */
 (function () {
   'use strict';
@@ -12,10 +12,11 @@
   if (!script) return;
 
   var storeId = script.getAttribute('data-store-id');
+  var trackingKey = script.getAttribute('data-tracking-key') || script.getAttribute('data-key');
   var apiUrl = script.src.replace(/\/tracking\.js.*$/, '/api/tracking/events');
 
-  if (!storeId) {
-    console.warn('[Tracking] Missing data-store-id attribute');
+  if (!storeId || !trackingKey) {
+    console.warn('[Tracking] Missing data-store-id or data-tracking-key attribute');
     return;
   }
 
@@ -48,6 +49,7 @@
       resourceId: resourceId || null,
       resourceTitle: resourceTitle || null,
       metadata: metadata || null,
+      trackingKey: trackingKey,
     };
 
     if (navigator.sendBeacon) {
