@@ -352,17 +352,6 @@ function SettingsContent() {
       setShopifyConfig(existingShopify);
     }
 
-    // Check store connection status from server
-    fetch('/api/store/status')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.connected && data.store) {
-          setStoreConnected(true);
-          setConnectedStore(data.store);
-        }
-      })
-      .catch(() => {});
-
     // Load WhatsApp config from server
     loadWhatsAppConfig();
 
@@ -375,10 +364,37 @@ function SettingsContent() {
   // currentStore may not be resolved yet.
   useEffect(() => {
     if (currentStore?.id) {
+      loadShopifyStatus();
       loadWhatsAppConfig();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStore?.id]);
+
+  const loadShopifyStatus = async () => {
+    try {
+      const storeId = currentStore?.id;
+      const url = storeId
+        ? `/api/store/status?storeId=${encodeURIComponent(storeId)}`
+        : '/api/store/status';
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: storeId ? { 'x-store-id': storeId } : undefined,
+      });
+      const data = await res.json();
+
+      if (res.ok && data.connected && data.store) {
+        setStoreConnected(true);
+        setConnectedStore(data.store);
+      } else {
+        setStoreConnected(false);
+        setConnectedStore(null);
+      }
+    } catch (error) {
+      console.error('Error checking Shopify store status:', error);
+      setStoreConnected(false);
+      setConnectedStore(null);
+    }
+  };
 
   const checkSettingsStatus = async () => {
     try {
@@ -483,6 +499,15 @@ function SettingsContent() {
           console.warn('Server-side save failed:', data.message);
           // Continue anyway since client-side save succeeded
         } else {
+          if (data.store) {
+            setStoreConnected(true);
+            setConnectedStore({
+              id: data.store.id,
+              domain: data.store.shopDomain,
+              name: data.store.name,
+              connectedAt: new Date().toISOString(),
+            });
+          }
           // Refresh stores and switch to the created/updated store so the switcher shows real name/domain
           const newStoreId = data?.store?.id as string | undefined;
           if (newStoreId && newStoreId !== currentStore?.id) {
