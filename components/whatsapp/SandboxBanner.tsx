@@ -38,7 +38,7 @@ export function SandboxBanner() {
           WhatsApp isn&apos;t connected, so messages are <strong>simulated</strong> (not
           actually delivered). You can still build and run campaigns, journeys, and cart
           recovery end-to-end to explore every feature.{' '}
-          <a href="/settings/whatsapp" className="font-medium underline">
+          <a href="/settings?tab=whatsapp" className="font-medium underline">
             Connect WhatsApp
           </a>{' '}
           to send real messages.

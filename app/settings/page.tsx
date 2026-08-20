@@ -337,7 +337,13 @@ function SettingsContent() {
       window.history.replaceState({}, '', cleanUrl.toString());
     } else if (errorParam) {
       toast.error(`Connection failed: ${searchParams.get('message') || errorParam}`);
-      setActiveTab('shopify');
+      if (tabParam === 'whatsapp') {
+        setActiveTab('whatsapp');
+        setActiveSection('wa');
+      } else {
+        setActiveTab('shopify');
+        setActiveSection('shop');
+      }
     }
 
     // Load Shopify config from localStorage

@@ -32,7 +32,7 @@ async function tryRegisterNumber(phoneNumberId: string, accessToken: string): Pr
  *      — guaranteed to match the one used in the OAuth dialog).
  *   2. Fetches the user's WABA + phone number.
  *   3. Saves the WhatsApp config.
- *   4. Redirects to /settings?connected=true.
+ *   4. Redirects to the WhatsApp settings tab.
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
@@ -41,17 +41,17 @@ export async function GET(request: NextRequest) {
   const errorDescription = request.nextUrl.searchParams.get('error_description');
 
   const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin;
-  const settingsUrl = `${baseUrl}/settings`;
+  const settingsUrl = `${baseUrl}/settings?tab=whatsapp`;
 
   if (error) {
     return NextResponse.redirect(
-      `${settingsUrl}?error=${encodeURIComponent(errorDescription || error)}`
+      `${settingsUrl}&error=${encodeURIComponent(errorDescription || error)}`
     );
   }
 
   if (!code || !state) {
     return NextResponse.redirect(
-      `${settingsUrl}?error=${encodeURIComponent('Missing authorization code')}`
+      `${settingsUrl}&error=${encodeURIComponent('Missing authorization code')}`
     );
   }
 
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     if (businesses.length === 0) {
       return NextResponse.redirect(
-        `${settingsUrl}?error=${encodeURIComponent('No WhatsApp Business Accounts found for this Facebook account')}`
+        `${settingsUrl}&error=${encodeURIComponent('No WhatsApp Business Accounts found for this Facebook account')}`
       );
     }
 
@@ -76,13 +76,13 @@ export async function GET(request: NextRequest) {
 
     if (!biz.wabaId && !biz.id) {
       return NextResponse.redirect(
-        `${settingsUrl}?error=${encodeURIComponent('No WhatsApp Business Account ID found')}`
+        `${settingsUrl}&error=${encodeURIComponent('No WhatsApp Business Account ID found')}`
       );
     }
 
     if (!phone?.id) {
       return NextResponse.redirect(
-        `${settingsUrl}?error=${encodeURIComponent('No phone number found on your WhatsApp Business Account')}`
+        `${settingsUrl}&error=${encodeURIComponent('No phone number found on your WhatsApp Business Account')}`
       );
     }
 
@@ -97,12 +97,12 @@ export async function GET(request: NextRequest) {
     // Register the number for Cloud API sending so messages work immediately.
     await tryRegisterNumber(phone.id, accessToken);
 
-    return NextResponse.redirect(`${settingsUrl}?connected=true`);
+    return NextResponse.redirect(`${settingsUrl}&connected=true`);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to complete WhatsApp setup';
     console.error('[embedded-signup][callback]', message);
     return NextResponse.redirect(
-      `${settingsUrl}?error=${encodeURIComponent(message)}`
+      `${settingsUrl}&error=${encodeURIComponent(message)}`
     );
   }
 }

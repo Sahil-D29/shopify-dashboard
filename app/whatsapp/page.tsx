@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
-export default function WhatsAppSettingsRedirectPage() {
+export default function WhatsAppRedirectPage() {
   redirect('/settings?tab=whatsapp');
 }
