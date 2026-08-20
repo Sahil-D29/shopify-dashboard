@@ -425,6 +425,14 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
     return text.trim();
   };
 
+  const templateVariablesForSend = (): Record<string, string> => {
+    const values: Record<string, string> = {};
+    variables.forEach(variable => {
+      values[variable] = String(formData.sampleValues?.[variable] || '').trim();
+    });
+    return values;
+  };
+
   const pollTestStatus = async (dbMessageId: string, normalizedPhone: string, pollToken: number) => {
     const terminalStatuses = new Set<TestDeliveryStatus>(['DELIVERED', 'READ', 'FAILED']);
     for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -469,18 +477,38 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       setTestResult({ success: false, message: 'Add some body text first.' });
       return;
     }
+    const isApprovedTemplate = editTemplate?.status === 'APPROVED';
+    const missingVariables = isApprovedTemplate
+      ? variables.filter(variable => !String(formData.sampleValues?.[variable] || '').trim())
+      : [];
+    if (missingVariables.length > 0) {
+      setTestResult({
+        success: false,
+        message: `Add sample values for ${missingVariables.map(variable => `{{${variable}}}`).join(', ')} before sending this approved template.`,
+      });
+      return;
+    }
     const pollToken = pollTokenRef.current + 1;
     pollTokenRef.current = pollToken;
     setSendingTest(true);
     setTestResult(null);
     try {
-      const res = await fetch('/api/whatsapp/send-text', {
+      const endpoint = isApprovedTemplate ? '/api/whatsapp/send-template' : '/api/whatsapp/send-text';
+      const payload = isApprovedTemplate
+        ? {
+            templateName: formData.name,
+            phoneNumber: phone,
+            variables: templateVariablesForSend(),
+            language: formData.language,
+          }
+        : { phoneNumber: phone, message: renderForTest() };
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(currentStore?.id ? { 'x-store-id': currentStore.id } : {}),
         },
-        body: JSON.stringify({ phoneNumber: phone, message: renderForTest() }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && !data.error) {
@@ -500,7 +528,9 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
         const raw = String(data.userMessage || data.error || '');
         const message = /133010|not registered/i.test(raw)
           ? 'Your WhatsApp number is not registered for sending yet. Go to Settings > WhatsApp > Register for sending, then try again.'
-          : raw || 'Failed to send. Plain text tests work only to a number that messaged your WhatsApp in the last 24 hours.';
+          : raw || (isApprovedTemplate
+            ? 'Failed to send approved template. Check that the template is approved and synced from Meta.'
+            : 'Failed to send. Plain text tests work only to a number that messaged your WhatsApp in the last 24 hours.');
         setTestResult({ success: false, message });
       }
     } catch {
@@ -512,6 +542,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
 
   const normalizedTestPhone = normalizeTestPhone(testPhone);
   const templateStatus = editTemplate?.status;
+  const isApprovedTemplate = templateStatus === 'APPROVED';
   const isNonApprovedTemplate = Boolean(templateStatus && templateStatus !== 'APPROVED');
 
   return (
@@ -975,11 +1006,13 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
               Send Test Message
             </h4>
             <p className="text-xs text-gray-500 mb-3">
-              Sends plain text to numbers that messaged your WhatsApp in the last 24 hours. Approved templates can start new conversations.
+              {isApprovedTemplate
+                ? 'Sends the approved WhatsApp template, so it can start a new conversation.'
+                : 'Sends a plain-text preview only to numbers that messaged your WhatsApp in the last 24 hours.'}
             </p>
             {isNonApprovedTemplate && (
               <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                Template is {String(templateStatus).toLowerCase()}. This test sends plain text only; real template sending needs Meta approval.
+                Template is {String(templateStatus).toLowerCase()}. Meta approval is required before this can be sent as a real template to any number.
               </div>
             )}
             <div className="flex gap-2">
@@ -996,7 +1029,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
                 disabled={sendingTest}
                 className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
               >
-                {sendingTest ? 'Sending...' : 'Send Plain Text'}
+                {sendingTest ? 'Sending...' : isApprovedTemplate ? 'Send Template' : 'Send Plain Text'}
               </Button>
             </div>
             {normalizedTestPhone && (

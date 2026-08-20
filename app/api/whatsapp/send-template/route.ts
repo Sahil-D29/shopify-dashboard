@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
-import { graphUrl } from '@/lib/whatsapp/graph';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { sendWhatsAppMessage } from '@/lib/whatsapp/send-message';
+import { isValidPhone, normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import type {
   WhatsAppTemplateBodyParameter,
   WhatsAppTemplateComponent,
@@ -23,22 +25,6 @@ interface WhatsAppApiError {
   fbtrace_id?: string;
 }
 
-interface WhatsAppApiResponse {
-  messages?: Array<{ id?: string }>;
-  error?: WhatsAppApiError;
-}
-
-interface TemplatePayload {
-  messaging_product: 'whatsapp';
-  to: string;
-  type: 'template';
-  template: {
-    name: string;
-    language: { code: string };
-    components?: WhatsAppTemplateComponent[];
-  };
-}
-
 function buildComponents(
   variables: SendTemplateRequestBody['variables'],
 ): WhatsAppTemplateComponent[] | undefined {
@@ -52,13 +38,17 @@ function buildComponents(
   return [{ type: 'body', parameters }];
 }
 
-function formatPhoneNumber(input: string | number): string {
-  const formatted = String(input).replace(/[\s\-+()]/g, '');
-  return formatted;
-}
-
-function buildUserFriendlyMessage(error: WhatsAppApiError | undefined, fallback: string): string {
+function buildUserFriendlyMessage(error: string | WhatsAppApiError | undefined, fallback: string): string {
   if (!error) return fallback;
+  if (typeof error === 'string') {
+    if (/133010|not registered/i.test(error)) {
+      return 'Your WhatsApp number is not registered for sending yet. Open Settings > WhatsApp and use Register for sending.';
+    }
+    if (/template.*approved|not approved|131047/i.test(error)) return 'Template not approved yet. Use an approved template.';
+    if (/template.*not found/i.test(error)) return 'Template not found. Make sure the template is approved and synced from Meta.';
+    if (/access token|190/i.test(error)) return 'Access token expired. Update WhatsApp credentials.';
+    return error;
+  }
   const code = error.code;
   if (code === 131047) return 'Template not approved yet. Use an approved template.';
   if (code === 131026) return 'Invalid phone number format.';
@@ -89,79 +79,113 @@ export async function POST(request: NextRequest) {
     }
 
     const storeId = await getCurrentStoreId(request);
-    const validation = await resolveWhatsAppConfig(storeId);
-    if (!validation.valid) {
-      return NextResponse.json(
-        {
-          error: 'WhatsApp credentials not configured. Connect via Settings or check .env.local',
-          details: validation.error,
-        },
-        { status: 500 },
-      );
+    if (!storeId) {
+      return NextResponse.json({ error: 'Store ID required' }, { status: 400 });
     }
 
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (formattedPhone.startsWith('0')) {
+    const normalizedPhone = normalizePhone(phoneNumber);
+    if (!normalizedPhone || !isValidPhone(normalizedPhone)) {
       return NextResponse.json(
         {
-          error: 'Invalid phone number format. Please include country code (e.g., 919876543210)',
-          hint: 'Remove leading 0 and add country code',
+          error: 'Invalid phone number format',
+          userMessage: 'Enter a WhatsApp number with country code. Indian 10-digit numbers are sent as +91 automatically.',
+          phoneNumber: normalizedPhone,
         },
         { status: 400 },
       );
     }
 
-    const components = buildComponents(variables);
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { id: true },
+    });
+    if (!store) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
 
-    const messagePayload: TemplatePayload = {
-      messaging_product: 'whatsapp',
-      to: formattedPhone,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: language },
-        components,
-      },
-    };
+    const session = await auth().catch(() => null);
+    const possiblePhones = normalizedPhone.startsWith('+')
+      ? [normalizedPhone, normalizedPhone.replace(/^\+/, '')]
+      : [normalizedPhone, `+${normalizedPhone}`];
 
-    const response = await fetch(
-      graphUrl(`${META_GRAPH_API_VERSION}/${validation.config.phoneNumberId}/messages`, validation.config.accessToken),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${validation.config.accessToken}`,
-          'Content-Type': 'application/json',
+    let contact = await prisma.contact.findFirst({
+      where: { storeId, phone: { in: possiblePhones } },
+      select: { id: true, phone: true },
+    });
+
+    if (!contact) {
+      contact = await prisma.contact.create({
+        data: {
+          storeId,
+          phone: normalizedPhone,
+          source: 'MANUAL',
+          optInStatus: 'NOT_SET',
+          lastMessageAt: new Date(),
+          tags: [],
+          customFields: {},
+          metadata: { createdFrom: 'whatsapp_template_test_send' },
         },
-        body: JSON.stringify(messagePayload),
+        select: { id: true, phone: true },
+      });
+    }
+
+    const conversation = await prisma.conversation.upsert({
+      where: { storeId_contactId: { storeId, contactId: contact.id } },
+      update: {
+        lastMessageAt: new Date(),
+        lastMessagePreview: templateName.substring(0, 100),
+        status: 'OPEN',
       },
-    );
+      create: {
+        storeId,
+        contactId: contact.id,
+        status: 'OPEN',
+        lastMessageAt: new Date(),
+        lastMessagePreview: templateName.substring(0, 100),
+      },
+      select: { id: true },
+    });
 
-    const result = (await response.json()) as WhatsAppApiResponse;
+    const components = buildComponents(variables) ?? [];
+    const result = await sendWhatsAppMessage({
+      storeId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      phone: normalizedPhone,
+      type: 'template',
+      templateName,
+      templateLanguage: language,
+      templateComponents: components,
+      sentBy: session?.user?.id ?? null,
+    });
 
-    if (!response.ok) {
-      const errorMessage = result.error?.message ?? 'Failed to send message';
-      const userFriendlyMessage = buildUserFriendlyMessage(result.error, errorMessage);
+    if (!result.success) {
+      const userFriendlyMessage = buildUserFriendlyMessage(result.error, 'Failed to send template message');
 
       return NextResponse.json(
         {
-          error: errorMessage,
+          success: false,
+          error: result.error ?? 'Failed to send template message',
           userMessage: userFriendlyMessage,
-          details: result.error,
-          errorCode: result.error?.code,
-          payload: messagePayload,
+          dbMessageId: result.dbMessageId,
+          phoneNumber: normalizedPhone,
+          hint: 'Only approved WhatsApp templates can start a new conversation outside the 24-hour customer-service window.',
         },
-        { status: response.status },
+        { status: 400 },
       );
     }
 
-    const messageId = result.messages?.[0]?.id;
-
     return NextResponse.json({
       success: true,
-      messageId,
-      message: 'Message sent successfully!',
-      wabaMessageId: messageId,
-      phoneNumber: formattedPhone,
+      messageId: result.whatsappMessageId,
+      whatsappMessageId: result.whatsappMessageId,
+      dbMessageId: result.dbMessageId,
+      deliveryStatus: result.dbMessageId ? 'SENT' : 'ACCEPTED',
+      message:
+        'Template accepted by WhatsApp. Delivery/read status updates when Meta sends the webhook receipt.',
+      phoneNumber: normalizedPhone,
+      displayPhoneNumber: `+${normalizedPhone}`,
+      hint: 'Approved templates can start new WhatsApp conversations. Pending or draft templates cannot.',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send message';
