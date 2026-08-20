@@ -56,27 +56,29 @@ export default function TemplatesPage() {
   const toast = useToast();
   const { currentStore } = useTenant();
 
+  const buildStoreAwareHeaders = useCallback((): Record<string, string> => {
+    const config = WhatsAppConfigManager.getConfig();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (config?.wabaId && config?.accessToken) {
+      headers['X-WhatsApp-Config'] = JSON.stringify({
+        wabaId: config.wabaId,
+        accessToken: config.accessToken,
+      });
+    }
+    if (currentStore?.id) headers['x-store-id'] = currentStore.id;
+
+    return headers;
+  }, [currentStore?.id]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Get WhatsApp config to pass in headers
-      const config = WhatsAppConfigManager.getConfig();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-
-      // Add WhatsApp config to headers if available
-      if (config?.wabaId && config?.accessToken) {
-        headers['X-WhatsApp-Config'] = JSON.stringify({
-          wabaId: config.wabaId,
-          accessToken: config.accessToken,
-        });
-      }
-      if (currentStore?.id) headers['x-store-id'] = currentStore.id;
-
       const res = await fetch('/api/whatsapp/templates', {
         cache: 'no-store',
-        headers,
+        headers: buildStoreAwareHeaders(),
       });
       const data = (await res.json().catch(() => ({}))) as TemplateListResponse;
       if (!res.ok) {
@@ -89,14 +91,19 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast, currentStore?.id]);
+  }, [toast, buildStoreAwareHeaders]);
 
   useEffect(() => {
     // Connection may live in localStorage (manual) OR the DB (Embedded Signup).
     if (WhatsAppConfigManager.getConfig()) {
       setConfigured(true);
     } else {
-      fetch('/api/settings/whatsapp')
+      const url = currentStore?.id
+        ? `/api/settings/whatsapp?storeId=${encodeURIComponent(currentStore.id)}`
+        : '/api/settings/whatsapp';
+      fetch(url, {
+        headers: currentStore?.id ? { 'x-store-id': currentStore.id } : undefined,
+      })
         .then(r => r.json())
         .then(d => setConfigured(Boolean(d?.isConfigured || d?.config?.isConfigured)))
         .catch(() => {});
@@ -113,7 +120,7 @@ export default function TemplatesPage() {
         }
       }
     }
-  }, [load]);
+  }, [load, currentStore?.id]);
 
   // Auto-sync on page load if no recent sync (tries with config or env vars)
   useEffect(() => {
@@ -137,7 +144,7 @@ export default function TemplatesPage() {
       const cfg = WhatsAppConfigManager.getConfig();
       setSyncing(true);
       
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const headers = buildStoreAwareHeaders();
       let body: string;
 
       if (cfg?.wabaId && cfg?.accessToken) {
@@ -178,7 +185,7 @@ export default function TemplatesPage() {
     }, 2000); // Wait 2 seconds after page load
     
     return () => clearTimeout(timer);
-  }, [lastSyncTime, syncing, loading, load]);
+  }, [lastSyncTime, syncing, loading, load, buildStoreAwareHeaders]);
 
   const filteredTemplates = templates.filter(t => {
     const matchesSearch = !searchQuery ||
@@ -252,7 +259,7 @@ export default function TemplatesPage() {
       const cfg = WhatsAppConfigManager.getConfig();
       
       // Prepare headers and body
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const headers = buildStoreAwareHeaders();
       let body: string;
 
       if (cfg?.wabaId && cfg?.accessToken) {

@@ -124,6 +124,7 @@ function SettingsContent() {
   const [waResult, setWaResult] = useState<{ success: boolean; message: string } | null>(null);
   const [embeddedLoading, setEmbeddedLoading] = useState(false);
   const [embeddedConnected, setEmbeddedConnected] = useState(false);
+  const [waRegistered, setWaRegistered] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [registerPin, setRegisterPin] = useState('');
   const [registerResult, setRegisterResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -410,8 +411,10 @@ function SettingsContent() {
         if (cfg.isConfigured || data.isConfigured) {
           setEmbeddedConnected(true);
         }
+        setWaRegistered(Boolean(settings.registered));
       } else {
         setEmbeddedConnected(false);
+        setWaRegistered(false);
       }
     } catch (error) {
       console.error('Failed to load WhatsApp config:', error);
@@ -641,6 +644,7 @@ function SettingsContent() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        setWaRegistered(true);
         setRegisterResult({ success: true, message: '✅ Number registered — you can now send messages.' });
       } else {
         setRegisterResult({ success: false, message: data.error || 'Failed to register number.' });
@@ -1294,12 +1298,19 @@ function SettingsContent() {
 
                 {/* Register number for sending (fixes #133010 Account not registered) */}
                 {embeddedConnected && (
-                  <div className="p-4 rounded-lg border border-amber-200 bg-amber-50">
-                    <h4 className="text-sm font-semibold text-gray-900">Register number for sending</h4>
+                  <div className={`p-4 rounded-lg border ${waRegistered ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <h4 className="text-sm font-semibold text-gray-900">
+                      {waRegistered ? 'Number registered for sending' : 'Sending troubleshooting'}
+                    </h4>
                     <p className="text-xs text-gray-600 mt-1 mb-3">
-                      A newly connected number must be registered once before it can send. If sending shows
-                      <span className="font-medium"> &quot;#133010 Account not registered&quot;</span>, click below.
-                      Only enter a PIN if your number already has two-step verification.
+                      {waRegistered
+                        ? 'This connected number has been registered for Cloud API sending.'
+                        : (
+                          <>
+                            If sending shows <span className="font-medium">&quot;#133010 Account not registered&quot;</span>, register the number below.
+                            Only enter a PIN if your number already has two-step verification.
+                          </>
+                        )}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <Input

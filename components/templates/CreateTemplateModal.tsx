@@ -32,6 +32,32 @@ interface Props {
   prefill?: TemplatePrefill | null;
 }
 
+type TestDeliveryStatus = 'ACCEPTED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
+
+interface TestResult {
+  success: boolean;
+  message: string;
+  status?: TestDeliveryStatus;
+  dbMessageId?: string;
+  normalizedPhone?: string;
+}
+
+function normalizeTestPhone(raw: string): string {
+  let phone = raw.replace(/[^\d]/g, '');
+  if (!phone) return '';
+  if (phone.startsWith('0') && phone.length === 11) phone = `91${phone.slice(1)}`;
+  if (phone.length === 10) phone = `91${phone}`;
+  return phone;
+}
+
+function getStatusMessage(status: TestDeliveryStatus, normalizedPhone?: string, errorMessage?: string): string {
+  const phoneText = normalizedPhone ? ` to +${normalizedPhone}` : '';
+  if (status === 'READ') return `Read on WhatsApp${phoneText}.`;
+  if (status === 'DELIVERED') return `Delivered on WhatsApp${phoneText}.`;
+  if (status === 'FAILED') return errorMessage || `WhatsApp accepted the request, but delivery failed${phoneText}.`;
+  return `Accepted by WhatsApp${phoneText}. Waiting for delivery receipt.`;
+}
+
 export default function CreateTemplateModal({ open, onClose, onCreated, editTemplate, prefill }: Props) {
   const { currentStore } = useTenant();
   const [formData, setFormData] = useState<CreateTemplateRequest>({
@@ -51,7 +77,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
   const [submitting, setSubmitting] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showHeaderEmojiPicker, setShowHeaderEmojiPicker] = useState(false);
   const [showFooterEmojiPicker, setShowFooterEmojiPicker] = useState(false);
@@ -59,6 +85,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLInputElement>(null);
   const footerRef = useRef<HTMLInputElement>(null);
+  const pollTokenRef = useRef(0);
 
   // Reset form when editTemplate changes
   useEffect(() => {
@@ -398,16 +425,52 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
     return text.trim();
   };
 
+  const pollTestStatus = async (dbMessageId: string, normalizedPhone: string, pollToken: number) => {
+    const terminalStatuses = new Set<TestDeliveryStatus>(['DELIVERED', 'READ', 'FAILED']);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      if (pollTokenRef.current !== pollToken) return;
+
+      try {
+        const params = new URLSearchParams({ messageId: dbMessageId });
+        const res = await fetch(`/api/whatsapp/send-text/status?${params.toString()}`, {
+          cache: 'no-store',
+          headers: currentStore?.id ? { 'x-store-id': currentStore.id } : undefined,
+        });
+        const data = await res.json().catch(() => ({}));
+        const status = data?.message?.status as TestDeliveryStatus | undefined;
+        if (!res.ok || !status) continue;
+
+        setTestResult({
+          success: status !== 'FAILED',
+          status,
+          dbMessageId,
+          normalizedPhone,
+          message: getStatusMessage(status, normalizedPhone, data?.message?.errorMessage),
+        });
+
+        if (terminalStatuses.has(status)) return;
+      } catch {
+        return;
+      }
+    }
+  };
+
   const handleSendTest = async () => {
-    const phone = testPhone.replace(/[\s\-()]/g, '');
+    const phone = normalizeTestPhone(testPhone);
     if (!phone) {
-      setTestResult({ success: false, message: 'Enter a phone number with country code (e.g. 919876543210).' });
+      setTestResult({
+        success: false,
+        message: 'Enter a WhatsApp phone number. Indian 10-digit numbers are sent as +91 automatically.',
+      });
       return;
     }
     if (!formData.body.trim()) {
       setTestResult({ success: false, message: 'Add some body text first.' });
       return;
     }
+    const pollToken = pollTokenRef.current + 1;
+    pollTokenRef.current = pollToken;
     setSendingTest(true);
     setTestResult(null);
     try {
@@ -421,12 +484,23 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && !data.error) {
-        setTestResult({ success: true, message: '✅ Test message sent — check WhatsApp on that number.' });
+        const normalizedPhone = String(data.phoneNumber || phone);
+        const dbMessageId = typeof data.dbMessageId === 'string' ? data.dbMessageId : undefined;
+        setTestResult({
+          success: true,
+          status: 'SENT',
+          dbMessageId,
+          normalizedPhone,
+          message: getStatusMessage('SENT', normalizedPhone),
+        });
+        if (dbMessageId) {
+          void pollTestStatus(dbMessageId, normalizedPhone, pollToken);
+        }
       } else {
         const raw = String(data.userMessage || data.error || '');
         const message = /133010|not registered/i.test(raw)
-          ? 'Your WhatsApp number isn\'t registered for sending yet. Go to Settings → WhatsApp → "Register for sending", then try again.'
-          : raw || 'Failed to send. Test sends work only to a number that messaged your WhatsApp in the last 24h.';
+          ? 'Your WhatsApp number is not registered for sending yet. Go to Settings > WhatsApp > Register for sending, then try again.'
+          : raw || 'Failed to send. Plain text tests work only to a number that messaged your WhatsApp in the last 24 hours.';
         setTestResult({ success: false, message });
       }
     } catch {
@@ -435,6 +509,10 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
       setSendingTest(false);
     }
   };
+
+  const normalizedTestPhone = normalizeTestPhone(testPhone);
+  const templateStatus = editTemplate?.status;
+  const isNonApprovedTemplate = Boolean(templateStatus && templateStatus !== 'APPROVED');
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -897,12 +975,17 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
               Send Test Message
             </h4>
             <p className="text-xs text-gray-500 mb-3">
-              Sends the rendered text to your number. Works for numbers that messaged your WhatsApp in the last 24h.
+              Sends plain text to numbers that messaged your WhatsApp in the last 24 hours. Approved templates can start new conversations.
             </p>
+            {isNonApprovedTemplate && (
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                Template is {String(templateStatus).toLowerCase()}. This test sends plain text only; real template sending needs Meta approval.
+              </div>
+            )}
             <div className="flex gap-2">
               <Input
                 type="tel"
-                placeholder="919876543210"
+                placeholder="7827718504 or 917827718504"
                 value={testPhone}
                 onChange={e => setTestPhone(e.target.value)}
                 className="flex-1"
@@ -913,13 +996,22 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
                 disabled={sendingTest}
                 className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
               >
-                {sendingTest ? 'Sending…' : 'Send Test'}
+                {sendingTest ? 'Sending...' : 'Send Plain Text'}
               </Button>
             </div>
+            {normalizedTestPhone && (
+              <p className="mt-2 text-xs text-gray-500">
+                Will send to +{normalizedTestPhone}
+              </p>
+            )}
             {testResult && (
               <div
                 className={`mt-2 text-xs rounded-md p-2 ${
-                  testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'
+                  testResult.success
+                    ? testResult.status === 'SENT' || testResult.status === 'ACCEPTED'
+                      ? 'bg-blue-50 text-blue-800'
+                      : 'bg-green-50 text-green-800'
+                    : 'bg-red-50 text-red-700'
                 }`}
               >
                 {testResult.message}
