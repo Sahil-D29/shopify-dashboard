@@ -15,10 +15,13 @@ export function SandboxBanner() {
   const [sandbox, setSandbox] = useState(false);
 
   useEffect(() => {
+    const url = currentStore?.id
+      ? `/api/settings/whatsapp?storeId=${encodeURIComponent(currentStore.id)}`
+      : '/api/settings/whatsapp';
     const headers: HeadersInit | undefined = currentStore?.id
       ? { 'x-store-id': currentStore.id }
       : undefined;
-    fetch('/api/settings/whatsapp', { headers })
+    fetch(url, { headers, cache: 'no-store' })
       .then(r => r.json())
       .then(d => setSandbox(!(d?.isConfigured || d?.config?.isConfigured)))
       .catch(() => {});

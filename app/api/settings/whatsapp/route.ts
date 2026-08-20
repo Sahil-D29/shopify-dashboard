@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { UserRole, UserStatus } from '@prisma/client';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 export interface WhatsAppServerConfig {
   wabaId: string;
@@ -22,7 +23,7 @@ export interface WhatsAppServerConfig {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    let storeId = searchParams.get('storeId');
+    let storeId = searchParams.get('storeId') || await getCurrentStoreId(request);
 
     if (!storeId) {
       // No store in query (e.g. "No stores" in UI). Resolve current user's first store.
