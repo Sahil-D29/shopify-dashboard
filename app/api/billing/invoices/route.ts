@@ -6,6 +6,14 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+function deriveGateway(paymentReference?: string | null): string {
+  if (!paymentReference) return 'unknown';
+  if (paymentReference.startsWith('pay_') || paymentReference.startsWith('order_')) return 'razorpay';
+  if (paymentReference.startsWith('sub_') || paymentReference.startsWith('cs_') || paymentReference.startsWith('pi_')) return 'stripe';
+  if (paymentReference.startsWith('gid://shopify/')) return 'shopify';
+  return 'gateway';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -49,10 +57,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       invoices: payments.map(payment => ({
         id: payment.id,
-        amount: payment.amount,
+        amount: Number(payment.amount),
         currency: payment.currency,
         status: payment.status,
         stripePaymentId: payment.stripePaymentId,
+        gateway: deriveGateway(payment.stripePaymentId),
         paidAt: payment.paidAt,
         createdAt: payment.createdAt,
         planName: subscription.planName,

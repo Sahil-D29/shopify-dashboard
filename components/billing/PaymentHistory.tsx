@@ -18,11 +18,18 @@ interface Invoice {
   amount: number;
   currency: string;
   status: 'SUCCEEDED' | 'FAILED' | 'PENDING';
-  gateway: string;
+  gateway?: string;
+  planName?: string;
 }
 
 interface PaymentHistoryProps {
   storeId: string;
+}
+
+function formatAmount(amount: number, currency: string): string {
+  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
+  const value = Number(amount || 0).toLocaleString(locale);
+  return `${currency} ${value}`;
 }
 
 export default function PaymentHistory({ storeId }: PaymentHistoryProps) {
@@ -32,13 +39,21 @@ export default function PaymentHistory({ storeId }: PaymentHistoryProps) {
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const response = await fetch(`/api/billing/invoices?storeId=${storeId}`);
+        const response = await fetch(`/api/billing/invoices?storeId=${storeId}`, { cache: 'no-store' });
         if (response.ok) {
           const data = await response.json();
-          setInvoices(data);
+          const nextInvoices = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.invoices)
+              ? data.invoices
+              : [];
+          setInvoices(nextInvoices);
+        } else {
+          setInvoices([]);
         }
       } catch (error) {
         console.error('Error fetching invoices:', error);
+        setInvoices([]);
       } finally {
         setLoading(false);
       }
@@ -94,11 +109,11 @@ export default function PaymentHistory({ storeId }: PaymentHistoryProps) {
                     })}
                   </TableCell>
                   <TableCell className="font-medium">
-                    ₹{invoice.amount.toLocaleString('en-IN')}
+                    {formatAmount(invoice.amount, invoice.currency)}
                   </TableCell>
                   <TableCell>{invoice.currency}</TableCell>
                   <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                  <TableCell className="capitalize">{invoice.gateway}</TableCell>
+                  <TableCell className="capitalize">{invoice.gateway || 'unknown'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
