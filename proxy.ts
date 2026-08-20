@@ -28,8 +28,9 @@ export async function proxy(request: NextRequest) {
   const isApiWebhook = pathname.startsWith("/api/webhooks");
   const isApiCron = pathname.startsWith("/api/cron");
   const isPublicApi = pathname.startsWith("/api/public");
+  const isApiTracking = pathname === "/api/tracking/events";
 
-  if (isApiAuth || isApiHealth || isApiWebhook || isApiCron || isPublicApi || isApiAdminAuth) {
+  if (isApiAuth || isApiHealth || isApiWebhook || isApiCron || isPublicApi || isApiTracking || isApiAdminAuth) {
     return NextResponse.next();
   }
 
