@@ -176,7 +176,7 @@ export default function TemplateLibraryPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="block text-sm font-medium mb-1">Status</label>
               <Select

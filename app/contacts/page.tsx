@@ -31,6 +31,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { PageActions, PageContainer, PageHeader } from '@/components/layout/PageLayout';
 
 const PAGE_SIZE = 25;
 
@@ -257,22 +258,19 @@ export default function ContactsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageContainer className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Contacts</h1>
-            <p className="text-gray-600 mt-1">
-              Manage your WhatsApp contacts, import from CSV, or sync from Shopify
-            </p>
-          </div>
-          <div className="flex gap-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <PageHeader
+          title="Contacts"
+          description="Manage your WhatsApp contacts, import from CSV, or sync from Shopify"
+          actions={
+          <PageActions>
             <Button
               onClick={handleSyncShopify}
               variant="outline"
               disabled={syncing}
-              className="whitespace-nowrap"
+              className="w-full whitespace-nowrap xs:w-auto"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? 'Syncing...' : 'Sync Shopify'}
@@ -280,25 +278,26 @@ export default function ContactsPage() {
             <Button
               onClick={() => setShowImportCSV(true)}
               variant="outline"
-              className="whitespace-nowrap"
+              className="w-full whitespace-nowrap xs:w-auto"
             >
               <Upload className="w-4 h-4 mr-2" />
               Import CSV
             </Button>
             <Button
               onClick={() => setShowAddDialog(true)}
-              className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
+              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 xs:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Contact
             </Button>
-          </div>
-        </div>
+          </PageActions>
+          }
+        />
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
+        <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 text-white shadow-lg sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <Users className="w-8 h-8 opacity-80" />
           </div>
@@ -306,7 +305,7 @@ export default function ContactsPage() {
           <div className="text-sm opacity-90">Total Contacts</div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 p-5 text-white shadow-lg sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <UserCheck className="w-8 h-8 opacity-80" />
           </div>
@@ -314,7 +313,7 @@ export default function ContactsPage() {
           <div className="text-sm opacity-90">Opted In</div>
         </div>
 
-        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="rounded-xl bg-gradient-to-br from-red-500 to-red-600 p-5 text-white shadow-lg sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <UserX className="w-8 h-8 opacity-80" />
           </div>
@@ -322,7 +321,7 @@ export default function ContactsPage() {
           <div className="text-sm opacity-90">Opted Out</div>
         </div>
 
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl p-6 text-white shadow-lg">
+        <div className="rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-600 p-5 text-white shadow-lg sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <Clock className="w-8 h-8 opacity-80" />
           </div>
@@ -332,7 +331,7 @@ export default function ContactsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div className="md:col-span-2">
@@ -387,11 +386,11 @@ export default function ContactsPage() {
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm font-medium text-blue-700">
             {selectedIds.size} contact{selectedIds.size > 1 ? 's' : ''} selected
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handleBulkTag}>
               <Tag className="w-4 h-4 mr-1" />
               Tag
@@ -455,11 +454,11 @@ export default function ContactsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                <p className="text-sm text-gray-600">
+              <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <p className="text-center text-sm text-gray-600 sm:text-left">
                   Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} contacts
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -515,6 +514,6 @@ export default function ContactsPage() {
         onOpenChange={setShowImportCSV}
         onImportComplete={() => loadContacts()}
       />
-    </div>
+    </PageContainer>
   );
 }

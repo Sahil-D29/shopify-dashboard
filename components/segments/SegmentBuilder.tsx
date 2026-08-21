@@ -445,7 +445,7 @@ export default function SegmentBuilder({
               {hasConditions && previewData && !previewData.error && !isPreviewing && (
                 <>
                   <div className="h-px bg-border" />
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {previewData.totalValue != null && (
                       <div className="rounded-lg bg-muted/30 p-3">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">

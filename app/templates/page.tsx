@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { useToast } from '@/lib/hooks/useToast';
 import { getWindowStorage } from '@/lib/window-storage';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 interface TemplateListResponse {
   templates?: WhatsAppTemplate[];
@@ -278,7 +279,7 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="p-8 max-w-[1920px] mx-auto">
+    <PageContainer>
       {/* Config warning banner */}
       {!configured && (
         <Card className="mb-6">
@@ -291,7 +292,7 @@ export default function TemplatesPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
         <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight truncate">Templates</h1>
+          <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">Templates</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Create and manage WhatsApp message templates
           </p>
@@ -455,7 +456,7 @@ export default function TemplatesPage() {
         cancelText="Cancel"
         variant="danger"
       />
-    </div>
+    </PageContainer>
   );
 }
 

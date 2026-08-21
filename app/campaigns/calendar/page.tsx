@@ -396,7 +396,7 @@ export default function CampaignCalendarPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
           {/* Month 1 */}
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">

@@ -197,7 +197,7 @@ function VariantCard({
       <p className="text-sm text-gray-900 mb-4 line-clamp-1" title={variant.subject}>
         {variant.subject || '(empty subject)'}
       </p>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 xs:grid-cols-3">
         <MetricBlock
           label="Open"
           value={`${variant.openRate.toFixed(1)}%`}

@@ -178,7 +178,7 @@ export default function EmailAnalyticsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 md:grid-cols-4">
         <StatCard
           icon={SendIcon}
           label="Total Sent"

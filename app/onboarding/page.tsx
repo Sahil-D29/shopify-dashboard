@@ -266,7 +266,7 @@ export default function OnboardingPage() {
         {/* ── Step 1: Brand Name ──────────────────────────────────────── */}
         {step === 1 && (
           <div
-            className="rounded-2xl border p-8 shadow-sm"
+            className="rounded-2xl border p-4 shadow-sm sm:p-8"
             style={{ backgroundColor: '#FFFFFF', borderColor: '#E8E4DE' }}
           >
             <form onSubmit={handleBrandSubmit} className="space-y-6">
@@ -328,7 +328,7 @@ export default function OnboardingPage() {
         {/* ── Step 2: Connect Shopify ─────────────────────────────────── */}
         {step === 2 && !shopifyConnected && (
           <div
-            className="rounded-2xl border p-8 shadow-sm"
+            className="rounded-2xl border p-4 shadow-sm sm:p-8"
             style={{ backgroundColor: '#FFFFFF', borderColor: '#E8E4DE' }}
           >
             <div className="space-y-6">
@@ -432,7 +432,7 @@ export default function OnboardingPage() {
         {/* ── Step 2: Connected Success ───────────────────────────────── */}
         {step === 2 && shopifyConnected && (
           <div
-            className="rounded-2xl border p-8 shadow-sm"
+            className="rounded-2xl border p-4 shadow-sm sm:p-8"
             style={{ backgroundColor: '#FFFFFF', borderColor: '#E8E4DE' }}
           >
             <div className="space-y-6">

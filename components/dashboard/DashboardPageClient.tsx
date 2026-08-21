@@ -171,7 +171,7 @@ const MetricCard = memo(function MetricCard({ title, value, subtitle, icon: Icon
   return (
     <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       <div className={`h-1 w-full bg-gradient-to-r ${accentGradient}`} />
-      <div className="space-y-5 p-6">
+      <div className="space-y-4 p-4 sm:space-y-5 sm:p-6">
         <div className="flex items-center justify-between">
           <div className={`rounded-lg bg-gradient-to-br ${gradient} bg-opacity-10 p-3`}>
             <Icon className="h-6 w-6 text-gray-700" />
@@ -188,7 +188,7 @@ const MetricCard = memo(function MetricCard({ title, value, subtitle, icon: Icon
           )}
         </div>
         <div className="space-y-1">
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          <p className="break-words text-2xl font-bold text-gray-900 sm:text-3xl">{value}</p>
           <p className="text-sm font-medium text-gray-900">{title}</p>
           {subtitle ? <p className="text-xs text-gray-500">{subtitle}</p> : null}
         </div>
@@ -214,11 +214,11 @@ function DashboardHeader({ refreshing, onRefresh, lastSynced }: DashboardHeaderP
           backgroundSize: '24px 24px',
         }}
       />
-      <div className="relative flex flex-col gap-6 px-8 py-6 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-2 text-white">
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+      <div className="relative flex min-w-0 flex-col gap-5 px-5 py-6 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+        <div className="min-w-0 space-y-2 text-white">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
           <p className="flex flex-wrap items-center gap-3 text-sm text-stone-300">
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-start gap-2 sm:items-center">
               <Store className="h-4 w-4" />
               Live overview of your store • Auto-syncing every 30s
             </span>
@@ -232,7 +232,7 @@ function DashboardHeader({ refreshing, onRefresh, lastSynced }: DashboardHeaderP
         <Button
           onClick={onRefresh}
           disabled={refreshing}
-          className="flex items-center gap-2 rounded-lg bg-white px-6 py-2.5 text-stone-700 shadow-lg transition-colors hover:bg-stone-50"
+          className="flex w-full items-center gap-2 rounded-lg bg-white px-6 py-2.5 text-stone-700 shadow-lg transition-colors hover:bg-stone-50 sm:w-auto"
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Syncing...' : 'Sync Now'}
@@ -249,21 +249,21 @@ interface ConnectionStatusProps {
 function ConnectionStatus({ shopUrl }: ConnectionStatusProps) {
   if (!shopUrl) return null;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-6 py-4 text-sm text-gray-700 shadow-sm">
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-gray-700 shadow-sm sm:flex-row sm:items-center sm:px-6">
       <div className="flex-shrink-0">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
           <Zap className="h-5 w-5 text-stone-600" />
         </div>
       </div>
-      <div className="flex-1 space-y-1">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
           <span className="font-semibold text-gray-900">Connected to:</span>
-          <span className="font-mono text-sm text-gray-700">{shopUrl}</span>
+          <span className="break-anywhere font-mono text-sm text-gray-700">{shopUrl}</span>
         </div>
         <p className="text-xs text-gray-600">All systems operational</p>
       </div>
-      <Button variant="ghost" className="text-stone-600 hover:text-stone-700">
+      <Button variant="ghost" className="w-full text-stone-600 hover:text-stone-700 sm:w-auto sm:shrink-0">
         Manage
       </Button>
     </div>
@@ -280,14 +280,14 @@ function SettingsIncompleteBanner({ missingConfigs }: SettingsIncompleteBannerPr
   if (missingConfigs.length === 0) return null;
   
   return (
-    <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-6 shadow-lg">
-      <div className="flex items-start gap-4">
+    <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-lg sm:p-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
         <div className="flex-shrink-0">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
             <AlertCircle className="h-6 w-6 text-amber-600" />
           </div>
         </div>
-        <div className="flex-1 space-y-3">
+        <div className="min-w-0 flex-1 space-y-3">
           <div>
             <h3 className="text-lg font-semibold text-amber-900">Complete Your Store Setup</h3>
             <p className="mt-1 text-sm text-amber-800">
@@ -305,7 +305,7 @@ function SettingsIncompleteBanner({ missingConfigs }: SettingsIncompleteBannerPr
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-2 xs:flex-row xs:flex-wrap sm:items-center sm:gap-3">
             <Button
               onClick={() => router.push('/settings?setup=true')}
               className="bg-amber-600 text-white hover:bg-amber-700"
@@ -334,8 +334,8 @@ interface RecentOrdersTableProps {
 function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ShoppingBag className="h-5 w-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">Recent Orders</h2>
           {orders.length > 0 ? (
@@ -347,13 +347,38 @@ function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
-      <div className="overflow-x-auto">
+      <div>
         {orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-gray-500">
             <ShoppingCart className="h-10 w-10 text-gray-300" />
             <p>No orders found.</p>
           </div>
         ) : (
+          <>
+          <div className="space-y-3 p-3 md:hidden">
+            {orders.map(order => (
+              <div key={order.id} className="rounded-lg border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold text-gray-900">
+                      {order.order_number != null ? `#${order.order_number}` : '—'}
+                    </p>
+                    <p className="mt-1 break-words text-sm text-gray-700">
+                      {order.customer ? formatPersonName(order.customer.first_name, order.customer.last_name) : 'Guest'}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-gray-900">{formatCurrency(order.total_price)}</p>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <Badge className={(order.financial_status ?? '').toLowerCase() === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                    {order.financial_status ?? 'pending'}
+                  </Badge>
+                  <span className="text-xs text-gray-500">{formatDateLabel(order.created_at)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
@@ -406,6 +431,8 @@ function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
               ))}
             </TableBody>
           </Table>
+          </div>
+          </>
         )}
       </div>
     </div>
@@ -423,7 +450,7 @@ function RecentProductsCard({ products }: RecentProductsCardProps) {
         <Package className="h-5 w-5 text-gray-600" />
         <h2 className="text-lg font-semibold text-gray-900">Recent Products</h2>
       </div>
-      <div className="space-y-4 p-6">
+      <div className="space-y-3 p-3 sm:space-y-4 sm:p-6">
         {products.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-gray-500">
             <Package className="h-10 w-10 text-gray-300" />
@@ -433,7 +460,7 @@ function RecentProductsCard({ products }: RecentProductsCardProps) {
           products.slice(0, 4).map(product => (
             <div
               key={product.id}
-              className="flex items-center gap-4 rounded-lg border border-transparent p-4 transition-colors hover:border-gray-200 hover:bg-gray-50"
+              className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-3 rounded-lg border border-transparent p-3 transition-colors hover:border-gray-200 hover:bg-gray-50 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4 sm:p-4"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
                 {product.images?.[0]?.src ? (
@@ -448,11 +475,11 @@ function RecentProductsCard({ products }: RecentProductsCardProps) {
                   <Package className="h-6 w-6 text-gray-400" />
                 )}
               </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-gray-900">{product.title}</h3>
+              <div className="min-w-0">
+                <h3 className="break-words text-sm font-semibold text-gray-900">{product.title}</h3>
                 <p className="text-xs text-gray-500">{product.vendor || 'Unknown vendor'}</p>
               </div>
-              <div className="text-right">
+              <div className="col-start-2 text-left sm:col-auto sm:text-right">
                 <p className="text-sm font-bold text-gray-900">
                   {formatCurrency(product.variants?.[0]?.price)}
                 </p>
@@ -466,7 +493,7 @@ function RecentProductsCard({ products }: RecentProductsCardProps) {
                   {product.status ?? 'draft'}
                 </span>
               </div>
-              <span className="text-xs text-gray-500">
+              <span className="col-start-2 text-xs text-gray-500 sm:col-auto">
                 {formatDateLabel(product.created_at)}
               </span>
             </div>
@@ -488,7 +515,7 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
         <Users className="h-5 w-5 text-gray-600" />
         <h2 className="text-lg font-semibold text-gray-900">Recent Customers</h2>
       </div>
-      <div className="space-y-4 p-6">
+      <div className="space-y-3 p-3 sm:space-y-4 sm:p-6">
         {customers.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-gray-500">
             <Users className="h-10 w-10 text-gray-300" />
@@ -496,21 +523,21 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
           </div>
         ) : (
           customers.slice(0, 5).map(customer => (
-            <div key={customer.id} className="flex items-center gap-4 rounded-lg border border-transparent p-4 hover:border-gray-200 hover:bg-gray-50">
+            <div key={customer.id} className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)] gap-3 rounded-lg border border-transparent p-3 hover:border-gray-200 hover:bg-gray-50 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4 sm:p-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-stone-500 to-stone-700 text-sm font-semibold text-white">
                 {formatCustomerInitials(customer)}
               </div>
-              <div className="flex-1">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900">
                   {formatPersonName(customer.first_name, customer.last_name, 'Customer')}
                 </p>
-                <p className="text-xs text-gray-500">{customer.email ?? 'No email provided'}</p>
+                <p className="break-anywhere text-xs text-gray-500">{customer.email ?? 'No email provided'}</p>
               </div>
-              <div className="text-right">
+              <div className="col-start-2 text-left sm:col-auto sm:text-right">
                 <p className="text-xs font-medium text-gray-500">Orders</p>
                 <p className="text-sm font-semibold text-gray-900">{customer.orders_count ?? 0}</p>
               </div>
-              <div className="text-right">
+              <div className="col-start-2 text-left sm:col-auto sm:text-right">
                 <p className="text-xs font-medium text-gray-500">Total spent</p>
                 <p className="text-sm font-semibold text-gray-900">
                   {formatCurrency(customer.total_spent)}
@@ -603,7 +630,26 @@ function AbandonedCartsCard({ checkouts }: AbandonedCartsCardProps) {
             <Button variant="outline" size="sm" className="text-blue-600 hover:text-blue-700">
               View All
             </Button>
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="space-y-3 md:hidden">
+              {checkouts.slice(0, 5).map(checkout => (
+                <div key={checkout.id} className="rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-gray-900">
+                        {checkout.customer ? formatPersonName(checkout.customer.first_name, checkout.customer.last_name, 'Customer') : 'Guest'}
+                      </p>
+                      <p className="break-anywhere mt-1 text-xs text-gray-500">{checkout.email ?? 'N/A'}</p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold text-gray-900">{formatCurrency(checkout.total_price)}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                    <span>{checkout.line_items?.length ?? 0} items</span>
+                    <span>{formatDateLabel(checkout.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto rounded-lg border border-gray-200 md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
@@ -689,7 +735,7 @@ function CampaignPerformanceCard({ campaignAnalytics }: CampaignPerformanceCardP
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:gap-4 md:grid-cols-4">
               <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
                 <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
                   <Send className="h-3.5 w-3.5" />
@@ -1063,8 +1109,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8">
+    <div className="app-page-container space-y-5 sm:space-y-8">
         <DashboardHeader refreshing={refreshing} onRefresh={handleRefresh} lastSynced={data?.lastSynced} />
         {settingsStatus && !settingsStatus.settingsCompleted && (
           <SettingsIncompleteBanner missingConfigs={settingsStatus.missingConfigs} />
@@ -1072,7 +1117,7 @@ function DashboardContent() {
         <ConnectionStatus shopUrl={currentStore?.shopDomain} />
 
         {data?.analytics ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             <MetricCard
               title="Total Revenue"
               value={formatCurrency(data.analytics.totalRevenue)}
@@ -1123,7 +1168,6 @@ function DashboardContent() {
             <AbandonedCartsCard checkouts={data?.checkouts ?? []} />
           </div>
         </div>
-      </div>
     </div>
   );
 }

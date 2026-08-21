@@ -51,7 +51,7 @@ export default function Toast({ type, message, onClose, duration = 5000 }: Toast
 
   return (
     <div
-      className={`${toastConfig.bgClass} ${toastConfig.textClass} rounded-xl shadow-2xl px-6 py-4 flex items-center gap-4 min-w-[300px] max-w-md transition-all duration-300 ${
+      className={`${toastConfig.bgClass} ${toastConfig.textClass} w-[calc(100vw-2rem)] sm:w-auto rounded-xl shadow-2xl px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 sm:min-w-[300px] max-w-md transition-all duration-300 ${
         isExiting ? 'animate-out slide-out-to-right' : 'animate-in slide-in-from-right'
       }`}
     >

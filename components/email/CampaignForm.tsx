@@ -441,7 +441,7 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
                 disabled={isLocked}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="fromName">From Name *</Label>
                 <Input
@@ -593,7 +593,7 @@ export function CampaignForm({ mode, initial, campaignStatus }: Props) {
               <Clock className="h-4 w-4" />
               Schedule
             </h2>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setScheduleType('IMMEDIATE')}

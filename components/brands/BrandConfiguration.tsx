@@ -361,7 +361,7 @@ export function BrandConfiguration({ storeId, onSuccess }: BrandConfigurationPro
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="brandColor">Primary Color</Label>
                 <div className="flex gap-2">

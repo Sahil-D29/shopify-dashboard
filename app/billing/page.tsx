@@ -21,6 +21,7 @@ import RazorpayCheckout from '@/components/billing/RazorpayCheckout';
 import { useTenant } from '@/lib/tenant/tenant-context';
 import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { Loader2, AlertTriangle, XCircle } from 'lucide-react';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 interface Plan {
   planId: string;
@@ -256,10 +257,10 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-        <div className="flex items-center gap-2">
+    <PageContainer className="space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">Billing & Subscription</h1>
+        <div className="flex flex-wrap items-center gap-2">
           {isShopifyStore ? (
             <Badge variant="outline" className="text-sm px-3 py-1 bg-green-50 border-green-300 text-green-700">
               Shopify Billing (USD)
@@ -356,7 +357,7 @@ export default function BillingPage() {
             <CardTitle>Current Subscription</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <p className="text-sm text-muted-foreground">Plan</p>
                 <p className="font-medium">{currentSubscription.planName}</p>
@@ -399,7 +400,7 @@ export default function BillingPage() {
               <p>No plans available yet.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
               {plans.map((plan) => (
                 <PlanCard
                   key={plan.planId}
@@ -535,6 +536,6 @@ export default function BillingPage() {
           onFailure={handlePaymentFailure}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }

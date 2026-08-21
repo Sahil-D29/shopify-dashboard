@@ -188,7 +188,7 @@ export function FlowScreenEditor({ screen, onChange, allScreens }: FlowScreenEdi
           {showElementPicker && (
             <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-4">
               <p className="mb-3 text-xs font-medium text-gray-700">Choose element type</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 xs:grid-cols-3">
                 {ELEMENT_TYPES.map((type) => (
                   <button
                     key={type.value}

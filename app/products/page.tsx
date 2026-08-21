@@ -11,6 +11,7 @@ import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyProduct, ShopifyProductListResponse, ShopifyProductVariant } from '@/lib/types/shopify-product';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 const formatCurrency = (value: string | number | null | undefined): string => {
   const numeric = Number(value ?? 0);
@@ -109,20 +110,20 @@ function ProductsContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <PageContainer className="space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Products</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Products</h1>
+          <p className="mt-1 break-words text-sm text-muted-foreground sm:text-base">
             Your product catalog • Live syncing every 30s
             {lastSynced && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="mt-1 block text-xs text-gray-500 sm:ml-2 sm:inline">
                 • Last synced: {format(new Date(lastSynced), 'MMM dd, yyyy HH:mm:ss')}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0 sm:justify-end">
           <Badge variant="secondary">{products.length} total</Badge>
           <Button
             onClick={handleRefresh}
@@ -148,7 +149,7 @@ function ProductsContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map(product => {
             const image = product.images?.[0]?.src;
             const { min, max } = getPriceRange(product.variants);
@@ -173,21 +174,21 @@ function ProductsContent() {
                     </div>
                   )}
                 </CardHeader>
-                <CardContent className="p-4">
+                <CardContent className="min-w-0 p-4">
                   <h3 className="mb-1 line-clamp-2 font-semibold">{product.title}</h3>
-                  <p className="mb-2 text-sm text-muted-foreground">
+                  <p className="mb-2 break-words text-sm text-muted-foreground">
                     {product.vendor ?? '—'} • {product.product_type ?? '—'}
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>
                       {product.status ?? 'draft'}
                     </Badge>
-                    <span>ID: {product.id}</span>
+                    <span className="break-all">ID: {product.id}</span>
                     <span>Variants: {product.variants?.length ?? 0}</span>
                   </div>
                 </CardContent>
-                <CardFooter className="flex items-center justify-between p-4 pt-0">
-                  <span className="text-sm font-semibold">
+                <CardFooter className="flex flex-wrap items-center justify-between gap-2 p-4 pt-0">
+                  <span className="break-words text-sm font-semibold">
                     {min === max
                       ? formatCurrency(min)
                       : `${formatCurrency(min)} - ${formatCurrency(max)}`}
@@ -201,7 +202,7 @@ function ProductsContent() {
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

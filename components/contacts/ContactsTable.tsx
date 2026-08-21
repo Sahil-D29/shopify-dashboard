@@ -71,7 +71,74 @@ export default function ContactsTable({
   };
 
   return (
-    <Table>
+    <>
+      <div className="space-y-3 p-3 md:hidden">
+        <button
+          type="button"
+          onClick={onSelectAll}
+          className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-700"
+        >
+          <span>{allSelected ? 'Clear page selection' : 'Select all on this page'}</span>
+          <Checkbox checked={allSelected} />
+        </button>
+        {contacts.map(contact => {
+          const displayName =
+            [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.name || 'Unknown';
+          const phoneDisplay = realPhone(contact.phone);
+          const isSelected = selectedIds.has(contact.id);
+
+          return (
+            <div
+              key={contact.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => handleRowClick(contact.id)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') handleRowClick(contact.id);
+              }}
+              className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <div onClick={event => event.stopPropagation()} className="pt-0.5">
+                  <Checkbox checked={isSelected} onCheckedChange={() => onSelect(contact.id)} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-gray-900">{displayName}</p>
+                      <p className="break-anywhere mt-0.5 text-xs text-gray-500">
+                        {phoneDisplay || contact.email || '—'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn('shrink-0 text-xs', optInColors[contact.optInStatus])}>
+                      {optInLabels[contact.optInStatus]}
+                    </Badge>
+                  </div>
+                  {contact.email && phoneDisplay ? (
+                    <p className="break-anywhere mt-2 text-xs text-gray-600">{contact.email}</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className={cn('text-xs', sourceColors[contact.source])}>
+                      {contact.source}
+                    </Badge>
+                    {contact.tags.slice(0, 2).map(tag => (
+                      <Badge key={tag} variant="outline" className="max-w-full truncate bg-blue-50 text-xs text-blue-700">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-gray-400">
+                    Added {format(new Date(contact.createdAt), 'MMM dd, yyyy')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block">
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead className="w-[40px]">
@@ -200,6 +267,8 @@ export default function ContactsTable({
           );
         })}
       </TableBody>
-    </Table>
+      </Table>
+      </div>
+    </>
   );
 }

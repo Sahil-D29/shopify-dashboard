@@ -280,7 +280,7 @@ export function CreateSegmentModal({ segment, onClose, onSave }: CreateSegmentMo
 
                   return (
                     <div key={index} className="flex items-start gap-2 p-3 border rounded-md">
-                      <div className="flex-1 grid grid-cols-3 gap-2">
+                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
                         {/* Field */}
                         <div>
                           <select

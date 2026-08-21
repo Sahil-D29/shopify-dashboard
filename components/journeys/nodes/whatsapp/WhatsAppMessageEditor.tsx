@@ -214,7 +214,7 @@ function VariableInsertMenu({ dataSources, onSelect }: VariableInsertMenuProps) 
           <ChevronsUpDown className="h-3.5 w-3.5 text-[#C0B4A8]" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
+      <PopoverContent className="w-[calc(100vw-2rem)] max-w-[320px] p-0" align="start">
         <Command>
           <CommandInput placeholder="Search variables..." className="h-9" />
           <CommandList>

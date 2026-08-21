@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 interface ContactEvent {
   id: string;
@@ -246,7 +247,7 @@ export default function ContactDetailPage() {
   const phoneDisplay = realPhone(contact.phone);
 
   return (
-    <div className="space-y-6">
+    <PageContainer className="space-y-4 sm:space-y-6">
       {/* Back Button */}
       <Button variant="ghost" onClick={() => router.push('/contacts')} className="gap-2">
         <ArrowLeft className="w-4 h-4" />
@@ -254,26 +255,26 @@ export default function ContactDetailPage() {
       </Button>
 
       {/* Contact Header */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
             {/* Avatar */}
-            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xl font-bold">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-blue-100 text-lg font-bold text-blue-600 sm:h-16 sm:w-16 sm:text-xl">
               {initials}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
-              <div className="flex items-center gap-3 mt-1">
+            <div className="min-w-0 flex-1">
+              <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">{displayName}</h1>
+              <div className="mt-1 flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-3">
                 {phoneDisplay && (
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <div className="flex min-w-0 items-center gap-1 text-sm text-gray-500">
                     <Phone className="w-3.5 h-3.5" />
                     {phoneDisplay}
                   </div>
                 )}
                 {contact.email && (
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <div className="flex min-w-0 items-start gap-1 text-sm text-gray-500">
                     <Mail className="w-3.5 h-3.5" />
-                    {contact.email}
+                    <span className="break-anywhere">{contact.email}</span>
                   </div>
                 )}
               </div>
@@ -287,15 +288,15 @@ export default function ContactDetailPage() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowEditDialog(true)}>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
+            <Button variant="outline" onClick={() => setShowEditDialog(true)} className="flex-1 sm:flex-none">
               <Pencil className="w-4 h-4 mr-2" />
               Edit
             </Button>
             <Button
               variant="outline"
               onClick={() => setShowDeleteDialog(true)}
-              className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+              className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 sm:flex-none"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete
@@ -308,7 +309,7 @@ export default function ContactDetailPage() {
         {/* Left Column - Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tags Section */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Tags</h2>
               {!editingTags ? (
@@ -350,7 +351,7 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Custom Fields Section */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Custom Fields</h2>
               {!editingCustomFields ? (
@@ -379,9 +380,9 @@ export default function ContactDetailPage() {
             {editingCustomFields ? (
               <div className="space-y-3">
                 {Object.entries(tempCustomFields).map(([key, value]) => (
-                  <div key={key} className="grid grid-cols-3 gap-3 items-center">
+                  <div key={key} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-3 sm:gap-3">
                     <Label className="text-sm text-gray-600">{key}</Label>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <Input
                         value={value}
                         onChange={e =>
@@ -399,9 +400,11 @@ export default function ContactDetailPage() {
             ) : Object.keys(contact.customFields).length > 0 ? (
               <div className="space-y-2">
                 {Object.entries(contact.customFields).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <span className="text-sm text-gray-500">{key}</span>
-                    <span className="text-sm font-medium text-gray-900">{value || '--'}</span>
+                  <div key={key} className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 border-b border-gray-100 py-2 last:border-0">
+                    <span className="break-words text-sm text-gray-500">{key}</span>
+                    <span className={cn('min-w-0 text-right text-sm font-medium text-gray-900', /(^id$|_id$|uuid|token)/i.test(key) ? 'break-all' : 'break-anywhere')}>
+                      {value || '--'}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -411,7 +414,7 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Activity / Timeline */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Activity {contact.events?.length ? `(${contact.events.length})` : ''}
             </h2>
@@ -422,7 +425,7 @@ export default function ContactDetailPage() {
                     ev.resourceTitle ||
                     (ev.metadata && typeof ev.metadata === 'object' ? (ev.metadata as any).title : undefined);
                   return (
-                    <li key={ev.id} className="flex items-start gap-3 border-b border-gray-100 pb-3 last:border-0">
+                    <li key={ev.id} className="flex min-w-0 items-start gap-3 border-b border-gray-100 pb-3 last:border-0">
                       <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                         <MessageSquare className="h-3.5 w-3.5" />
                       </div>
@@ -430,7 +433,7 @@ export default function ContactDetailPage() {
                         <p className="text-sm font-medium text-gray-900">{ev.eventType}</p>
                         {title && <p className="truncate text-xs text-gray-500">{title}</p>}
                       </div>
-                      <span className="whitespace-nowrap text-xs text-gray-400">
+                      <span className="shrink-0 whitespace-nowrap text-xs text-gray-400">
                         {format(new Date(ev.createdAt), 'MMM d, h:mm a')}
                       </span>
                     </li>
@@ -450,7 +453,7 @@ export default function ContactDetailPage() {
         {/* Right Column - Sidebar Info */}
         <div className="space-y-6">
           {/* Opt-in Status */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Opt-in Status</h2>
             <div className="flex items-center justify-between">
               <div>
@@ -469,18 +472,18 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Contact Info */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Details</h2>
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <User className="w-4 h-4 text-gray-400" />
                 <div>
                   <p className="text-xs text-gray-400">Full Name</p>
-                  <p className="text-sm font-medium text-gray-900">{displayName}</p>
+                  <p className="break-words text-sm font-medium text-gray-900">{displayName}</p>
                 </div>
               </div>
               {phoneDisplay && (
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <Phone className="w-4 h-4 text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-400">Phone</p>
@@ -489,11 +492,11 @@ export default function ContactDetailPage() {
                 </div>
               )}
               {contact.email && (
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-start gap-3">
                   <Mail className="w-4 h-4 text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-400">Email</p>
-                    <p className="text-sm font-medium text-gray-900">{contact.email}</p>
+                    <p className="break-anywhere text-sm font-medium text-gray-900">{contact.email}</p>
                   </div>
                 </div>
               )}
@@ -583,6 +586,6 @@ export default function ContactDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

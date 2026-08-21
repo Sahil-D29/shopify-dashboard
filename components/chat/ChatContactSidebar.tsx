@@ -19,7 +19,7 @@ export function ChatContactSidebar({ conversation }: ChatContactSidebarProps) {
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
 
   return (
-    <div className="flex h-full w-[360px] flex-col border-l bg-white overflow-y-auto">
+    <div className="flex h-full w-full max-w-[360px] flex-col overflow-y-auto border-l bg-white">
       {/* Contact header */}
       <div className="flex flex-col items-center border-b px-4 py-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">

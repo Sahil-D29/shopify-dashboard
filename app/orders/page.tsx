@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { ShoppingCart, RefreshCw, MessageSquare, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
+import { PageContainer } from '@/components/layout/PageLayout';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyOrder, ShopifyOrderListResponse } from '@/lib/types/shopify-order';
@@ -180,20 +181,20 @@ function OrdersContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <PageContainer className="space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Orders</h1>
+          <p className="mt-1 break-words text-sm text-muted-foreground sm:text-base">
             View and manage orders • Live syncing every 30s
             {lastSynced && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="mt-1 block text-xs text-gray-500 sm:ml-2 sm:inline">
                 • Last synced: {format(new Date(lastSynced), 'MMM dd, yyyy HH:mm:ss')}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0 sm:justify-end">
           <Badge variant="secondary">{filteredOrders.length} orders</Badge>
           <Button
             onClick={handleRefresh}
@@ -209,10 +210,10 @@ function OrdersContent() {
       </div>
 
       {/* Source Filter Toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Filter className="h-4 w-4 text-gray-500" />
         <span className="text-sm text-gray-500 mr-2">Source:</span>
-        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-1">
           <button
             onClick={() => setSourceFilter('all')}
             className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
@@ -258,7 +259,33 @@ function OrdersContent() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="space-y-3 md:hidden">
+              {filteredOrders.map(order => {
+                const campaignName = getCampaignName(order);
+                return (
+                  <div key={order.id} className="rounded-lg border border-gray-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-semibold text-gray-900">
+                          {order.order_number != null ? `#${order.order_number}` : '—'}
+                        </p>
+                        <p className="mt-1 break-words text-sm text-gray-700">
+                          {order.customer ? `${order.customer.first_name ?? ''} ${order.customer.last_name ?? ''}`.trim() || 'Customer' : 'Guest'}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold text-gray-900">{formatCurrency(order.total_price)}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge className={getStatusColor(order.financial_status)}>{order.financial_status ?? 'pending'}</Badge>
+                      {campaignName ? <Badge className="bg-amber-100 text-amber-800">{campaignName}</Badge> : null}
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">{formatDate(order.created_at)}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -323,10 +350,11 @@ function OrdersContent() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -204,7 +204,7 @@ function SignInForm() {
 
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
             {/* Welcome Text */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">

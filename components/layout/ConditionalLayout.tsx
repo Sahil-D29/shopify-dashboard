@@ -100,11 +100,11 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-y-auto">
           {isChatPage ? (
             children
           ) : (
-            <div className="px-4 py-6 sm:px-6 lg:px-8">
+            <div className="app-page-shell">
               {children}
             </div>
           )}

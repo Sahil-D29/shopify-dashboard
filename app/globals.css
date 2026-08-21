@@ -125,8 +125,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
+  }
+  img, video, canvas, svg {
+    max-width: 100%;
   }
 }
 
@@ -311,20 +318,6 @@
   animation-delay: 4s;
 }
 
-/* Responsive Design Utilities */
-@layer base {
-  /* Prevent horizontal scroll */
-  html, body {
-    overflow-x: hidden;
-    max-width: 100vw;
-  }
-
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-}
-
 /* Journey Builder Responsive Styles */
 @layer utilities {
   @media (max-width: 1024px) {
@@ -397,17 +390,42 @@
 }
 
 @layer utilities {
-  /* Touch-friendly tap targets on mobile */
-  @media (max-width: 768px) {
-    button, a, input, select, textarea {
-      min-height: 44px;
-      min-width: 44px;
+  .app-page-shell {
+    width: 100%;
+    min-width: 0;
+    padding: 1rem;
+  }
+
+  .app-page-container {
+    width: 100%;
+    max-width: 80rem;
+    min-width: 0;
+    margin-inline: auto;
+  }
+
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  @media (min-width: 640px) {
+    .app-page-shell {
+      padding: 1.5rem;
     }
-    
-    /* Ensure buttons are touch-friendly */
-    button:not(.no-touch-target) {
+  }
+
+  @media (min-width: 1024px) {
+    .app-page-shell {
+      padding: 2rem;
+    }
+  }
+
+  /* Touch-friendly controls without imposing widths or padding globally. */
+  @media (max-width: 768px) {
+    button,
+    a[role="button"],
+    [role="button"] {
       min-height: 44px;
-      padding: 0.5rem 1rem;
     }
   }
 

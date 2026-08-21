@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 const EmojiPicker = dynamic(() => import('emoji-picker-react').then(m => m.default), {
   ssr: false,
-  loading: () => <div className="h-[350px] w-[350px] bg-white rounded-lg border animate-pulse" />,
+  loading: () => <div className="h-[min(350px,70dvh)] w-full max-w-[350px] animate-pulse rounded-lg border bg-white" />,
 });
 
 interface MessageInputProps {

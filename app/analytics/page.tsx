@@ -26,6 +26,7 @@ import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { CustomEventsChart } from '@/components/analytics/CustomEventsChart';
 import dynamic from 'next/dynamic';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 // Lazy-load Recharts to avoid SSR issues
 const RechartsLineChart = dynamic(
@@ -277,11 +278,11 @@ function AnalyticsContent() {
   const maxSourceCount = sourceEntries[0]?.[1] ?? 1;
 
   return (
-    <div className="space-y-6">
+    <PageContainer className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight sm:gap-3 sm:text-3xl">
             WhatsApp Marketing Analytics
             <span className="flex items-center gap-1.5 text-sm font-normal text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
               <span className="relative flex h-2.5 w-2.5">
@@ -313,7 +314,7 @@ function AnalyticsContent() {
       </div>
 
       {/* KPI Row 1 — Campaign Performance */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Messages Sent</CardTitle>
@@ -372,7 +373,7 @@ function AnalyticsContent() {
       </div>
 
       {/* KPI Row 2 — Platform Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
@@ -612,7 +613,7 @@ function AnalyticsContent() {
 
       {/* Custom Events Analytics */}
       <CustomEventsChart />
-    </div>
+    </PageContainer>
   );
 }
 

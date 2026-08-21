@@ -14,6 +14,7 @@ import { ConfigurationGuard } from '@/components/ConfigurationGuard';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { PageContainer } from '@/components/layout/PageLayout';
 
 function formatCurrency(value: number | string | null | undefined) {
   const numeric =
@@ -160,7 +161,7 @@ export default function CustomersClientPage() {
 
   return (
     <ConfigurationGuard>
-      <div className="space-y-4">
+      <PageContainer className="space-y-4 sm:space-y-6">
         <CustomerManagement customers={customersForManagement} onRefresh={handleRefresh} />
 
         {errorMessage && (
@@ -169,7 +170,7 @@ export default function CustomersClientPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">
             Live syncing every 30s
@@ -206,6 +207,27 @@ export default function CustomersClientPage() {
               </p>
             </div>
             ) : (
+            <>
+            <div className="space-y-3 md:hidden">
+              {customers.map(customer => (
+                <div key={customer.id} className="rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-gray-900">
+                        {(customer.first_name || customer.last_name) ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'No name'}
+                      </p>
+                      <p className="break-anywhere mt-1 text-xs text-gray-500">{customer.email || customer.phone || 'No contact information'}</p>
+                    </div>
+                    <Badge variant={customer.state === 'enabled' ? 'default' : 'secondary'}>{customer.state || 'enabled'}</Badge>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div><p className="text-xs text-gray-500">Orders</p><p className="font-medium">{customer.orders_count ?? 0}</p></div>
+                    <div><p className="text-xs text-gray-500">Total spent</p><p className="font-medium">{formatCurrency(customer.total_spent)}</p></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -303,10 +325,12 @@ export default function CustomersClientPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
             )}
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     </ConfigurationGuard>
   );
 }

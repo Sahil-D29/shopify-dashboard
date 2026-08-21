@@ -60,7 +60,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           {/* Success Message */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm sm:p-8">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
@@ -115,7 +115,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {/* Forgot Password Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-8">
           {/* Back Button */}
           <Link
             href="/auth/signin"

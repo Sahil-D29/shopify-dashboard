@@ -176,7 +176,7 @@ export default function TemplatesPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FAF9F6] p-8">
+      <div className="min-h-screen bg-[#FAF9F6] p-4 sm:p-6 lg:p-8">
         <div className="mx-auto flex max-w-6xl items-center justify-center">
           <p className="text-sm text-[#8B7F76]">Loading templates…</p>
         </div>
@@ -185,7 +185,7 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] p-8">
+    <div className="min-h-screen bg-[#FAF9F6] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="text-center">
           <Button

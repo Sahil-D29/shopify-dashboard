@@ -282,7 +282,7 @@ function VariablePickerSelect({ label, groups, value, selectedOption, onSelect }
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 text-[#C0B4A8]" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
+      <PopoverContent className="w-[calc(100vw-2rem)] max-w-[320px] p-0" align="start">
         {hasGroups ? (
           <Command>
             <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />

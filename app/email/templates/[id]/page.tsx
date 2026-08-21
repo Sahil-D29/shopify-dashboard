@@ -106,7 +106,7 @@ export default function EditEmailTemplatePage({
           This is a built-in template and cannot be edited directly. Clone it to make an editable copy in your store.
         </div>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="border-b p-4 grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 border-b p-4 text-sm sm:grid-cols-2">
             <div>
               <span className="text-gray-500">Subject: </span>
               <span className="text-gray-900">{initial.subject || '—'}</span>

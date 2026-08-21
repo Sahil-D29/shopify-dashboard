@@ -152,7 +152,7 @@ export function TemplatePickerModal({
               placeholder="Search templates"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm text-gray-600">
+          <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
                 <Filter className="h-3.5 w-3.5" /> Category
@@ -302,7 +302,7 @@ export function TemplatePickerModal({
           {selectedTemplate ? (
             <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold text-gray-900">Template Details</h4>
-              <dl className="grid grid-cols-2 gap-3 text-xs text-gray-500">
+              <dl className="grid grid-cols-1 gap-3 text-xs text-gray-500 sm:grid-cols-2">
                 <div>
                   <dt className="uppercase tracking-wide">Category</dt>
                   <dd className="text-sm text-gray-800">{selectedTemplate.category}</dd>

@@ -101,7 +101,7 @@ function ResetPasswordContent() {
   if (tokenValid === false) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF9F6] px-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+        <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm sm:p-8">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-8 h-8 text-red-600" />
           </div>
@@ -128,7 +128,7 @@ function ResetPasswordContent() {
           <p className="mt-2 text-gray-600">Enter your new password below</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-8">
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>

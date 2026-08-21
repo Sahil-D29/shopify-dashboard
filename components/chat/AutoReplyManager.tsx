@@ -110,7 +110,7 @@ export function AutoReplyManager({ storeId }: AutoReplyManagerProps) {
       {/* Form */}
       {showForm && (
         <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs font-medium text-gray-600">Rule Name</label>
               <input
@@ -141,7 +141,7 @@ export function AutoReplyManager({ storeId }: AutoReplyManagerProps) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs font-medium text-gray-600">Match Type</label>
               <select

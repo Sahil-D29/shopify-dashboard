@@ -244,13 +244,13 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Customers</h1>
           <p className="text-muted-foreground">Manage your customer database</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
+        <div className="flex w-full flex-col gap-2 xs:flex-row xs:flex-wrap sm:w-auto sm:justify-end">
+          <Button onClick={handleExportCSV} disabled={isExporting} variant="outline" className="w-full xs:w-auto">
             {isExporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -263,7 +263,7 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
               </>
             )}
           </Button>
-          <Button onClick={() => setShowAddModal(true)}>
+          <Button onClick={() => setShowAddModal(true)} className="w-full xs:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Add Customer
           </Button>
@@ -271,12 +271,12 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="relative max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-4 shadow-2xl sm:p-6">
             <div className="mb-6 pb-4 border-b relative">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Add New Customer</h2>
+              <div className="flex min-w-0 items-start justify-between gap-3 pr-10">
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">Add New Customer</h2>
                   <p className="text-sm text-gray-600 mt-1">Create a new customer in your Shopify store</p>
                 </div>
                 <button
@@ -290,7 +290,7 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
             </div>
             <div>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="first_name">First Name *</Label>
                     <Input
@@ -374,7 +374,7 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Input
                     placeholder="City"
                     value={formData.city}

@@ -7,6 +7,7 @@ import CampaignCard from '@/components/campaigns/CampaignCard';
 import { SandboxBanner } from '@/components/whatsapp/SandboxBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PageContainer } from '@/components/layout/PageLayout';
 import { useToast } from '@/lib/hooks/useToast';
 import type { Campaign, CampaignStatus, CampaignType } from '@/lib/types/campaign';
 import {
@@ -177,29 +178,29 @@ export default function CampaignsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageContainer className="space-y-4 sm:space-y-6">
       <SandboxBanner />
       {/* Header */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Campaigns</h1>
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Campaigns</h1>
             <p className="text-gray-600 mt-1">
               Create, manage, and track your WhatsApp marketing campaigns
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex w-full flex-col gap-2 xs:flex-row xs:flex-wrap sm:w-auto sm:justify-end">
             <Button
               onClick={() => router.push('/campaigns/calendar')}
               variant="outline"
-              className="whitespace-nowrap"
+              className="w-full whitespace-nowrap xs:w-auto"
             >
               <Calendar className="w-4 h-4 mr-2" />
               Calendar View
             </Button>
             <Button
               onClick={() => router.push('/campaigns/create')}
-              className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
+              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 xs:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Campaign
@@ -209,7 +210,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Stats Cards — Row 1: Main Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 lg:grid-cols-5">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
             <Zap className="w-7 h-7 opacity-80" />
@@ -252,7 +253,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Stats Cards — Row 2: Engagement + Type Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 lg:grid-cols-6">
         {/* Click Rate */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 mb-1">
@@ -300,7 +301,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-400" />
@@ -399,7 +400,7 @@ export default function CampaignsPage() {
 
       {/* Campaigns List */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {/* Results count header */}
           {!loading && campaigns.length > 0 && (
             <div className="flex items-center justify-between mb-4">
@@ -463,6 +464,6 @@ export default function CampaignsPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

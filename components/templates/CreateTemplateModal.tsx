@@ -549,12 +549,12 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] relative shadow-2xl flex overflow-hidden">
         {/* Form Section */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div>
             {/* Header */}
-            <div className="flex items-center justify-between mb-8 pb-6 border-b relative">
+            <div className="relative mb-6 flex min-w-0 flex-col gap-3 border-b pb-5 sm:mb-8 sm:flex-row sm:items-center sm:justify-between sm:pb-6">
               <div>
-                <h2 className="text-3xl font-bold text-gray-900">
+                <h2 className="break-words text-2xl font-bold text-gray-900 sm:text-3xl">
                   {editTemplate ? 'Edit Template' : 'Create Template'}
                 </h2>
                 <p className="text-gray-600 mt-1">
@@ -590,7 +590,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
             </div>
 
               {/* Category & Language */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                 <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
                   <Label htmlFor="category" className="text-base font-semibold mb-3 block">
                     Category *

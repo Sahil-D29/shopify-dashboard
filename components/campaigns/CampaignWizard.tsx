@@ -354,7 +354,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
       {/* Header with steps */}
-      <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 p-8">
+      <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 p-4 sm:p-6 lg:p-8">
         <h2 className="mb-6 text-2xl font-bold text-gray-900">
           {isEditMode ? 'Edit WhatsApp Campaign' : 'Create New WhatsApp Campaign'}
         </h2>
@@ -466,7 +466,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
       )}
 
       {/* Body */}
-      <div className="min-h-[500px] p-8">
+      <div className="min-h-[500px] p-4 sm:p-6 lg:p-8">
         {currentStep === 1 && <StepDetails campaignData={campaignData} setCampaignData={setCampaignData} />}
         {currentStep === 2 && (
           <StepAudience campaignData={campaignData} setCampaignData={setCampaignData} segments={segments} loadingSegments={loadingSegments} estimatedReach={estimatedReach} onCreateSegment={loadSegments} />
@@ -650,7 +650,7 @@ function StepAudience({ campaignData, setCampaignData, segments, loadingSegments
       <div className="rounded-r-lg border-l-4 border-blue-500 bg-blue-50 p-4">
         <p className="text-sm text-blue-800">Choose one or more customer segments for this campaign.</p>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <AudienceStat label="Total Segments" value={segments.length.toLocaleString()} />
         <AudienceStat label="Selected" value={campaignData.segmentIds.length.toString()} accent />
         <AudienceStat label="Est. Reach" value={estimatedReach.toLocaleString()} accent />

@@ -8,6 +8,7 @@ import { MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
+import { PageContainer } from '@/components/layout/PageLayout';
 import { useConfigRefresh } from '@/hooks/useConfigRefresh';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type { ShopifyCheckout } from '@/lib/types/shopify-checkout';
@@ -112,20 +113,20 @@ function AbandonedCartsContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <PageContainer className="space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Abandoned Carts</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Abandoned Carts</h1>
+          <p className="mt-1 break-words text-sm text-muted-foreground sm:text-base">
             Recover lost sales with WhatsApp reminders • Live syncing every 30s
             {lastSynced && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="mt-1 block text-xs text-gray-500 sm:ml-2 sm:inline">
                 • Last synced: {format(new Date(lastSynced), 'MMM dd, yyyy HH:mm:ss')}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0 sm:justify-end">
           <Badge variant="secondary">{carts.length} total</Badge>
           <Button
             onClick={handleRefresh}
@@ -151,6 +152,32 @@ function AbandonedCartsContent() {
           <CardTitle>Abandoned Checkouts</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="space-y-3 md:hidden">
+            {carts.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">No abandoned carts found</div>
+            ) : carts.map(cart => (
+              <div key={cart.id} className="rounded-lg border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold text-gray-900">
+                      {cart.customer ? `${cart.customer.first_name} ${cart.customer.last_name}` : 'Guest'}
+                    </p>
+                    <p className="break-anywhere mt-1 text-xs text-gray-500">{cart.email || cart.phone || 'No contact information'}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold">{formatCurrency(cart.total_price)}</p>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+                  <span>{cart.line_items?.length || 0} items</span>
+                  <span>{cart.created_at ? formatDistanceToNow(new Date(cart.created_at), { addSuffix: true }) : '—'}</span>
+                </div>
+                <Button size="sm" variant="outline" className="mt-4 w-full">
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Send WhatsApp
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -216,9 +243,10 @@ function AbandonedCartsContent() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
 

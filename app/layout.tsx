@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConditionalLayout } from '@/components/layout/ConditionalLayout';
 import { ToastProvider } from '@/components/ui/toast-provider';
@@ -8,6 +9,12 @@ import { TenantProvider } from '@/lib/tenant/tenant-context';
 import { AppConfigProvider } from '@/components/providers/AppConfigProvider';
 import { getAppSettings } from '@/lib/app-config';
 import { Toaster } from 'sonner';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getAppSettings().catch(() => null);
@@ -29,7 +36,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
       </head>
       <body
-        className="font-sans antialiased"
+        className={`${inter.variable} font-sans antialiased`}
       >
         <SessionProvider>
           <ReactQueryProvider>
