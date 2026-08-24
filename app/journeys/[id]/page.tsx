@@ -324,7 +324,7 @@ export default function JourneyDetailPage() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white/85 px-4 py-4 backdrop-blur sm:px-6 sm:py-5">
+      <header className="border-b border-slate-200 bg-white/85 py-4 backdrop-blur sm:py-5">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
           {/* Top Row: Back + Title + Actions */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -380,7 +380,7 @@ export default function JourneyDetailPage() {
       </header>
 
       {/* Tabbed Content */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-7xl flex-1 py-5 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
           <div className="overflow-x-auto">
             <TabsList className="bg-white border border-slate-200 shadow-sm">

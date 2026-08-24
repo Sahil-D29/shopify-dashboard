@@ -13,6 +13,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const { settings: appSettings, featureFlags } = useAppConfig();
   const isAuthPage = pathname?.startsWith('/auth');
   const isChatPage = pathname?.startsWith('/chat');
+  const isSettingsPage = pathname?.startsWith('/settings');
   const isBuilderPage = /^\/(journeys|flows)\/[^/]+\/builder/.test(pathname ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -104,7 +105,13 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
           {isChatPage ? (
             children
           ) : (
-            <div className="app-page-shell">
+            <div
+              className={
+                isSettingsPage
+                  ? 'w-full min-w-0 p-4 sm:p-6 lg:p-8'
+                  : 'mx-auto w-full min-w-0 max-w-[84rem] p-4 sm:p-6 lg:p-8'
+              }
+            >
               {children}
             </div>
           )}

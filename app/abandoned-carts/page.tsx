@@ -162,7 +162,7 @@ function AbandonedCartsContent() {
                     <p className="break-words text-sm font-semibold text-gray-900">
                       {cart.customer ? `${cart.customer.first_name} ${cart.customer.last_name}` : 'Guest'}
                     </p>
-                    <p className="break-anywhere mt-1 text-xs text-gray-500">{cart.email || cart.phone || 'No contact information'}</p>
+                    <p className="mt-1 break-words [overflow-wrap:anywhere] text-xs text-gray-500">{cart.email || cart.phone || 'No contact information'}</p>
                   </div>
                   <p className="shrink-0 text-sm font-semibold">{formatCurrency(cart.total_price)}</p>
                 </div>

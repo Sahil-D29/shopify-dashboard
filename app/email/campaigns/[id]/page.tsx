@@ -265,7 +265,7 @@ export default function CampaignDetailPage({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[475px]:grid-cols-2 md:grid-cols-4">
         <Stat
           icon={Mail}
           label="Recipients"

@@ -216,7 +216,7 @@ export default function CustomersClientPage() {
                       <p className="break-words text-sm font-semibold text-gray-900">
                         {(customer.first_name || customer.last_name) ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'No name'}
                       </p>
-                      <p className="break-anywhere mt-1 text-xs text-gray-500">{customer.email || customer.phone || 'No contact information'}</p>
+                      <p className="mt-1 break-words [overflow-wrap:anywhere] text-xs text-gray-500">{customer.email || customer.phone || 'No contact information'}</p>
                     </div>
                     <Badge variant={customer.state === 'enabled' ? 'default' : 'secondary'}>{customer.state || 'enabled'}</Badge>
                   </div>

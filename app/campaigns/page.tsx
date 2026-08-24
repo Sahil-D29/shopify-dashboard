@@ -189,18 +189,18 @@ export default function CampaignsPage() {
               Create, manage, and track your WhatsApp marketing campaigns
             </p>
           </div>
-          <div className="flex w-full flex-col gap-2 xs:flex-row xs:flex-wrap sm:w-auto sm:justify-end">
+          <div className="flex w-full flex-col gap-2 min-[475px]:flex-row min-[475px]:flex-wrap sm:w-auto sm:justify-end">
             <Button
               onClick={() => router.push('/campaigns/calendar')}
               variant="outline"
-              className="w-full whitespace-nowrap xs:w-auto"
+              className="w-full whitespace-nowrap min-[475px]:w-auto"
             >
               <Calendar className="w-4 h-4 mr-2" />
               Calendar View
             </Button>
             <Button
               onClick={() => router.push('/campaigns/create')}
-              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 xs:w-auto"
+              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 min-[475px]:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Campaign
@@ -210,7 +210,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Stats Cards — Row 1: Main Metrics */}
-      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 min-[475px]:grid-cols-2 lg:grid-cols-5">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
             <Zap className="w-7 h-7 opacity-80" />
@@ -253,7 +253,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Stats Cards — Row 2: Engagement + Type Breakdown */}
-      <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 min-[475px]:grid-cols-2 lg:grid-cols-6">
         {/* Click Rate */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 mb-1">

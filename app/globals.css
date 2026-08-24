@@ -389,69 +389,37 @@
   }
 }
 
-@layer utilities {
-  .app-page-shell {
-    width: 100%;
-    min-width: 0;
-    padding: 1rem;
+/* Touch-friendly controls without imposing widths or padding globally. */
+@media (max-width: 768px) {
+  button,
+  a[role="button"],
+  [role="button"] {
+    min-height: 44px;
   }
+}
 
-  .app-page-container {
-    width: 100%;
-    max-width: 80rem;
-    min-width: 0;
-    margin-inline: auto;
-  }
+/* Hide scrollbar but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
-  .break-anywhere {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
+/* Responsive text */
+.responsive-text {
+  font-size: clamp(0.875rem, 2vw, 1rem);
+}
 
-  @media (min-width: 640px) {
-    .app-page-shell {
-      padding: 1.5rem;
-    }
-  }
+/* Responsive heading */
+.responsive-heading {
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+}
 
-  @media (min-width: 1024px) {
-    .app-page-shell {
-      padding: 2rem;
-    }
-  }
-
-  /* Touch-friendly controls without imposing widths or padding globally. */
-  @media (max-width: 768px) {
-    button,
-    a[role="button"],
-    [role="button"] {
-      min-height: 44px;
-    }
-  }
-
-  /* Hide scrollbar but keep functionality */
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Responsive text */
-  .responsive-text {
-    font-size: clamp(0.875rem, 2vw, 1rem);
-  }
-
-  /* Responsive heading */
-  .responsive-heading {
-    font-size: clamp(1.5rem, 4vw, 2.5rem);
-  }
-
-  /* Responsive padding */
-  .responsive-padding {
-    padding: clamp(1rem, 3vw, 2rem);
-  }
+/* Responsive padding */
+.responsive-padding {
+  padding: clamp(1rem, 3vw, 2rem);
 }
 
 /* Button hover effects */

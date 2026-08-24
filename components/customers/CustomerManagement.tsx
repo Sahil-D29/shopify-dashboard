@@ -249,8 +249,8 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Customers</h1>
           <p className="text-muted-foreground">Manage your customer database</p>
         </div>
-        <div className="flex w-full flex-col gap-2 xs:flex-row xs:flex-wrap sm:w-auto sm:justify-end">
-          <Button onClick={handleExportCSV} disabled={isExporting} variant="outline" className="w-full xs:w-auto">
+        <div className="flex w-full flex-col gap-2 min-[475px]:flex-row min-[475px]:flex-wrap sm:w-auto sm:justify-end">
+          <Button onClick={handleExportCSV} disabled={isExporting} variant="outline" className="w-full min-[475px]:w-auto">
             {isExporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -263,7 +263,7 @@ export function CustomerManagement({ customers, onRefresh }: CustomerManagementP
               </>
             )}
           </Button>
-          <Button onClick={() => setShowAddModal(true)} className="w-full xs:w-auto">
+          <Button onClick={() => setShowAddModal(true)} className="w-full min-[475px]:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Add Customer
           </Button>

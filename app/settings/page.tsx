@@ -847,9 +847,9 @@ function SettingsContent() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)] overflow-hidden -mx-4 sm:-mx-6 lg:-mx-8">
+    <div className="-mx-4 flex h-[calc(100dvh-6rem)] min-w-0 overflow-hidden sm:-mx-6 sm:h-[calc(100dvh-7rem)] lg:-mx-8 lg:h-[calc(100dvh-4rem)]">
       {/* Column 2: Settings Section Menu - Enhanced */}
-      <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-700 flex-col overflow-y-auto">
+      <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-700 bg-slate-900 xl:flex">
         {/* Header */}
         <div className="px-6 py-6 border-b border-slate-700">
           <div className="flex items-center space-x-3">
@@ -923,9 +923,9 @@ function SettingsContent() {
       </aside>
 
       {/* Column 3: Content Area */}
-      <main className="flex-1 overflow-y-auto bg-gray-50">
+      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
         {/* Mobile Header */}
-        <div className="md:hidden sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-4">
+        <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-4 xl:hidden">
           <div className="flex items-center space-x-3">
             <Settings className="h-6 w-6 text-gray-700" />
             <div>
@@ -935,9 +935,9 @@ function SettingsContent() {
           </div>
         </div>
 
-        {/* Mobile Tabs */}
-        <div className="md:hidden bg-white border-b border-gray-200 px-4">
-          <div className="flex space-x-1">
+        {/* Compact navigation used until the wide settings sidebar fits. */}
+        <div className="overflow-x-auto border-b border-gray-200 bg-white px-4 xl:hidden">
+          <div className="flex min-w-max gap-1">
             {settingsSections.filter(s => {
               // Show all non-disabled sections (Team tab is always visible now)
               return !s.disabled;
@@ -948,7 +948,7 @@ function SettingsContent() {
                   key={section.id}
                   onClick={() => handleSectionChange(section.id)}
                   className={`
-                    flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition-colors
+                    flex shrink-0 items-center justify-center gap-2 rounded-t-lg px-4 py-3 text-sm font-medium transition-colors
                     ${activeSection === section.id
                       ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -1013,42 +1013,6 @@ function SettingsContent() {
               </div>
             </div>
           )}
-
-          {/* Desktop Tabs (hidden on mobile, shown in sidebar) */}
-          <div className="hidden md:block mb-8">
-            <div className="flex space-x-8 border-b border-gray-200">
-              <button
-                onClick={() => handleSectionChange('shop')}
-                className={`pb-4 px-1 text-sm font-semibold border-b-2 transition-colors ${
-                  activeSection === 'shop'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
-                }`}
-              >
-                Shop
-              </button>
-              <button
-                onClick={() => handleSectionChange('wa')}
-                className={`pb-4 px-1 text-sm font-semibold border-b-2 transition-colors ${
-                  activeSection === 'wa'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
-                }`}
-              >
-                WA
-              </button>
-              <button
-                onClick={() => handleSectionChange('team')}
-                className={`pb-4 px-1 text-sm font-semibold border-b-2 transition-colors ${
-                  activeSection === 'team'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
-                }`}
-              >
-                Team
-              </button>
-            </div>
-          </div>
 
           {/* Shopify Section */}
           {activeSection === 'shop' && (

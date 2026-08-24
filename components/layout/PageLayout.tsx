@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function PageContainer({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('app-page-container', className)} {...props} />;
+  return <div className={cn('mx-auto w-full min-w-0 max-w-7xl', className)} {...props} />;
 }
 
 interface PageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -52,7 +52,7 @@ export function PageActions({ className, ...props }: HTMLAttributes<HTMLDivEleme
   return (
     <div
       className={cn(
-        'flex w-full min-w-0 flex-col gap-2 xs:flex-row xs:flex-wrap sm:w-auto sm:justify-end',
+        'flex w-full min-w-0 flex-col gap-2 min-[475px]:flex-row min-[475px]:flex-wrap sm:w-auto sm:justify-end',
         className
       )}
       {...props}

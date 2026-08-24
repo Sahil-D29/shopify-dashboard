@@ -293,7 +293,7 @@ export default function JourneysPage() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Header */}
-      <section className="border-b border-slate-200 bg-white/80 px-4 py-5 backdrop-blur sm:px-6 sm:py-6">
+      <section className="border-b border-slate-200 bg-white/80 py-5 backdrop-blur sm:py-6">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:gap-6">
           <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -338,7 +338,7 @@ export default function JourneysPage() {
       </section>
 
       {/* Main Content */}
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 py-5 sm:gap-6 sm:py-8">
         {/* Search, Sort & Filter Bar */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-5">
           {/* Search + Sort Row */}

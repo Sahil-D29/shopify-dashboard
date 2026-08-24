@@ -200,7 +200,7 @@ export default function TeamManagementPage() {
 
   if (!storeId) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto">
         <Card>
           <CardContent className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Please select a store</p>
@@ -212,7 +212,7 @@ export default function TeamManagementPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto">
         <Card>
           <CardContent className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin" />
@@ -223,7 +223,7 @@ export default function TeamManagementPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Team Management</h1>

@@ -259,7 +259,7 @@ function ConnectionStatus({ shopUrl }: ConnectionStatusProps) {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
           <span className="font-semibold text-gray-900">Connected to:</span>
-          <span className="break-anywhere font-mono text-sm text-gray-700">{shopUrl}</span>
+          <span className="break-words [overflow-wrap:anywhere] font-mono text-sm text-gray-700">{shopUrl}</span>
         </div>
         <p className="text-xs text-gray-600">All systems operational</p>
       </div>
@@ -305,7 +305,7 @@ function SettingsIncompleteBanner({ missingConfigs }: SettingsIncompleteBannerPr
               </div>
             ))}
           </div>
-          <div className="flex flex-col gap-2 xs:flex-row xs:flex-wrap sm:items-center sm:gap-3">
+          <div className="flex flex-col gap-2 min-[475px]:flex-row min-[475px]:flex-wrap sm:items-center sm:gap-3">
             <Button
               onClick={() => router.push('/settings?setup=true')}
               className="bg-amber-600 text-white hover:bg-amber-700"
@@ -531,7 +531,7 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
                 <p className="text-sm font-semibold text-gray-900">
                   {formatPersonName(customer.first_name, customer.last_name, 'Customer')}
                 </p>
-                <p className="break-anywhere text-xs text-gray-500">{customer.email ?? 'No email provided'}</p>
+                <p className="break-words [overflow-wrap:anywhere] text-xs text-gray-500">{customer.email ?? 'No email provided'}</p>
               </div>
               <div className="col-start-2 text-left sm:col-auto sm:text-right">
                 <p className="text-xs font-medium text-gray-500">Orders</p>
@@ -638,7 +638,7 @@ function AbandonedCartsCard({ checkouts }: AbandonedCartsCardProps) {
                       <p className="break-words text-sm font-semibold text-gray-900">
                         {checkout.customer ? formatPersonName(checkout.customer.first_name, checkout.customer.last_name, 'Customer') : 'Guest'}
                       </p>
-                      <p className="break-anywhere mt-1 text-xs text-gray-500">{checkout.email ?? 'N/A'}</p>
+                      <p className="mt-1 break-words [overflow-wrap:anywhere] text-xs text-gray-500">{checkout.email ?? 'N/A'}</p>
                     </div>
                     <p className="shrink-0 text-sm font-semibold text-gray-900">{formatCurrency(checkout.total_price)}</p>
                   </div>
@@ -735,7 +735,7 @@ function CampaignPerformanceCard({ campaignAnalytics }: CampaignPerformanceCardP
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 min-[475px]:grid-cols-2 sm:gap-4 md:grid-cols-4">
               <div className="rounded-lg border border-stone-100 bg-stone-50 p-4">
                 <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
                   <Send className="h-3.5 w-3.5" />
@@ -1109,7 +1109,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="app-page-container space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-5 sm:space-y-8">
         <DashboardHeader refreshing={refreshing} onRefresh={handleRefresh} lastSynced={data?.lastSynced} />
         {settingsStatus && !settingsStatus.settingsCompleted && (
           <SettingsIncompleteBanner missingConfigs={settingsStatus.missingConfigs} />

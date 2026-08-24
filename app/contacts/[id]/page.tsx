@@ -274,7 +274,7 @@ export default function ContactDetailPage() {
                 {contact.email && (
                   <div className="flex min-w-0 items-start gap-1 text-sm text-gray-500">
                     <Mail className="w-3.5 h-3.5" />
-                    <span className="break-anywhere">{contact.email}</span>
+                    <span className="break-words [overflow-wrap:anywhere]">{contact.email}</span>
                   </div>
                 )}
               </div>
@@ -402,7 +402,7 @@ export default function ContactDetailPage() {
                 {Object.entries(contact.customFields).map(([key, value]) => (
                   <div key={key} className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 border-b border-gray-100 py-2 last:border-0">
                     <span className="break-words text-sm text-gray-500">{key}</span>
-                    <span className={cn('min-w-0 text-right text-sm font-medium text-gray-900', /(^id$|_id$|uuid|token)/i.test(key) ? 'break-all' : 'break-anywhere')}>
+                    <span className={cn('min-w-0 text-right text-sm font-medium text-gray-900', /(^id$|_id$|uuid|token)/i.test(key) ? 'break-all' : 'break-words [overflow-wrap:anywhere]')}>
                       {value || '--'}
                     </span>
                   </div>
@@ -496,7 +496,7 @@ export default function ContactDetailPage() {
                   <Mail className="w-4 h-4 text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-400">Email</p>
-                    <p className="break-anywhere text-sm font-medium text-gray-900">{contact.email}</p>
+                    <p className="break-words [overflow-wrap:anywhere] text-sm font-medium text-gray-900">{contact.email}</p>
                   </div>
                 </div>
               )}

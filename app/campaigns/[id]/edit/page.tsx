@@ -13,7 +13,7 @@ export default function EditCampaignPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4">
+    <div className="mx-auto max-w-6xl py-4 sm:py-8">
       <CampaignWizard campaignId={campaignId} onComplete={handleComplete} />
     </div>
   );

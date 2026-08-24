@@ -69,7 +69,7 @@ export default function CreateFlowPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <div className="mx-auto max-w-lg px-4 py-12 sm:px-6">
+      <div className="mx-auto max-w-lg py-4 sm:py-8">
         {/* Back link */}
         <Link
           href="/flows"

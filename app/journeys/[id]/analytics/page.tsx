@@ -192,7 +192,7 @@ export default function JourneyAnalyticsPage() {
   if (state.loading) {
     return (
       <div className="flex min-h-screen flex-col bg-[#FAF9F6] text-[#4A4139]">
-        <header className="border-b border-[#E8E4DE] bg-white/70 px-6 py-6 backdrop-blur">
+        <header className="border-b border-[#E8E4DE] bg-white/70 py-6 backdrop-blur">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-1 flex-col gap-3">
               <Skeleton className="h-4 w-24 rounded-full" />
@@ -228,7 +228,7 @@ export default function JourneyAnalyticsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FAF9F6] text-[#4A4139]">
-      <header className="border-b border-[#E8E4DE] bg-white/85 px-4 py-4 backdrop-blur sm:px-6 sm:py-6">
+      <header className="border-b border-[#E8E4DE] bg-white/85 py-4 backdrop-blur sm:py-6">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6">
           <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3 sm:items-center sm:gap-4">
@@ -284,7 +284,7 @@ export default function JourneyAnalyticsPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 px-4 py-5 sm:gap-8 sm:px-6 sm:py-10">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 py-5 sm:gap-8 sm:py-10">
         <section className="grid gap-4 grid-cols-1 sm:gap-6 xl:grid-cols-[2fr_1fr]">
           <div className="rounded-2xl border border-[#E8E4DE] bg-white/90 p-4 shadow-sm sm:rounded-3xl sm:p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

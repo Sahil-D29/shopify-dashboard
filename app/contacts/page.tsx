@@ -270,7 +270,7 @@ export default function ContactsPage() {
               onClick={handleSyncShopify}
               variant="outline"
               disabled={syncing}
-              className="w-full whitespace-nowrap xs:w-auto"
+              className="w-full whitespace-nowrap min-[475px]:w-auto"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? 'Syncing...' : 'Sync Shopify'}
@@ -278,14 +278,14 @@ export default function ContactsPage() {
             <Button
               onClick={() => setShowImportCSV(true)}
               variant="outline"
-              className="w-full whitespace-nowrap xs:w-auto"
+              className="w-full whitespace-nowrap min-[475px]:w-auto"
             >
               <Upload className="w-4 h-4 mr-2" />
               Import CSV
             </Button>
             <Button
               onClick={() => setShowAddDialog(true)}
-              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 xs:w-auto"
+              className="w-full whitespace-nowrap bg-blue-600 hover:bg-blue-700 min-[475px]:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Contact

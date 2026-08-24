@@ -106,7 +106,7 @@ export default function ContactsTable({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-gray-900">{displayName}</p>
-                      <p className="break-anywhere mt-0.5 text-xs text-gray-500">
+                      <p className="mt-0.5 break-words [overflow-wrap:anywhere] text-xs text-gray-500">
                         {phoneDisplay || contact.email || '—'}
                       </p>
                     </div>
@@ -115,7 +115,7 @@ export default function ContactsTable({
                     </Badge>
                   </div>
                   {contact.email && phoneDisplay ? (
-                    <p className="break-anywhere mt-2 text-xs text-gray-600">{contact.email}</p>
+                    <p className="mt-2 break-words [overflow-wrap:anywhere] text-xs text-gray-600">{contact.email}</p>
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn('text-xs', sourceColors[contact.source])}>

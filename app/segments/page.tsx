@@ -246,7 +246,7 @@ export default function SegmentsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mx-auto max-w-7xl py-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Customer Segments</h1>
@@ -310,7 +310,7 @@ export default function SegmentsPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-7xl py-8">
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />

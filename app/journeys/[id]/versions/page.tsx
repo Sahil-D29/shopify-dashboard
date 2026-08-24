@@ -149,7 +149,7 @@ export default function JourneyVersionsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FAF9F6] text-[#4A4139]">
-      <header className="border-b border-[#E8E4DE] bg-white/85 px-6 py-6 backdrop-blur">
+      <header className="border-b border-[#E8E4DE] bg-white/85 py-6 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
@@ -187,7 +187,7 @@ export default function JourneyVersionsPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 py-8">
         {metadataQuery.isError ? (
           <div className="rounded-3xl border border-[#F2C7C7] bg-white px-6 py-4 text-sm text-[#B45151]">
             {(metadataQuery.error as Error)?.message || 'Unable to load version history'}
