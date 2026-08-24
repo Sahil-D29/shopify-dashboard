@@ -247,14 +247,14 @@ export default function SegmentsPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
         <div className="mx-auto max-w-7xl py-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
+          <div className="flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">Customer Segments</h1>
               <p className="text-gray-500 mt-1">Organize and target your customers effectively</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
               {syncStatus && (
-                <div className="text-sm text-gray-600 flex items-center gap-2">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 text-sm text-gray-600 sm:w-auto">
                   {syncStatus.isRunning ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -270,7 +270,7 @@ export default function SegmentsPage() {
               )}
               <button
                 onClick={handleForceSync}
-                className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 flex items-center gap-2 text-sm"
+                className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border bg-white px-3 py-2 text-sm hover:bg-gray-50 min-[475px]:w-auto"
                 disabled={isSyncing}
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -278,7 +278,7 @@ export default function SegmentsPage() {
               </button>
               <button
                 onClick={handleRefresh}
-                className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 flex items-center gap-2 text-sm"
+                className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border bg-white px-3 py-2 text-sm hover:bg-gray-50 min-[475px]:w-auto"
                 disabled={isRefreshing}
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -286,21 +286,21 @@ export default function SegmentsPage() {
               </button>
               <button
                 onClick={() => router.push('/segments/create')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 min-[475px]:w-auto"
               >
                 <Plus className="w-5 h-5" />
                 Create Segment
               </button>
               <button
                 onClick={() => router.push('/segments/custom')}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 min-[475px]:w-auto"
               >
                 <Plus className="w-5 h-5" />
                 Custom Audience
               </button>
               <button
                 onClick={() => router.push('/segments/compare')}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 min-[475px]:w-auto"
               >
                 <BarChart3 className="w-5 h-5" />
                 Compare Segments

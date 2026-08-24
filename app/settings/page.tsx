@@ -936,7 +936,7 @@ function SettingsContent() {
         </div>
 
         {/* Compact navigation used until the wide settings sidebar fits. */}
-        <div className="overflow-x-auto border-b border-gray-200 bg-white px-4 xl:hidden">
+        <div className="hide-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-4 xl:hidden">
           <div className="flex min-w-max gap-1">
             {settingsSections.filter(s => {
               // Show all non-disabled sections (Team tab is always visible now)
