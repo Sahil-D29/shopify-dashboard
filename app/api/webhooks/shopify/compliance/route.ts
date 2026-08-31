@@ -33,10 +33,7 @@ export async function POST(request: NextRequest) {
   const hmacHeader = request.headers.get('x-shopify-hmac-sha256');
   const topicHeader = request.headers.get('x-shopify-topic');
 
-  const secret =
-    process.env.SHOPIFY_WEBHOOK_SECRET ||
-    process.env.SHOPIFY_CLIENT_SECRET ||
-    process.env.SHOPIFY_API_SECRET;
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET;
 
   if (!verifyHmac(secret, rawBody, hmacHeader)) {
     console.error('[Compliance Webhook] HMAC verification failed');

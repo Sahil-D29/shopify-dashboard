@@ -11,7 +11,7 @@ import { registerWebhooks } from '@/lib/shopify-webhooks';
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_CLIENT_ID || process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET || '';
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 const SHOPIFY_SCOPES = [
   'read_products',
   'write_products',

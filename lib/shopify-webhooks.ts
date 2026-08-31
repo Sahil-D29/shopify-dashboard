@@ -1,6 +1,6 @@
 import { getBaseUrl } from '@/lib/utils/getBaseUrl';
 
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 
 /** Webhook topics we need for the app to function */
 const REQUIRED_WEBHOOKS = [

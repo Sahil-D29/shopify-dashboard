@@ -4,6 +4,7 @@ import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyProductListResponse } from '@/lib/types/shopify-product';
 import type { ShopifyProduct } from '@/lib/types/shopify-product';
 import { cache } from '@/lib/utils/cache';
+import { requireStoreAccess } from '@/lib/tenant/api-helpers';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +26,8 @@ export async function GET(request: NextRequest) {
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 10);
 
-    const cacheKey = `products_${limit}`;
+    const storeId = await requireStoreAccess(request);
+    const cacheKey = `shop:${storeId}:products:${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<ProductsCacheEntry>(cacheKey);

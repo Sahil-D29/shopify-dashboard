@@ -360,7 +360,7 @@ function AnalyticsContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Campaign Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Dorza Attributed Revenue</CardTitle>
             <DollarSign className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -494,7 +494,7 @@ function AnalyticsContent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            Top Campaigns by Revenue
+            Top Campaigns by Attributed Revenue
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -512,7 +512,7 @@ function AnalyticsContent() {
                     <TableHead className="text-right">Read Rate</TableHead>
                     <TableHead className="text-right">Clicked</TableHead>
                     <TableHead className="text-right">Converted</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">Attributed Revenue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

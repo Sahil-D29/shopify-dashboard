@@ -3,21 +3,11 @@ import crypto from 'crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
 type JsonRecord = Record<string, unknown>;
-
-interface ShopifyWebhookLogEntry {
-  id: string;
-  topic: string;
-  shop?: string | null;
-  receivedAt: string;
-  payload: JsonRecord;
-}
 
 const SUPPORTED_TOPICS = new Set([
   'orders/create',
@@ -64,24 +54,13 @@ function toJsonRecord(payload: unknown): JsonRecord {
   return {};
 }
 
-function createLogEntry(topic: string, shop: string | null, payload: JsonRecord): ShopifyWebhookLogEntry {
-  const timestamp = new Date().toISOString();
-  return {
-    id: `log_${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
-    topic,
-    shop,
-    receivedAt: timestamp,
-    payload,
-  };
-}
-
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const hmacHeader = request.headers.get('x-shopify-hmac-sha256');
   const topicHeader = request.headers.get('x-shopify-topic');
   const shopHeader = request.headers.get('x-shopify-shop-domain');
 
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET;
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET;
   const isValid = verifyShopifySignature(secret, rawBody, hmacHeader);
   if (!isValid) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
@@ -100,34 +79,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
   }
 
-  try {
-    const logs = readJsonFile<ShopifyWebhookLogEntry>('webhook-logs.json');
-    logs.unshift(createLogEntry(topic, shopHeader, payload));
-    const MAX_LOGS = 200;
-    if (logs.length > MAX_LOGS) {
-      logs.length = MAX_LOGS;
-    }
-    writeJsonFile('webhook-logs.json', logs);
-  } catch (error) {
-    console.error('[webhooks][shopify] Failed to write webhook log:', error);
-  }
-
-  try {
-    await matchAndExecuteJourneys(topic, {
-      shop: shopHeader,
-      payload,
-      receivedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('[webhooks][shopify] Journey execution failed:', error);
-  }
-
   // ─── Campaign conversion attribution (orders/create) ────────
   try {
     if (topic === 'orders/create') {
-      attributeOrderToCampaign(payload).catch(err => {
-        console.error('[webhooks][shopify] Campaign attribution failed:', err);
-      });
+      await attributeOrderToCampaign(payload, shopHeader);
     }
   } catch (error) {
     console.error('[webhooks][shopify] Campaign attribution error:', error);
@@ -250,7 +205,7 @@ async function queueSegmentReevaluation(topic: string, payload: any): Promise<vo
  * When a Shopify order is created, check if the customer received a campaign
  * message within the last 72 hours and attribute the conversion.
  */
-async function attributeOrderToCampaign(payload: JsonRecord): Promise<void> {
+async function attributeOrderToCampaign(payload: JsonRecord, shopDomain: string | null): Promise<void> {
   try {
     const customerEmail = (payload.email as string) || (payload.customer as JsonRecord)?.email as string || '';
     const customerPhone = (payload.customer as JsonRecord)?.phone as string ||
@@ -258,7 +213,35 @@ async function attributeOrderToCampaign(payload: JsonRecord): Promise<void> {
     const orderTotal = Number(payload.total_price || 0);
     const orderId = String(payload.id || '');
 
-    if ((!customerEmail && !customerPhone) || !orderId) return;
+    if ((!customerEmail && !customerPhone) || !orderId || !shopDomain || !Number.isFinite(orderTotal)) return;
+
+    const store = await prisma.store.findUnique({
+      where: { shopifyDomain: shopDomain },
+      select: { id: true },
+    });
+    if (!store) return;
+
+    const attributionUrls = [payload.landing_site, payload.landing_site_ref, payload.referring_site]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    let campaignId = '';
+    for (const candidate of attributionUrls) {
+      try {
+        const url = new URL(candidate, `https://${shopDomain}`);
+        if (url.searchParams.get('utm_source')?.toLowerCase() === 'dorza') {
+          campaignId = url.searchParams.get('dza_campaign_id') ?? '';
+        }
+      } catch {
+        // Ignore malformed URLs supplied by Shopify.
+      }
+      if (campaignId) break;
+    }
+    if (!campaignId) return;
+
+    const alreadyAttributed = await prisma.campaignLog.findFirst({
+      where: { convertedOrderId: orderId, campaign: { storeId: store.id } },
+      select: { id: true },
+    });
+    if (alreadyAttributed) return;
 
     // Normalize phone for matching — campaigns store Shopify customer IDs,
     // but we can match via phone or email in the customerId field
@@ -281,12 +264,14 @@ async function attributeOrderToCampaign(payload: JsonRecord): Promise<void> {
     for (const term of searchTerms) {
       const recentLog = await prisma.campaignLog.findFirst({
         where: {
+          campaignId,
+          campaign: { storeId: store.id },
           customerId: { contains: term },
-          status: { in: ['SUCCESS', 'DELIVERED', 'READ', 'CLICKED'] },
-          createdAt: { gte: attributionCutoff },
+          status: 'CLICKED',
+          clickedAt: { gte: attributionCutoff },
           convertedAt: null, // Not already attributed
         },
-        orderBy: { createdAt: 'desc' }, // Last-touch
+        orderBy: { clickedAt: 'desc' }, // Verified last-touch
       });
 
       if (recentLog) {
@@ -297,6 +282,15 @@ async function attributeOrderToCampaign(payload: JsonRecord): Promise<void> {
             convertedAt: new Date(),
             convertedOrderId: orderId,
             convertedAmount: orderTotal,
+            metadata: {
+              ...(isRecord(recentLog.metadata) ? recentLog.metadata : {}),
+              attribution: {
+                verified: true,
+                source: 'dorza_utm',
+                shopDomain,
+                campaignId,
+              },
+            },
           },
         });
 

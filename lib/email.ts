@@ -9,14 +9,9 @@ interface EmailOptions {
 }
 
 export async function sendEmail({ to, subject, html, text }: EmailOptions): Promise<void> {
-  // If SMTP is not configured, log the email instead
+  // Never report a message as sent when no real provider is configured.
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.log('📧 Email would be sent (SMTP not configured):');
-    console.log('To:', to);
-    console.log('Subject:', subject);
-    console.log('HTML:', html);
-    console.log('---');
-    return;
+    throw new Error('Email delivery is unavailable because SMTP is not configured');
   }
 
   try {

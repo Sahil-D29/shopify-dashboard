@@ -67,10 +67,7 @@ export async function POST(request: NextRequest) {
   const topic = (request.headers.get('x-shopify-topic') ?? '').toLowerCase();
   const shopDomain = request.headers.get('x-shopify-shop-domain');
 
-  const secret =
-    process.env.SHOPIFY_WEBHOOK_SECRET ||
-    process.env.SHOPIFY_API_SECRET ||
-    process.env.SHOPIFY_CLIENT_SECRET;
+  const secret = process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET;
   if (!verifyShopifySignature(secret, rawBody, hmacHeader)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }

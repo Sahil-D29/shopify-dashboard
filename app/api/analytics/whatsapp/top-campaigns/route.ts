@@ -25,29 +25,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ topCampaigns: [] });
     }
 
-    const campaigns = await prisma.campaign.findMany({
-      where: {
-        storeId,
-        totalSent: { gt: 0 },
-      },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        totalSent: true,
-        totalDelivered: true,
-        totalOpened: true,
-        totalClicked: true,
-        totalConverted: true,
-        totalFailed: true,
-        totalRevenue: true,
-        createdAt: true,
-      },
-      orderBy: { totalRevenue: 'desc' },
-      take: 10,
-    });
+    const [campaigns, verifiedConversions] = await Promise.all([
+      prisma.campaign.findMany({
+        where: { storeId, totalSent: { gt: 0 } },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          totalSent: true,
+          totalDelivered: true,
+          totalOpened: true,
+          totalClicked: true,
+          totalFailed: true,
+          createdAt: true,
+        },
+      }),
+      prisma.campaignLog.findMany({
+        where: {
+          campaign: { storeId },
+          status: 'CONVERTED',
+          metadata: { path: ['attribution', 'verified'], equals: true },
+        },
+        select: { campaignId: true, convertedAmount: true },
+      }),
+    ]);
 
-    const topCampaigns = campaigns.map(c => ({
+    const attributionByCampaign = new Map<string, { conversions: number; revenue: number }>();
+    for (const log of verifiedConversions) {
+      const current = attributionByCampaign.get(log.campaignId) ?? { conversions: 0, revenue: 0 };
+      current.conversions += 1;
+      current.revenue += log.convertedAmount ?? 0;
+      attributionByCampaign.set(log.campaignId, current);
+    }
+
+    const topCampaigns = campaigns.map(c => {
+      const attribution = attributionByCampaign.get(c.id) ?? { conversions: 0, revenue: 0 };
+      return ({
       id: c.id,
       name: c.name,
       status: c.status,
@@ -55,13 +68,14 @@ export async function GET(request: NextRequest) {
       totalDelivered: c.totalDelivered,
       totalRead: c.totalOpened,
       totalClicked: c.totalClicked,
-      totalConverted: c.totalConverted,
+      totalConverted: attribution.conversions,
       totalFailed: c.totalFailed,
-      totalRevenue: c.totalRevenue,
+      totalRevenue: attribution.revenue,
       readRate: c.totalDelivered > 0 ? Math.round((c.totalOpened / c.totalDelivered) * 1000) / 10 : 0,
-      conversionRate: c.totalSent > 0 ? Math.round((c.totalConverted / c.totalSent) * 1000) / 10 : 0,
+      conversionRate: c.totalSent > 0 ? Math.round((attribution.conversions / c.totalSent) * 1000) / 10 : 0,
       createdAt: c.createdAt.toISOString(),
-    }));
+      });
+    }).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 10);
 
     return NextResponse.json({ topCampaigns });
   } catch (error) {

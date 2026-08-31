@@ -34,31 +34,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { getWindowStorage } from '@/lib/window-storage';
-import type { ShopifyOrder, ShopifyOrderListResponse } from '@/lib/types/shopify-order';
 import type { ShopifyProduct, ShopifyProductListResponse } from '@/lib/types/shopify-product';
 import type { ShopifyCustomer, ShopifyCustomerListResponse } from '@/lib/types/shopify-customer';
-import type { ShopifyLocation, ShopifyLocationListResponse } from '@/lib/types/shopify-location';
-import type { ShopifyCheckout, ShopifyCheckoutListResponse } from '@/lib/types/shopify-checkout';
+import type { ShopifyOrder } from '@/lib/types/shopify-order';
+import type { ShopifyLocation } from '@/lib/types/shopify-location';
+import type { ShopifyCheckout } from '@/lib/types/shopify-checkout';
 
 type ApiErrorPayload = {
   error?: string;
   message?: string;
 };
-
-interface ShopifyAnalyticsSummary extends ApiErrorPayload {
-  totalRevenue: number;
-  totalOrders: number;
-  totalCustomers: number;
-  averageOrderValue: number;
-  revenueGrowth: number;
-  ordersGrowth: number;
-  abandonedCarts?: number;
-  abandonedCartsValue?: number;
-  recentOrders?: number;
-  previousOrders?: number;
-  lastSynced?: number;
-  cached?: boolean;
-}
 
 interface CampaignAnalytics {
   totalCampaigns: number;
@@ -74,12 +59,8 @@ interface CampaignAnalytics {
 }
 
 interface DashboardData {
-  analytics: ShopifyAnalyticsSummary;
-  orders: ShopifyOrder[];
   products: ShopifyProduct[];
   customers: ShopifyCustomer[];
-  locations: ShopifyLocation[];
-  checkouts: ShopifyCheckout[];
   campaignAnalytics: CampaignAnalytics;
   lastSynced?: number;
 }
@@ -98,12 +79,8 @@ const accentBorderMap = {
   taupe: 'from-stone-500 to-stone-700',
 } as const;
 
-const SHOPIFY_STORE_DATA_KEY = 'shopify:store_data';
-const SHOPIFY_ORDERS_KEY = 'shopify:orders';
 const SHOPIFY_PRODUCTS_KEY = 'shopify:products';
 const SHOPIFY_CUSTOMERS_KEY = 'shopify:customers';
-const SHOPIFY_LOCATIONS_KEY = 'shopify:locations';
-const SHOPIFY_CHECKOUTS_KEY = 'shopify:checkouts';
 const SHOPIFY_LAST_SYNCED_KEY = 'shopify:last_synced';
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
@@ -778,7 +755,7 @@ function CampaignPerformanceCard({ campaignAnalytics }: CampaignPerformanceCardP
               <div className="rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-amber-600">Revenue from Campaigns</p>
+                    <p className="text-xs font-medium text-amber-600">Dorza Attributed Revenue</p>
                     <p className="mt-1 text-2xl font-bold text-amber-900">
                       {formatCurrency(campaignAnalytics.campaignRevenue)}
                     </p>
@@ -839,14 +816,10 @@ function DashboardContent() {
         const fetchOpts = { cache: 'no-store' as const, credentials: 'include' as const, headers: fetchHeaders };
 
         // Fetch all data with proper error handling
-        const [analyticsRes, ordersRes, productsRes, customersRes, locationsRes, checkoutsRes, campaignAnalyticsRes] =
+        const [productsRes, customersRes, campaignAnalyticsRes] =
           await Promise.allSettled([
-            fetch(`${baseUrl}/api/shopify/analytics?refresh=${isRefresh}`, fetchOpts),
-            fetch(`${baseUrl}/api/shopify/orders?limit=10${refreshParam}`, fetchOpts),
             fetch(`${baseUrl}/api/shopify/products?limit=10${refreshParam}`, fetchOpts),
             fetch(`${baseUrl}/api/shopify/customers?limit=10${refreshParam}`, fetchOpts),
-            fetch(`${baseUrl}/api/shopify/locations?limit=10${refreshParam}`, fetchOpts),
-            fetch(`${baseUrl}/api/shopify/checkouts?limit=10${refreshParam}`, fetchOpts),
             fetch(`${baseUrl}/api/campaigns/analytics`, fetchOpts),
           ]);
 
@@ -858,48 +831,8 @@ function DashboardContent() {
         };
 
         // Parse responses with fallback on failure (no throw, so no console errors for 5xx)
-        let analytics: ShopifyAnalyticsSummary;
-        let ordersData: ShopifyOrderListResponse;
         let productsData: ShopifyProductListResponse;
         let customersData: ShopifyCustomerListResponse;
-        let locationsData: ShopifyLocationListResponse;
-        let checkoutsData: ShopifyCheckoutListResponse;
-
-        const analyticsResSafe = getResponseSafe(analyticsRes, 'analytics');
-        if (!analyticsResSafe) {
-          analytics = {
-            totalRevenue: 0,
-            totalOrders: 0,
-            totalCustomers: 0,
-            averageOrderValue: 0,
-            revenueGrowth: 0,
-            ordersGrowth: 0,
-          };
-        } else {
-          try {
-            analytics = await parseJsonResponse<ShopifyAnalyticsSummary>(analyticsResSafe, 'analytics');
-          } catch {
-            analytics = {
-              totalRevenue: 0,
-              totalOrders: 0,
-              totalCustomers: 0,
-              averageOrderValue: 0,
-              revenueGrowth: 0,
-              ordersGrowth: 0,
-            };
-          }
-        }
-
-        const ordersResSafe = getResponseSafe(ordersRes, 'orders');
-        if (!ordersResSafe) {
-          ordersData = { orders: [] };
-        } else {
-          try {
-            ordersData = await parseJsonResponse<ShopifyOrderListResponse>(ordersResSafe, 'orders');
-          } catch {
-            ordersData = { orders: [] };
-          }
-        }
 
         const productsResSafe = getResponseSafe(productsRes, 'products');
         if (!productsResSafe) {
@@ -923,28 +856,6 @@ function DashboardContent() {
           }
         }
 
-        const locationsResSafe = getResponseSafe(locationsRes, 'locations');
-        if (!locationsResSafe) {
-          locationsData = { locations: [] };
-        } else {
-          try {
-            locationsData = await parseJsonResponse<ShopifyLocationListResponse>(locationsResSafe, 'locations');
-          } catch {
-            locationsData = { locations: [] };
-          }
-        }
-
-        const checkoutsResSafe = getResponseSafe(checkoutsRes, 'checkouts');
-        if (!checkoutsResSafe) {
-          checkoutsData = { checkouts: [] };
-        } else {
-          try {
-            checkoutsData = await parseJsonResponse<ShopifyCheckoutListResponse>(checkoutsResSafe, 'checkouts');
-          } catch {
-            checkoutsData = { checkouts: [] };
-          }
-        }
-
         const defaultCampaignAnalytics: CampaignAnalytics = {
           totalCampaigns: 0, totalMessagesSent: 0, totalDelivered: 0,
           totalOpened: 0, totalClicked: 0, totalConverted: 0,
@@ -963,22 +874,14 @@ function DashboardContent() {
         }
 
         const lastSynced = Math.max(
-          analytics.lastSynced ?? 0,
-          ordersData.lastSynced ?? 0,
           productsData.lastSynced ?? 0,
           customersData.lastSynced ?? 0,
-          locationsData.lastSynced ?? 0,
-          checkoutsData.lastSynced ?? 0,
           Date.now()
         );
 
         const payload: DashboardData = {
-          analytics,
-          orders: ordersData.orders ?? [],
           products: productsData.products ?? [],
           customers: customersData.customers ?? [],
-          locations: locationsData.locations ?? [],
-          checkouts: checkoutsData.checkouts ?? [],
           campaignAnalytics,
           lastSynced,
         };
@@ -986,12 +889,8 @@ function DashboardContent() {
         setData(payload);
 
         if (storage) {
-          storage.setJSON(SHOPIFY_STORE_DATA_KEY, analytics);
-          storage.setJSON(SHOPIFY_ORDERS_KEY, payload.orders);
           storage.setJSON(SHOPIFY_PRODUCTS_KEY, payload.products);
           storage.setJSON(SHOPIFY_CUSTOMERS_KEY, payload.customers);
-          storage.setJSON(SHOPIFY_LOCATIONS_KEY, payload.locations);
-          storage.setJSON(SHOPIFY_CHECKOUTS_KEY, payload.checkouts);
           storage.set(SHOPIFY_LAST_SYNCED_KEY, String(lastSynced));
         }
       } catch (error) {
@@ -1007,32 +906,21 @@ function DashboardContent() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storage = getWindowStorage();
-      const cachedAnalytics = storage.getJSON<ShopifyAnalyticsSummary | null>(SHOPIFY_STORE_DATA_KEY);
-      if (cachedAnalytics) {
-        const cachedOrders = storage.getJSON<ShopifyOrder[] | null>(SHOPIFY_ORDERS_KEY, []);
-        const cachedProducts = storage.getJSON<ShopifyProduct[] | null>(SHOPIFY_PRODUCTS_KEY, []);
-        const cachedCustomers = storage.getJSON<ShopifyCustomer[] | null>(
-          SHOPIFY_CUSTOMERS_KEY,
-          []
-        );
-        const cachedLocations = storage.getJSON<ShopifyLocation[] | null>(SHOPIFY_LOCATIONS_KEY, []);
-        const cachedCheckouts = storage.getJSON<ShopifyCheckout[] | null>(SHOPIFY_CHECKOUTS_KEY, []);
+      const cachedProducts = storage.getJSON<ShopifyProduct[] | null>(SHOPIFY_PRODUCTS_KEY, []);
+      const cachedCustomers = storage.getJSON<ShopifyCustomer[] | null>(SHOPIFY_CUSTOMERS_KEY, []);
+      if ((cachedProducts?.length ?? 0) > 0 || (cachedCustomers?.length ?? 0) > 0) {
         const cachedLastSyncedRaw = storage.get(SHOPIFY_LAST_SYNCED_KEY);
         const cachedLastSynced = cachedLastSyncedRaw ? Number(cachedLastSyncedRaw) : undefined;
 
         setData({
-          analytics: cachedAnalytics,
-          orders: cachedOrders ?? [],
           products: cachedProducts ?? [],
           customers: cachedCustomers ?? [],
-          locations: cachedLocations ?? [],
-          checkouts: cachedCheckouts ?? [],
           campaignAnalytics: {
             totalCampaigns: 0, totalMessagesSent: 0, totalDelivered: 0,
             totalOpened: 0, totalClicked: 0, totalConverted: 0,
             campaignRevenue: 0, deliveryRate: 0, readRate: 0, conversionRate: 0,
           },
-          lastSynced: cachedLastSynced ?? cachedAnalytics.lastSynced ?? undefined,
+          lastSynced: cachedLastSynced,
         });
         setLoading(false);
       }
@@ -1116,36 +1004,27 @@ function DashboardContent() {
         )}
         <ConnectionStatus shopUrl={currentStore?.shopDomain} />
 
-        {data?.analytics ? (
-          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+        {data ? (
+          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
             <MetricCard
-              title="Total Revenue"
-              value={formatCurrency(data.analytics.totalRevenue)}
-              subtitle="vs last week"
+              title="Dorza Attributed Revenue"
+              value={formatCurrency(data.campaignAnalytics.campaignRevenue)}
+              subtitle="Verified campaign conversions only"
               icon={DollarSign}
-              trend={data.analytics.revenueGrowth}
               accent="warm"
             />
             <MetricCard
-              title="Total Orders"
-              value={data.analytics.totalOrders.toLocaleString('en-IN')}
-              subtitle="Total orders processed"
-              icon={ShoppingCart}
-              trend={data.analytics.ordersGrowth}
-              accent="sand"
-            />
-            <MetricCard
-              title="Total Customers"
-              value={data.analytics.totalCustomers.toLocaleString('en-IN')}
-              subtitle="Active customers"
+              title="Recently Synced Customers"
+              value={data.customers.length.toLocaleString('en-IN')}
+              subtitle="Latest Shopify customer records"
               icon={Users}
               accent="clay"
             />
             <MetricCard
-              title="Average Order Value"
-              value={formatCurrency(data.analytics.averageOrderValue)}
-              subtitle="Per transaction"
-              icon={TrendingUp}
+              title="Messages Sent"
+              value={data.campaignAnalytics.totalMessagesSent.toLocaleString('en-IN')}
+              subtitle="Real campaign sends"
+              icon={Send}
               accent="taupe"
             />
           </div>
@@ -1156,16 +1035,9 @@ function DashboardContent() {
         )}
 
         <div className="space-y-6 animate-fade-in">
-          <RecentOrdersTable orders={data?.orders ?? []} />
-
           <div className="grid gap-6 lg:grid-cols-2">
             <RecentProductsCard products={data?.products ?? []} />
             <RecentCustomersCard customers={data?.customers ?? []} />
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <InventoryLocationsCard locations={data?.locations ?? []} />
-            <AbandonedCartsCard checkouts={data?.checkouts ?? []} />
           </div>
         </div>
     </div>

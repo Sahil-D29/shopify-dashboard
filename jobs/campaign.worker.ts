@@ -11,7 +11,6 @@ import { sendEmail } from '@/lib/email';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { SegmentGroup } from '@/lib/types/segment';
 import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
-import { isWhatsAppSandbox } from '@/lib/whatsapp/sandbox';
 
 const currentPeriod = (): string => {
   const now = new Date();
@@ -44,7 +43,7 @@ function sanitizePhone(value: string | null | undefined): string | null {
   return digits;
 }
 
-async function sendWhatsAppText(phone: string, body: string, storeId: string): Promise<{ success: boolean; error?: string }> {
+async function sendWhatsAppText(phone: string, body: string, storeId: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const config = await prisma.whatsAppConfig.findUnique({
     where: { storeId },
   });
@@ -82,7 +81,7 @@ async function sendWhatsAppText(phone: string, body: string, storeId: string): P
       },
     );
     const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string } };
-    if (res.ok && data.messages?.[0]?.id) return { success: true };
+    if (res.ok && data.messages?.[0]?.id) return { success: true, messageId: data.messages[0].id };
     return { success: false, error: data.error?.message ?? 'Send failed' };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -94,7 +93,7 @@ async function sendWhatsAppTemplate(
   templateName: string,
   language: string,
   storeId: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const config = await prisma.whatsAppConfig.findUnique({ where: { storeId } });
   if (!config?.phoneNumberId || !config?.accessToken) {
     return { success: false, error: 'WhatsApp not configured' };
@@ -128,7 +127,7 @@ async function sendWhatsAppTemplate(
       },
     );
     const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string } };
-    if (res.ok && data.messages?.[0]?.id) return { success: true };
+    if (res.ok && data.messages?.[0]?.id) return { success: true, messageId: data.messages[0].id };
     return { success: false, error: data.error?.message ?? 'Send failed' };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -236,10 +235,6 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
     let delivered = 0;
     let failed = 0;
 
-    // Sandbox: simulate sends when the store has no WhatsApp connection, so the
-    // campaign completes with delivery counts and can be demoed without a WABA.
-    const sandbox = await isWhatsAppSandbox(storeId);
-
     for (const customer of matchingCustomers) {
       const customerId = String(customer.id);
       const personalizedBody = personalizeBody(body, customer);
@@ -303,24 +298,20 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
           failed++;
           continue;
         }
-        const result = sandbox
-          ? { success: true as const, error: undefined }
-          : templateName
-            ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
-            : await sendWhatsAppText(phone, personalizedBody, storeId);
+        const result = templateName
+          ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
+          : await sendWhatsAppText(phone, personalizedBody, storeId);
         if (result.success) {
-          await logSuccess();
+          await logSuccess(result.messageId);
           sent++;
-          delivered++;
         } else {
           await logFailure(result.error ?? 'Send failed');
           sent++;
           failed++;
         }
       } else if (campaignType === 'SMS' || campaignType === 'PUSH') {
-        await logSuccess(`Channel ${campaignType} not configured`);
-        sent++;
-        delivered++;
+        await logFailure(`${campaignType} provider is not configured`);
+        failed++;
       }
 
       // Rate-limiting delay between messages

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { getDecryptedToken } from '@/lib/shopify-token';
 import { getClientCredentialsToken } from '@/lib/shopify/cc-token-provider';
 
-const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 
 export interface ResolvedStore {
   shop: string;

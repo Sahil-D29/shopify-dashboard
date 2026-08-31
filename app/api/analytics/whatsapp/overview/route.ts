@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(ZERO_OVERVIEW);
     }
 
-    const [campaigns, contactTotal, contactByOptIn, contactBySource, conversationStats, journeys, messageStats] = await Promise.all([
+    const [campaigns, verifiedConversions, contactTotal, contactByOptIn, contactBySource, conversationStats, journeys, messageStats] = await Promise.all([
       // Campaign aggregates
       prisma.campaign.findMany({
         where: { storeId },
@@ -59,10 +59,16 @@ export async function GET(request: NextRequest) {
           totalDelivered: true,
           totalOpened: true,
           totalClicked: true,
-          totalConverted: true,
           totalFailed: true,
-          totalRevenue: true,
         },
+      }),
+      prisma.campaignLog.findMany({
+        where: {
+          campaign: { storeId },
+          status: 'CONVERTED',
+          metadata: { path: ['attribution', 'verified'], equals: true },
+        },
+        select: { convertedAmount: true },
       }),
       // Total contacts
       prisma.contact.count({ where: { storeId } }),
@@ -106,9 +112,9 @@ export async function GET(request: NextRequest) {
     const totalDelivered = campaigns.reduce((s, c) => s + (c.totalDelivered ?? 0), 0);
     const totalRead = campaigns.reduce((s, c) => s + (c.totalOpened ?? 0), 0);
     const totalClicked = campaigns.reduce((s, c) => s + (c.totalClicked ?? 0), 0);
-    const totalConverted = campaigns.reduce((s, c) => s + (c.totalConverted ?? 0), 0);
+    const totalConverted = verifiedConversions.length;
     const totalFailed = campaigns.reduce((s, c) => s + (c.totalFailed ?? 0), 0);
-    const totalRevenue = campaigns.reduce((s, c) => s + (c.totalRevenue ?? 0), 0);
+    const totalRevenue = verifiedConversions.reduce((s, log) => s + (log.convertedAmount ?? 0), 0);
     const activeCampaigns = campaigns.filter(c => c.status === 'RUNNING').length;
     const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 1000) / 10 : 0;
     const readRate = totalDelivered > 0 ? Math.round((totalRead / totalDelivered) * 1000) / 10 : 0;

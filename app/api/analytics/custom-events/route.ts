@@ -63,20 +63,18 @@ export async function GET(request: NextRequest) {
     }));
 
     // Get daily trend data
-    const dailyEvents = await prisma.$queryRawUnsafe<Array<{ date: string; count: bigint }>>(
-      `SELECT DATE(created_at) as date, COUNT(*) as count
-       FROM storefront_events
-       WHERE store_id = $1
-         AND event_type LIKE 'custom:%'
-         AND created_at >= $2
-       GROUP BY DATE(created_at)
-       ORDER BY date ASC`,
-      storeId,
-      fromDate
-    );
+    const dailyEvents = await prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
+      SELECT DATE("createdAt") as date, COUNT(*) as count
+       FROM "storefront_events"
+       WHERE "storeId" = ${storeId}
+         AND "eventType" LIKE 'custom:%'
+         AND "createdAt" >= ${fromDate}
+       GROUP BY DATE("createdAt")
+       ORDER BY date ASC
+    `;
 
     const trend = dailyEvents.map((d) => ({
-      date: d.date,
+      date: new Date(d.date).toISOString().split('T')[0],
       count: Number(d.count),
     }));
 

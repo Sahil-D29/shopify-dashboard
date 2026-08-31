@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Test the connection by making a simple API call to Shopify
     // Try latest API version first, then fallback to stable version
-    const apiVersion = process.env.SHOPIFY_API_VERSION || '2024-10';
+    const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
     const testUrl = `https://${shopUrl}/admin/api/${apiVersion}/shop.json`;
 
     console.log('[Test Connection] Testing Shopify connection:', {

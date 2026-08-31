@@ -7,6 +7,7 @@ import { getShopifyClientAsync, StoreNotConnectedError } from '@/lib/shopify/api
 import { cache } from '@/lib/utils/cache';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import { getUserContext } from '@/lib/user-context';
+import { requireStoreAccess } from '@/lib/tenant/api-helpers';
 
 export const runtime = 'nodejs';
 
@@ -156,7 +157,8 @@ export async function GET(request: NextRequest) {
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 250);
 
-    const cacheKey = `customers_${limit}`;
+    const storeId = await requireStoreAccess(request);
+    const cacheKey = `shop:${storeId}:customer-management:${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<CustomersCacheEntry>(cacheKey);

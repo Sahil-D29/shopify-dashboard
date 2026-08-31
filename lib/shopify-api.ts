@@ -26,7 +26,8 @@ export async function callShopifyAPI(
     throw new ShopifyAPIError('No access token found for shop', 404);
   }
   
-  const url = `https://${shop}/admin/api/2024-10${endpoint}`;
+  const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
+  const url = `https://${shop}/admin/api/${apiVersion}${endpoint}`;
   
   // First attempt
   let response = await fetch(url, {

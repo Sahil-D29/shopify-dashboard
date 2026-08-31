@@ -39,25 +39,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(ZERO_ANALYTICS);
     }
 
-    const campaigns = await prisma.campaign.findMany({
+    const [campaigns, verifiedConversions] = await Promise.all([
+      prisma.campaign.findMany({
       where: { storeId },
       select: {
         totalSent: true,
         totalDelivered: true,
         totalOpened: true,
         totalClicked: true,
-        totalConverted: true,
-        totalRevenue: true,
       },
-    });
+      }),
+      prisma.campaignLog.findMany({
+        where: {
+          campaign: { storeId },
+          status: 'CONVERTED',
+          metadata: { path: ['attribution', 'verified'], equals: true },
+        },
+        select: { convertedAmount: true },
+      }),
+    ]);
 
     const totalCampaigns = campaigns.length;
     const totalMessagesSent = campaigns.reduce((sum, c) => sum + (c.totalSent ?? 0), 0);
     const totalDelivered = campaigns.reduce((sum, c) => sum + (c.totalDelivered ?? 0), 0);
     const totalOpened = campaigns.reduce((sum, c) => sum + (c.totalOpened ?? 0), 0);
     const totalClicked = campaigns.reduce((sum, c) => sum + (c.totalClicked ?? 0), 0);
-    const totalConverted = campaigns.reduce((sum, c) => sum + (c.totalConverted ?? 0), 0);
-    const campaignRevenue = campaigns.reduce((sum, c) => sum + (c.totalRevenue ?? 0), 0);
+    const totalConverted = verifiedConversions.length;
+    const campaignRevenue = verifiedConversions.reduce((sum, log) => sum + (log.convertedAmount ?? 0), 0);
 
     const deliveryRate = totalMessagesSent > 0 ? (totalDelivered / totalMessagesSent) * 100 : 0;
     const readRate = totalDelivered > 0 ? (totalOpened / totalDelivered) * 100 : 0;

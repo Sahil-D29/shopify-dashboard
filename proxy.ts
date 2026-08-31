@@ -93,6 +93,11 @@ export async function proxy(request: NextRequest) {
     return res;
   }
 
+  const productionHiddenRoutes = ['/orders', '/abandoned-carts', '/journeys', '/flows', '/email'];
+  if (productionHiddenRoutes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // Authenticated: root (/) renders the dashboard directly — no redirect needed.
   // /dashboard redirects to / in app/dashboard/page.tsx.
 

@@ -6,7 +6,6 @@
 
 import { prisma } from '@/lib/prisma';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
-import { isWhatsAppSandbox, sandboxMessageId } from './sandbox';
 import { graphUrl } from './graph';
 import { normalizePhone } from './normalize-phone';
 export type SendMessageType = 'text' | 'template' | 'image' | 'video' | 'document' | 'audio';
@@ -42,12 +41,6 @@ export interface SendMessageResult {
  * Send a WhatsApp message and record it in the database.
  */
 export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
-  // Sandbox: simulate the send when the store has no WhatsApp connection so
-  // journeys / cart recovery / auto-replies work without a WhatsApp account.
-  if (await isWhatsAppSandbox(opts.storeId)) {
-    return { success: true, whatsappMessageId: sandboxMessageId() };
-  }
-
   const validation = await resolveWhatsAppConfig(opts.storeId);
   if (!validation.valid) {
     return { success: false, error: validation.error };

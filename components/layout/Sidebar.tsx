@@ -45,6 +45,21 @@ import { X } from 'lucide-react';
 import { useAppConfig } from '@/components/providers/AppConfigProvider';
 
 const USER_PREFERENCES_KEY = 'user:preferences';
+const PRODUCTION_HIDDEN_FEATURES = new Set([
+  'orders',
+  'abandoned_carts',
+  'journeys',
+  'flows',
+  'email_marketing',
+  'email_campaigns',
+  'email_templates',
+  'email_analytics',
+  'email_subscribers',
+  'email_domains',
+  'email_ab_tests',
+  'email_back_in_stock',
+  'email_cross_sell',
+]);
 
 interface UserPreferences {
   sidebarCustomersExpanded?: boolean;
@@ -101,7 +116,7 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
     () => new Set(featureFlags.disabledItems),
     [featureFlags.disabledItems],
   );
-  const isEnabled = (key: string) => !disabled.has(key);
+  const isEnabled = (key: string) => !disabled.has(key) && !PRODUCTION_HIDDEN_FEATURES.has(key);
   // Locked = visible but gated by subscription (greyed + lock → Billing).
   const locked = useMemo(
     () => new Set(featureFlags.lockedItems || []),

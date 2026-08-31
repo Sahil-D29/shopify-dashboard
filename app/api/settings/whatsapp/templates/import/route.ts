@@ -4,6 +4,8 @@ import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
 export async function POST(request: NextRequest) {
+  return NextResponse.redirect(new URL('/api/whatsapp/templates/sync', request.url), 307);
+  /* legacy implementation retained below for compatibility history
   try {
     // In a real implementation, this would call Meta's Graph API
     // For now, we'll simulate importing templates
@@ -79,5 +81,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  */
 }
 

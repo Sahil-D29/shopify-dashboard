@@ -18,7 +18,8 @@ export async function runShopifyTokenCheck(): Promise<{ valid: boolean; reason?:
   const now = new Date();
   try {
     const domain = store.shopifyDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const url = `https://${domain}/admin/api/2024-10/graphql.json`;
+    const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
+    const url = `https://${domain}/admin/api/${apiVersion}/graphql.json`;
     const res = await fetch(url, {
       method: 'POST',
       headers: {

@@ -4,6 +4,7 @@ import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
 import type { ShopifyCustomerResponse } from '@/lib/shopify/client';
 import type { ShopifyCustomer, ShopifyCustomerListResponse } from '@/lib/types/shopify-customer';
 import { cache } from '@/lib/utils/cache';
+import { requireStoreAccess } from '@/lib/tenant/api-helpers';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
     const forceRefresh = searchParams.get('refresh') === 'true';
     const limit = parseLimit(searchParams.get('limit'), 10);
 
-    const cacheKey = `customers_${limit}`;
+    const storeId = await requireStoreAccess(request);
+    const cacheKey = `shop:${storeId}:customers:${limit}`;
 
     if (!forceRefresh) {
       const cached = cache.get<CustomersCacheEntry>(cacheKey);

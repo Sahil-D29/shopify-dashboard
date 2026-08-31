@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE status IN ('DELIVERED', 'READ')) as delivered,
         COUNT(*) FILTER (WHERE status = 'READ') as read,
         COUNT(*) FILTER (WHERE status = 'FAILED') as failed
-      FROM "Message"
+      FROM "messages"
       WHERE "storeId" = ${storeId}
         AND "direction" = 'OUTBOUND'
         AND "createdAt" >= ${thirtyDaysAgo}
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       SELECT
         DATE("createdAt") as date,
         COUNT(*) as "newContacts"
-      FROM "Contact"
+      FROM "contacts"
       WHERE "storeId" = ${storeId}
         AND "createdAt" >= ${thirtyDaysAgo}
       GROUP BY DATE("createdAt")

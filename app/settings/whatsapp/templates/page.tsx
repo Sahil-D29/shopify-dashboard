@@ -68,7 +68,7 @@ export default function TemplateLibraryPage() {
   const syncTemplates = async () => {
     setSyncing(true);
     try {
-      const response = await fetch('/api/settings/whatsapp/templates/sync', {
+      const response = await fetch('/api/whatsapp/templates/sync', {
         method: 'POST',
       });
       
@@ -78,7 +78,7 @@ export default function TemplateLibraryPage() {
       setLastSync(new Date());
       await loadTemplates();
       
-      toast.success(`Synced ${result.synced || 0} templates. ${result.statusChanges || 0} status changes.`);
+      toast.success(`Synced ${result.syncedCount || 0} templates from Meta.`);
     } catch (error) {
       console.error('[TemplateLibrary] Sync failed', error);
       toast.error('Failed to sync templates from Meta');
@@ -89,7 +89,7 @@ export default function TemplateLibraryPage() {
 
   const importFromMeta = async () => {
     try {
-      const response = await fetch('/api/settings/whatsapp/templates/import', {
+      const response = await fetch('/api/whatsapp/templates/sync', {
         method: 'POST',
       });
       
@@ -98,7 +98,7 @@ export default function TemplateLibraryPage() {
       const result = await response.json();
       await loadTemplates();
       
-      toast.success(`Imported ${result.imported || 0} templates, updated ${result.updated || 0}`);
+      toast.success(`Imported ${result.added || 0} templates and updated ${result.updated || 0}.`);
     } catch (error) {
       console.error('[TemplateLibrary] Import failed', error);
       toast.error('Failed to import templates from Meta');

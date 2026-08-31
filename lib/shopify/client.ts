@@ -1,6 +1,6 @@
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 
 interface ShopifyConfig {
   shop: string;
