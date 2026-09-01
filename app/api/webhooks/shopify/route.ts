@@ -88,6 +88,24 @@ export async function POST(request: NextRequest) {
     console.error('[webhooks][shopify] Campaign attribution error:', error);
   }
 
+  // Send real utility WhatsApp notifications for Shopify order/shipping events.
+  // Missing templates or customer phone numbers are logged, not simulated.
+  try {
+    if (
+      topic === 'orders/create' ||
+      topic === 'orders/fulfilled' ||
+      topic === 'orders/partially_fulfilled' ||
+      topic === 'orders/cancelled' ||
+      topic === 'fulfillments/create' ||
+      topic === 'fulfillments/update'
+    ) {
+      const { sendShopifyWhatsAppNotification } = await import('@/lib/whatsapp/shopify-notifications');
+      await sendShopifyWhatsAppNotification(topic, payload, shopHeader);
+    }
+  } catch (error) {
+    console.error('[webhooks][shopify] WhatsApp notification error:', error);
+  }
+
   // ─── Handle app/uninstalled ─────────────────────────────────
   if (topic === 'app/uninstalled' && shopHeader) {
     try {
