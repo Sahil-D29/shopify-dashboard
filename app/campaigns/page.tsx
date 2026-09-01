@@ -240,7 +240,7 @@ export default function CampaignsPage() {
             <DollarSign className="w-7 h-7 opacity-80" />
           </div>
           <div className="text-3xl font-bold">₹{(stats.totalRevenue / 1000).toFixed(0)}k</div>
-          <div className="text-sm opacity-90">Revenue Generated</div>
+          <div className="text-sm opacity-90">Dorza Attributed Revenue</div>
         </div>
 
         <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl p-5 text-white shadow-lg">

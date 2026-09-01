@@ -500,7 +500,7 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
           </div>
         ) : (
           customers.slice(0, 5).map(customer => (
-            <div key={customer.id} className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)] gap-3 rounded-lg border border-transparent p-3 hover:border-gray-200 hover:bg-gray-50 sm:grid-cols-[2.75rem_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4 sm:p-4">
+            <div key={customer.id} className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3 rounded-lg border border-transparent p-3 hover:border-gray-200 hover:bg-gray-50 sm:gap-4 sm:p-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-stone-500 to-stone-700 text-sm font-semibold text-white">
                 {formatCustomerInitials(customer)}
               </div>
@@ -509,16 +509,6 @@ function RecentCustomersCard({ customers }: RecentCustomersCardProps) {
                   {formatPersonName(customer.first_name, customer.last_name, 'Customer')}
                 </p>
                 <p className="break-words [overflow-wrap:anywhere] text-xs text-gray-500">{customer.email ?? 'No email provided'}</p>
-              </div>
-              <div className="col-start-2 text-left sm:col-auto sm:text-right">
-                <p className="text-xs font-medium text-gray-500">Orders</p>
-                <p className="text-sm font-semibold text-gray-900">{customer.orders_count ?? 0}</p>
-              </div>
-              <div className="col-start-2 text-left sm:col-auto sm:text-right">
-                <p className="text-xs font-medium text-gray-500">Total spent</p>
-                <p className="text-sm font-semibold text-gray-900">
-                  {formatCurrency(customer.total_spent)}
-                </p>
               </div>
             </div>
           ))

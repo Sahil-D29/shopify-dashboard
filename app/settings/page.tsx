@@ -1467,11 +1467,11 @@ function SettingsContent() {
                   </div>
                 )}
 
-                <div className="flex items-center space-x-4 pt-6">
+                <div className="flex min-w-0 flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:gap-4">
                   <button
                     onClick={handleWaTest}
                     disabled={waTesting}
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
                   >
                     {waTesting ? (
                       <span className="flex items-center">
@@ -1488,7 +1488,7 @@ function SettingsContent() {
                   <button
                     onClick={handleWaSave}
                     disabled={waLoading}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-base font-semibold rounded-lg shadow-lg shadow-green-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-base font-semibold rounded-lg shadow-lg shadow-green-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed sm:min-w-0 sm:flex-1"
                   >
                     {waLoading ? (
                       <span className="flex items-center justify-center">
@@ -1501,7 +1501,7 @@ function SettingsContent() {
                   </button>
                   <button
                     onClick={handleWaReset}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                    className="w-full px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors sm:w-auto"
                   >
                     Reset
                   </button>

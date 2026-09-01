@@ -13,7 +13,6 @@ import {
   Target,
   Users,
   MessageCircle,
-  GitBranch,
   RefreshCw,
   TrendingUp,
   DollarSign,
@@ -94,13 +93,6 @@ interface ConversationOverview {
   closed: number;
 }
 
-interface JourneyOverview {
-  total: number;
-  active: number;
-  totalEnrollments: number;
-  completedEnrollments: number;
-}
-
 interface MessageOverview {
   total: number;
   inbound: number;
@@ -112,7 +104,6 @@ interface WhatsAppOverview {
   campaigns: CampaignOverview;
   contacts: ContactOverview;
   conversations: ConversationOverview;
-  journeys: JourneyOverview;
   messages: MessageOverview;
 }
 
@@ -261,7 +252,6 @@ function AnalyticsContent() {
   const c = overview?.campaigns;
   const contacts = overview?.contacts;
   const conv = overview?.conversations;
-  const journeys = overview?.journeys;
 
   // Funnel data
   const funnelSteps = [
@@ -314,7 +304,7 @@ function AnalyticsContent() {
       </div>
 
       {/* KPI Row 1 — Campaign Performance */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Messages Sent</CardTitle>
@@ -413,18 +403,6 @@ function AnalyticsContent() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Journeys</CardTitle>
-            <GitBranch className="h-4 w-4 text-pink-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{journeys?.active ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {formatNumber(journeys?.totalEnrollments ?? 0)} enrollments
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Message Delivery Funnel */}
