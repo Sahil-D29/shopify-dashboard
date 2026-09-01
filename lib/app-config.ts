@@ -172,6 +172,17 @@ const SIDEBAR_VISIBILITY_MODES = new Set<SidebarVisibilityModeValue>([
   'SELECTED',
 ]);
 
+const REVIEW_SAFE_DEFAULT_HIDDEN_ITEMS: SidebarItemKey[] = [
+  'orders',
+  'abandoned_carts',
+  'email_marketing',
+  'flows',
+  'settings_team',
+  'settings_custom_events',
+  'settings_api_keys',
+  'settings_webhooks',
+];
+
 export function isSidebarVisibilityMode(value: unknown): value is SidebarVisibilityModeValue {
   return typeof value === 'string' && SIDEBAR_VISIBILITY_MODES.has(value as SidebarVisibilityModeValue);
 }
@@ -182,7 +193,8 @@ export async function getSidebarVisibilityRules(): Promise<SidebarVisibilityRule
       orderBy: { itemKey: 'asc' },
     });
 
-    return rows
+    const savedRules = new Map<SidebarItemKey, SidebarVisibilityRuleValue>(
+      rows
       .filter(row => isSidebarItemKey(row.itemKey))
       .map(row => ({
         itemKey: row.itemKey as SidebarItemKey,
@@ -193,7 +205,26 @@ export async function getSidebarVisibilityRules(): Promise<SidebarVisibilityRule
         updatedBy: row.updatedBy ?? null,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
-      }));
+      }))
+      .map(rule => [rule.itemKey, rule] as const),
+    );
+
+    for (const itemKey of REVIEW_SAFE_DEFAULT_HIDDEN_ITEMS) {
+      if (!savedRules.has(itemKey)) {
+        savedRules.set(itemKey, {
+          itemKey,
+          mode: 'HIDDEN',
+          allowedStoreIds: [],
+          allowedUserIds: [],
+          notes: 'Reviewer-safe default. Super Admin can override.',
+          updatedBy: null,
+        });
+      }
+    }
+
+    return ALL_SIDEBAR_KEYS
+      .filter(key => savedRules.has(key))
+      .map(key => savedRules.get(key)!);
   } catch (error) {
     console.warn('[app-config] Failed to load SidebarVisibilityRule, defaulting to everyone:', error);
     return [];
