@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { useSearchParams, useRouter, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import { ApiKeysManager } from '@/components/settings/ApiKeysManager';
 import { StoreConfigManager, ShopifyConfig } from '@/lib/store-config';
 import { getWindowStorage } from '@/lib/window-storage';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { toast } from 'sonner';
 import { InviteTeamMemberModal } from '@/components/team/InviteTeamMemberModal';
 import { PermissionsEditor } from '@/components/team/PermissionsEditor';
@@ -63,14 +64,14 @@ const getErrorMessage = (error: unknown, fallback: string): string =>
 
 // Settings sections configuration
 const settingsSections = [
-  { id: 'shop', name: 'Shop', icon: ShoppingBag, description: 'Shopify integration' },
-  { id: 'wa', name: 'WA', icon: MessageSquare, description: 'WhatsApp configuration' },
-  { id: 'team', name: 'Team', icon: Users, description: 'Team management', requiresOwner: true },
-  { id: 'custom-events', name: 'Custom Events', icon: Webhook, description: 'Define custom events' },
-  { id: 'api-keys', name: 'API Keys', icon: Key, description: 'Manage API keys' },
+  { id: 'shop', name: 'Shop', icon: ShoppingBag, description: 'Shopify integration', visibilityKey: 'settings_shop' },
+  { id: 'wa', name: 'WA', icon: MessageSquare, description: 'WhatsApp configuration', visibilityKey: 'settings_whatsapp' },
+  { id: 'team', name: 'Team', icon: Users, description: 'Team management', requiresOwner: true, visibilityKey: 'settings_team' },
+  { id: 'custom-events', name: 'Custom Events', icon: Webhook, description: 'Define custom events', visibilityKey: 'settings_custom_events' },
+  { id: 'api-keys', name: 'API Keys', icon: Key, description: 'Manage API keys', visibilityKey: 'settings_api_keys' },
   { id: 'integrations', name: 'Integrations', icon: LinkIcon, description: 'Third-party apps', disabled: true },
   { id: 'payments', name: 'Payments', icon: CreditCard, description: 'Payment settings', disabled: true },
-  { id: 'webhooks', name: 'Webhooks', icon: Settings, description: 'Webhook configuration' },
+  { id: 'webhooks', name: 'Webhooks', icon: Settings, description: 'Webhook configuration', visibilityKey: 'settings_webhooks' },
   { id: 'notifications', name: 'Notifications', icon: Bell, description: 'Alert settings', disabled: true },
 ];
 
@@ -78,6 +79,7 @@ function SettingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { currentStore, stores, refreshStores, switchStore } = useTenant();
+  const { featureFlags } = useAppConfig();
   const [activeSection, setActiveSection] = useState('shop');
   const [activeTab, setActiveTab] = useState('shopify');
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
@@ -129,6 +131,16 @@ function SettingsContent() {
   const [registerPin, setRegisterPin] = useState('');
   const [registerResult, setRegisterResult] = useState<{ success: boolean; message: string } | null>(null);
   const [settingsStatus, setSettingsStatus] = useState<{ shopifyConfigured: boolean; whatsappConfigured: boolean; settingsCompleted: boolean; missingConfigs: string[] } | null>(null);
+  const hiddenSettingKeys = useMemo(
+    () => new Set(featureFlags.disabledItems || []),
+    [featureFlags.disabledItems],
+  );
+  const visibleSettingsSections = useMemo(
+    () => settingsSections.filter(section =>
+      !section.disabled && (!section.visibilityKey || !hiddenSettingKeys.has(section.visibilityKey)),
+    ),
+    [hiddenSettingKeys],
+  );
 
   // Check access permissions
   useEffect(() => {
@@ -297,17 +309,20 @@ function SettingsContent() {
 
     const setupParam = searchParams.get('setup');
     const tabParam = searchParams.get('tab');
+    const sectionParam = searchParams.get('section');
     const successParam = searchParams.get('success');
     const errorParam = searchParams.get('error');
     
     setIsSetupMode(setupParam === 'true');
     
-    if (tabParam === 'whatsapp') {
+    if (sectionParam && visibleSettingsSections.some(section => section.id === sectionParam)) {
+      setActiveSection(sectionParam);
+    } else if (tabParam === 'whatsapp') {
       setActiveTab('whatsapp');
-      setActiveSection('wa');
+      if (visibleSettingsSections.some(section => section.id === 'wa')) setActiveSection('wa');
     } else if (tabParam === 'shopify') {
       setActiveTab('shopify');
-      setActiveSection('shop');
+      if (visibleSettingsSections.some(section => section.id === 'shop')) setActiveSection('shop');
     }
     
     // Handle OAuth success/error
@@ -330,7 +345,7 @@ function SettingsContent() {
       toast.success('Store connected successfully!');
       refreshStores();
       setActiveTab('shopify');
-      setActiveSection('shop');
+      if (visibleSettingsSections.some(section => section.id === 'shop')) setActiveSection('shop');
       // Clean URL
       const cleanUrl = new URL(window.location.href);
       cleanUrl.search = isSetupMode ? '?setup=true' : '';
@@ -339,10 +354,10 @@ function SettingsContent() {
       toast.error(`Connection failed: ${searchParams.get('message') || errorParam}`);
       if (tabParam === 'whatsapp') {
         setActiveTab('whatsapp');
-        setActiveSection('wa');
+        if (visibleSettingsSections.some(section => section.id === 'wa')) setActiveSection('wa');
       } else {
         setActiveTab('shopify');
-        setActiveSection('shop');
+        if (visibleSettingsSections.some(section => section.id === 'shop')) setActiveSection('shop');
       }
     }
 
@@ -357,7 +372,7 @@ function SettingsContent() {
 
     // Check settings status
     checkSettingsStatus();
-  }, [searchParams, refreshStores, hasAccess]);
+  }, [searchParams, refreshStores, hasAccess, visibleSettingsSections, isSetupMode]);
 
   // Reload the WhatsApp config (and "Connected" state) whenever the active
   // store changes — the config is stored per-store, and on first mount
@@ -694,15 +709,15 @@ function SettingsContent() {
     const oauthError = searchParams.get('error');
     if (oauthError) {
       setWaResult({ success: false, message: decodeURIComponent(oauthError) });
-      setActiveSection('wa');
+      if (visibleSettingsSections.some(section => section.id === 'wa')) setActiveSection('wa');
       return;
     }
 
     if (searchParams.get('connected') === 'true') {
       setEmbeddedConnected(true);
-      setActiveSection('wa');
+      if (visibleSettingsSections.some(section => section.id === 'wa')) setActiveSection('wa');
     }
-  }, [searchParams]);
+  }, [searchParams, visibleSettingsSections]);
 
   // WhatsApp functions
   const handleWaTest = async () => {
@@ -818,11 +833,23 @@ function SettingsContent() {
   };
 
   // ✅ ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  useEffect(() => {
+    if (visibleSettingsSections.length === 0) return;
+    if (!visibleSettingsSections.some(section => section.id === activeSection)) {
+      const fallback = visibleSettingsSections[0].id;
+      setActiveSection(fallback);
+      if (fallback === 'shop') setActiveTab('shopify');
+      else if (fallback === 'wa') setActiveTab('whatsapp');
+    }
+  }, [activeSection, visibleSettingsSections]);
+
   // Sync activeSection with activeTab for backward compatibility
   useEffect(() => {
-    if (activeTab === 'shopify') setActiveSection('shop');
-    else if (activeTab === 'whatsapp') setActiveSection('wa');
-  }, [activeTab]);
+    const sectionId = activeTab === 'shopify' ? 'shop' : activeTab === 'whatsapp' ? 'wa' : null;
+    if (sectionId && visibleSettingsSections.some(section => section.id === sectionId)) {
+      setActiveSection(sectionId);
+    }
+  }, [activeTab, visibleSettingsSections]);
 
   // ✅ NOW we can have early returns AFTER all hooks
   // Show loading while checking access (but don't block)
@@ -841,6 +868,7 @@ function SettingsContent() {
 
   // Handle section change
   const handleSectionChange = (sectionId: string) => {
+    if (!visibleSettingsSections.some(section => section.id === sectionId)) return;
     setActiveSection(sectionId);
     if (sectionId === 'shop') setActiveTab('shopify');
     else if (sectionId === 'wa') setActiveTab('whatsapp');
@@ -865,10 +893,7 @@ function SettingsContent() {
 
         {/* Settings Menu Items - Enhanced */}
         <nav className="flex-1 px-4 py-6 space-y-2">
-          {settingsSections.filter(s => {
-            // Show all non-disabled sections (Team tab is always visible now)
-            return !s.disabled;
-          }).map((section) => {
+          {visibleSettingsSections.map((section) => {
             const Icon = section.icon;
             const isActive = activeSection === section.id;
             return (
@@ -938,10 +963,7 @@ function SettingsContent() {
         {/* Compact navigation used until the wide settings sidebar fits. */}
         <div className="hide-scrollbar overflow-x-auto border-b border-gray-200 bg-white px-4 xl:hidden">
           <div className="flex min-w-max gap-1">
-            {settingsSections.filter(s => {
-              // Show all non-disabled sections (Team tab is always visible now)
-              return !s.disabled;
-            }).map((section) => {
+            {visibleSettingsSections.map((section) => {
               const Icon = section.icon;
               return (
                 <button

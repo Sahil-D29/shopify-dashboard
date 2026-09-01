@@ -28,7 +28,7 @@ import { useToast } from '@/lib/hooks/useToast';
 import { cn } from '@/lib/utils';
 
 type Mode = 'EVERYONE' | 'HIDDEN' | 'SELECTED';
-type Group = 'main' | 'email';
+type Group = 'main' | 'email' | 'settings';
 
 interface CatalogItem {
   key: string;
@@ -142,6 +142,7 @@ export default function AdminSidebarVisibilityPage() {
     () => ({
       main: catalog.filter(item => item.group === 'main'),
       email: catalog.filter(item => item.group === 'email'),
+      settings: catalog.filter(item => item.group === 'settings'),
     }),
     [catalog],
   );
@@ -247,6 +248,24 @@ export default function AdminSidebarVisibilityPage() {
       <VisibilityPanel
         title="Email Marketing"
         items={grouped.email}
+        rules={rules}
+        stores={stores}
+        users={users}
+        storeQueries={storeQueries}
+        userQueries={userQueries}
+        onStoreQueryChange={(itemKey, value) =>
+          setStoreQueries(prev => ({ ...prev, [itemKey]: value }))
+        }
+        onUserQueryChange={(itemKey, value) =>
+          setUserQueries(prev => ({ ...prev, [itemKey]: value }))
+        }
+        onUpdate={updateRule}
+        onToggle={toggleSelectedId}
+      />
+
+      <VisibilityPanel
+        title="Settings Sections"
+        items={grouped.settings}
         rules={rules}
         stores={stores}
         users={users}
