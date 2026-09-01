@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import { JOURNEY_NODE_CATALOG } from './nodeCatalog';
 import type { JourneyNodeData } from './nodes';
 import { isUnifiedTriggerEnabled } from '@/lib/featureFlags';
@@ -250,11 +251,6 @@ const journeyBlocks = [
   },
 ];
 
-const JOURNEY_BLOCK_COUNT = journeyBlocks.reduce(
-  (total, group) => total + group.blocks.length,
-  0
-);
-
 interface SidebarSectionProps {
   title: string;
   count: number;
@@ -292,6 +288,8 @@ interface JourneySidebarProps {
 }
 
 export function JourneySidebar({ className }: JourneySidebarProps) {
+  const { featureFlags } = useAppConfig();
+  const abandonedCartsHidden = featureFlags.disabledItems.includes('abandoned_carts');
   const [segments, setSegments] = useState<SegmentSummary[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsError, setSegmentsError] = useState<string | null>(null);
@@ -543,8 +541,22 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
   const collectionCount = collections.length;
   const metafieldCount = metafields.length;
 
+  const visibleJourneyBlocks = useMemo(() => {
+    return journeyBlocks
+      .map(group => ({
+        ...group,
+        blocks: group.blocks.filter(block => !abandonedCartsHidden || block.subtype !== 'cart_abandoned'),
+      }))
+      .filter(group => group.blocks.length > 0);
+  }, [abandonedCartsHidden]);
+
+  const journeyBlockCount = useMemo(
+    () => visibleJourneyBlocks.reduce((total, group) => total + group.blocks.length, 0),
+    [visibleJourneyBlocks]
+  );
+
   const groupBlocks = useMemo(() => {
-    return journeyBlocks.map(group => ({
+    return visibleJourneyBlocks.map(group => ({
       ...group,
       blocks: group.blocks.map(block => {
         const catalogNode = JOURNEY_NODE_CATALOG.flatMap(category => category.nodes).find(
@@ -557,7 +569,7 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
         } satisfies (typeof block) & { description?: string; variant?: PaletteVariant };
       }),
     }));
-  }, []);
+  }, [visibleJourneyBlocks]);
 
   const toggleSection = (key: keyof typeof sectionOpen) => {
     setSectionOpen(prev => ({
@@ -585,7 +597,7 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
         <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden pb-6 px-2 custom-scrollbar min-w-[200px]">
             <SidebarSection
               title="Journey Blocks"
-              count={JOURNEY_BLOCK_COUNT}
+              count={journeyBlockCount}
               isOpen={sectionOpen.journeyBlocks}
               onToggle={() => toggleSection('journeyBlocks')}
             >

@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/lib/hooks/useToast';
+import { useAppConfig } from '@/components/providers/AppConfigProvider';
 import type {
   Campaign,
   CampaignMessageContent,
@@ -184,6 +185,7 @@ const defaultCampaignData: CampaignFormData = {
 export default function CampaignWizard({ campaignId, onComplete }: CampaignWizardProps) {
   const router = useRouter();
   const toast = useToast();
+  const { featureFlags } = useAppConfig();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
@@ -194,6 +196,15 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
   const isEditMode = Boolean(campaignId);
   const [showPresets, setShowPresets] = useState(!isEditMode);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const abandonedCartsHidden = featureFlags.disabledItems.includes('abandoned_carts');
+  const availablePresets = useMemo(
+    () => CAMPAIGN_PRESETS.filter(preset => !abandonedCartsHidden || preset.triggerEvent !== 'cart_abandoned'),
+    [abandonedCartsHidden],
+  );
+  const availableTriggerEvents = useMemo(
+    () => TRIGGER_EVENTS.filter(event => !abandonedCartsHidden || event.value !== 'cart_abandoned'),
+    [abandonedCartsHidden],
+  );
 
   const applyPreset = useCallback((preset: CampaignPreset) => {
     setSelectedPresetId(preset.id);
@@ -405,7 +416,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
           </div>
           <div className="space-y-4">
             {PRESET_CATEGORIES.map(cat => {
-              const presets = CAMPAIGN_PRESETS.filter(p => p.category === cat.key);
+              const presets = availablePresets.filter(p => p.category === cat.key);
               if (presets.length === 0) return null;
               return (
                 <div key={cat.key}>
@@ -453,7 +464,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
         <div className="mx-8 mt-4 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-blue-800">
             <CheckCircle2 className="w-4 h-4 text-blue-600" />
-            Preset applied: <strong>{CAMPAIGN_PRESETS.find(p => p.id === selectedPresetId)?.name}</strong>
+            Preset applied: <strong>{availablePresets.find(p => p.id === selectedPresetId)?.name}</strong>
             <span className="text-blue-600">— customize any field below</span>
           </div>
           <button
@@ -467,13 +478,13 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
 
       {/* Body */}
       <div className="min-h-[500px] p-4 sm:p-6 lg:p-8">
-        {currentStep === 1 && <StepDetails campaignData={campaignData} setCampaignData={setCampaignData} />}
+        {currentStep === 1 && <StepDetails campaignData={campaignData} setCampaignData={setCampaignData} availableTriggerEvents={availableTriggerEvents} />}
         {currentStep === 2 && (
           <StepAudience campaignData={campaignData} setCampaignData={setCampaignData} segments={segments} loadingSegments={loadingSegments} estimatedReach={estimatedReach} onCreateSegment={loadSegments} />
         )}
         {currentStep === 3 && <StepMessage campaignData={campaignData} setCampaignData={setCampaignData} />}
         {currentStep === 4 && <StepSchedule campaignData={campaignData} setCampaignData={setCampaignData} />}
-        {currentStep === 5 && <StepReview campaignData={campaignData} estimatedReach={estimatedReach} selectedSegments={selectedSegments} />}
+        {currentStep === 5 && <StepReview campaignData={campaignData} estimatedReach={estimatedReach} selectedSegments={selectedSegments} availableTriggerEvents={availableTriggerEvents} />}
       </div>
 
       {/* Footer */}
@@ -514,7 +525,15 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
 /* ═══════════════════════════════════════════
    Step 1 — Campaign Details + Goal Tracking + Trigger Config
    ═══════════════════════════════════════════ */
-function StepDetails({ campaignData, setCampaignData }: { campaignData: CampaignFormData; setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>> }) {
+function StepDetails({
+  campaignData,
+  setCampaignData,
+  availableTriggerEvents,
+}: {
+  campaignData: CampaignFormData;
+  setCampaignData: React.Dispatch<React.SetStateAction<CampaignFormData>>;
+  availableTriggerEvents: typeof TRIGGER_EVENTS;
+}) {
   const [showGoalTracking, setShowGoalTracking] = useState(campaignData.goalTracking?.enabled ?? false);
   const showTriggerConfig = campaignData.type === 'TRIGGER_BASED';
 
@@ -569,10 +588,10 @@ function StepDetails({ campaignData, setCampaignData }: { campaignData: Campaign
             <Label className="mb-2 block text-sm font-medium">Trigger Event *</Label>
             <select value={campaignData.triggerEvent ?? ''} onChange={e => setCampaignData(p => ({ ...p, triggerEvent: e.target.value as TriggerEvent }))} className="w-full rounded-lg border border-amber-300 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-400">
               <option value="">Select a trigger event...</option>
-              {TRIGGER_EVENTS.map(ev => <option key={ev.value} value={ev.value}>{ev.label}</option>)}
+              {availableTriggerEvents.map(ev => <option key={ev.value} value={ev.value}>{ev.label}</option>)}
             </select>
             {campaignData.triggerEvent && (
-              <p className="mt-1 text-xs text-amber-700">{TRIGGER_EVENTS.find(e => e.value === campaignData.triggerEvent)?.desc}</p>
+              <p className="mt-1 text-xs text-amber-700">{availableTriggerEvents.find(e => e.value === campaignData.triggerEvent)?.desc}</p>
             )}
           </div>
           <div>
@@ -1071,7 +1090,17 @@ function StepSchedule({ campaignData, setCampaignData }: { campaignData: Campaig
 /* ═══════════════════════════════════════════
    Step 5 — Review
    ═══════════════════════════════════════════ */
-function StepReview({ campaignData, selectedSegments, estimatedReach }: { campaignData: CampaignFormData; selectedSegments: CustomerSegment[]; estimatedReach: number }) {
+function StepReview({
+  campaignData,
+  selectedSegments,
+  estimatedReach,
+  availableTriggerEvents,
+}: {
+  campaignData: CampaignFormData;
+  selectedSegments: CustomerSegment[];
+  estimatedReach: number;
+  availableTriggerEvents: typeof TRIGGER_EVENTS;
+}) {
   const typeLabel = (type: CampaignType) => ({ ONE_TIME: 'One-Time', RECURRING: 'Recurring', DRIP: 'Drip', TRIGGER_BASED: 'Trigger-Based' }[type] ?? type);
 
   return (
@@ -1111,7 +1140,7 @@ function StepReview({ campaignData, selectedSegments, estimatedReach }: { campai
       {/* Trigger config review */}
       {campaignData.type === 'TRIGGER_BASED' && campaignData.triggerEvent && (
         <ReviewCard title="Trigger Configuration" icon={<Zap className="h-5 w-5 text-amber-600" />} items={[
-          { label: 'Trigger Event', value: TRIGGER_EVENTS.find(e => e.value === campaignData.triggerEvent)?.label ?? campaignData.triggerEvent },
+          { label: 'Trigger Event', value: availableTriggerEvents.find(e => e.value === campaignData.triggerEvent)?.label ?? campaignData.triggerEvent },
           { label: 'Delay', value: `${campaignData.triggerDelay ?? 0} minutes` },
         ]} />
       )}

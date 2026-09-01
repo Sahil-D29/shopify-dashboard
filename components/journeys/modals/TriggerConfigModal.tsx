@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
 import type { JourneyNodeData } from "@/components/journeys/builder/nodes";
 import type {
   DurationValue,
@@ -374,6 +375,8 @@ function buildMetaPayload(
 }
 
 export function TriggerConfigModal({ open, initialMeta, onClose, onSave }: TriggerConfigModalProps) {
+  const { featureFlags } = useAppConfig();
+  const abandonedCartsHidden = featureFlags.disabledItems.includes("abandoned_carts");
   const [segments, setSegments] = useState<SegmentOption[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsError, setSegmentsError] = useState<string | null>(null);
@@ -463,6 +466,17 @@ export function TriggerConfigModal({ open, initialMeta, onClose, onSave }: Trigg
       typeof initialMeta?.estimateError === "string" ? initialMeta.estimateError : null;
     setEstimateState({ loading: false, error: initialError });
   }, [initialMeta, open]);
+
+  const visibleTriggerCards = useMemo(
+    () =>
+      TRIGGER_CARD_DEFINITIONS.filter(
+        card =>
+          !abandonedCartsHidden ||
+          card.id !== "shopify_cart_abandoned" ||
+          selectedCard === "shopify_cart_abandoned",
+      ),
+    [abandonedCartsHidden, selectedCard],
+  );
 
   const handleSelectCard = (card: TriggerCards) => {
     setSelectedCard(card);
@@ -1438,7 +1452,7 @@ export function TriggerConfigModal({ open, initialMeta, onClose, onSave }: Trigg
         </p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {TRIGGER_CARD_DEFINITIONS.map(card => {
+        {visibleTriggerCards.map(card => {
           const Icon = card.icon;
           const isActive = selectedCard === card.id;
           return (
