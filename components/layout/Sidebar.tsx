@@ -48,8 +48,6 @@ const USER_PREFERENCES_KEY = 'user:preferences';
 const PRODUCTION_HIDDEN_FEATURES = new Set([
   'orders',
   'abandoned_carts',
-  'journeys',
-  'flows',
   'email_marketing',
   'email_campaigns',
   'email_templates',
