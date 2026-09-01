@@ -93,7 +93,7 @@ export async function proxy(request: NextRequest) {
     return res;
   }
 
-  const productionHiddenRoutes = ['/orders', '/abandoned-carts', '/journeys', '/flows', '/email'];
+  const productionHiddenRoutes = ['/orders', '/abandoned-carts', '/email'];
   if (productionHiddenRoutes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return NextResponse.redirect(new URL('/', request.url));
   }
