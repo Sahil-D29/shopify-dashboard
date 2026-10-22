@@ -358,9 +358,10 @@ export default function ContactsPage() {
             >
               <option value="ALL">All Sources</option>
               <option value="SHOPIFY">Shopify</option>
-              <option value="CSV">CSV Import</option>
+              <option value="CSV_IMPORT">CSV Import</option>
               <option value="MANUAL">Manual</option>
-              <option value="WHATSAPP">WhatsApp</option>
+              <option value="WHATSAPP_INBOUND">WhatsApp</option>
+              <option value="WEBHOOK">Webhook</option>
             </select>
           </div>
 

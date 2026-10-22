@@ -9,6 +9,7 @@ import {
   type CustomEventDef,
 } from '@/lib/constants/segment-fields';
 import type { SubFilterProperty, SubFilterPropertyType } from '@/lib/constants/sub-filter-properties';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface SegmentFieldsContextValue {
   /** Static fields + dynamic custom-event fields */
@@ -50,13 +51,14 @@ export function SegmentFieldsProvider({ children }: { children: React.ReactNode 
     if (currentStore?.id) headers['x-store-id'] = currentStore.id;
     fetch('/api/settings/custom-events', { headers })
       .then(res => (res.ok ? res.json() : { events: [] }))
-      .then((data: { events?: Array<{ eventName: string; displayName: string; properties?: Array<{ name: string; type?: string }> }> }) => {
+      .then((data: { events?: Array<{ eventName: string; displayName: string; properties?: Array<{ name: string; type?: string }>; sources?: EventSource[] }> }) => {
         if (cancelled) return;
         setCustomEvents(
           (data.events || []).map(e => ({
             eventName: e.eventName,
             displayName: e.displayName,
             properties: e.properties || [],
+            sources: e.sources || [],
           })),
         );
       })

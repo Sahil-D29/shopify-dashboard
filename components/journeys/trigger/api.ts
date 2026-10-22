@@ -7,8 +7,10 @@ import type {
 
 interface EventSummary {
   name: string;
+  label?: string;
   displayName?: string;
   recentCount?: number;
+  sources?: import('@/lib/types/event-source').EventSource[];
 }
 
 interface EventProperty {

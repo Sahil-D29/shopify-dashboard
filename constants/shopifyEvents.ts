@@ -8,7 +8,8 @@ export interface EnhancedShopifyEvent {
   id: string;
   label: string;
   description: string;
-  category: 'product' | 'order' | 'cart' | 'customer' | 'payment' | 'fulfillment' | 'engagement' | 'marketing';
+  category: 'product' | 'order' | 'cart' | 'customer' | 'payment' | 'fulfillment' | 'engagement' | 'marketing' | 'custom';
+  sources?: import('@/lib/types/event-source').EventSource[];
   properties?: ShopifyEventProperty[];
 }
 
@@ -456,13 +457,15 @@ export const mergeCustomEvents = (
     displayName: string;
     description?: string | null;
     properties?: Array<{ name: string; type: string; description?: string }>;
+    sources?: import('@/lib/types/event-source').EventSource[];
   }>
 ): Record<string, EnhancedShopifyEvent[]> => {
   const customEvents: EnhancedShopifyEvent[] = definitions.map((def) => ({
     id: `custom:${def.eventName}`,
     label: def.displayName,
     description: def.description || `Custom event: ${def.displayName}`,
-    category: 'custom' as unknown as EnhancedShopifyEvent['category'],
+    category: 'custom',
+    sources: def.sources || [],
     properties: (def.properties || []).map((p) => ({
       name: p.name,
       type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as ShopifyEventProperty['type'],

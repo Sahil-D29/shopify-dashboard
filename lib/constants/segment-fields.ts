@@ -1,3 +1,5 @@
+import type { EventSource } from '@/lib/types/event-source';
+
 export type SegmentFieldType = 'text' | 'number' | 'date' | 'tags' | 'boolean';
 
 export type EntityType = 'product' | 'campaign' | 'template' | 'segment' | 'journey' | 'collection' | 'country' | 'state' | 'flow' | 'agent' | 'custom_field';
@@ -14,6 +16,7 @@ export interface SegmentFieldOption {
   supportsSubFilters?: boolean;
   supportsTimeWindow?: boolean;
   supportsFrequency?: boolean;
+  sources?: EventSource[];
 }
 
 export const SEGMENT_FIELD_OPTIONS: SegmentFieldOption[] = [
@@ -257,6 +260,7 @@ export interface CustomEventDef {
   eventName: string;
   displayName: string;
   properties?: Array<{ name: string; type?: string }>;
+  sources?: EventSource[];
 }
 
 /** Generate dynamic segment field options from custom event definitions */
@@ -271,5 +275,6 @@ export function getCustomEventSegmentFields(
     supportsSubFilters: (event.properties?.length ?? 0) > 0,
     supportsTimeWindow: true,
     supportsFrequency: true,
+    sources: event.sources,
   }));
 }

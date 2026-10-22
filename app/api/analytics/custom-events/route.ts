@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { prisma } from '@/lib/prisma';
+import { getWebhookSourcesByEvent } from '@/lib/custom-events/sources';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,11 +29,16 @@ export async function GET(request: NextRequest) {
     const fromDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     // Build filter
+    const definitions = await prisma.customEventDefinition.findMany({
+      where: { storeId },
+      select: { eventName: true, displayName: true, eventCount: true, lastSeenAt: true },
+    });
+    const selectedNames = eventNameFilter
+      ? [eventNameFilter, `custom:${eventNameFilter}`]
+      : definitions.flatMap(definition => [definition.eventName, `custom:${definition.eventName}`]);
     const where: Record<string, unknown> = {
       storeId,
-      eventType: eventNameFilter
-        ? `custom:${eventNameFilter}`
-        : { startsWith: 'custom:' },
+      eventType: { in: selectedNames },
       createdAt: { gte: fromDate },
     };
 
@@ -47,19 +53,15 @@ export async function GET(request: NextRequest) {
     // Get total count
     const totalEvents = await prisma.storefrontEvent.count({ where });
 
-    // Get event definitions for display names
-    const definitions = await prisma.customEventDefinition.findMany({
-      where: { storeId },
-      select: { eventName: true, displayName: true, eventCount: true, lastSeenAt: true },
-    });
-
-    const defMap = new Map(definitions.map((d) => [`custom:${d.eventName}`, d]));
+    const defMap = new Map(definitions.flatMap(d => [[d.eventName, d] as const, [`custom:${d.eventName}`, d] as const]));
+    const sources = await getWebhookSourcesByEvent(storeId, definitions.map(def => def.eventName));
 
     const topEvents = eventCounts.map((ec) => ({
       eventType: ec.eventType,
       eventName: ec.eventType.replace('custom:', ''),
       displayName: defMap.get(ec.eventType)?.displayName || ec.eventType.replace('custom:', ''),
       count: ec._count.id,
+      sources: sources.get(ec.eventType.replace(/^custom:/, '')) || [],
     }));
 
     // Get daily trend data
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
       SELECT DATE("createdAt") as date, COUNT(*) as count
        FROM "storefront_events"
        WHERE "storeId" = ${storeId}
-         AND "eventType" LIKE 'custom:%'
+         AND "eventType" = ANY(${selectedNames})
          AND "createdAt" >= ${fromDate}
        GROUP BY DATE("createdAt")
        ORDER BY date ASC
@@ -90,6 +92,7 @@ export async function GET(request: NextRequest) {
           displayName: d.displayName,
           totalCount: d.eventCount,
           lastSeenAt: d.lastSeenAt,
+          sources: sources.get(d.eventName) || [],
         })),
       },
     });

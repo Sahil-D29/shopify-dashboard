@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const integration = await prisma.webhookIntegration.findUnique({
     where: { publicId },
-    select: { id: true, storeId: true, dataTypes: true, events: true, isActive: true, secretEnc: true },
+    select: { id: true, name: true, storeId: true, dataTypes: true, events: true, isActive: true, secretEnc: true },
   });
 
   if (!integration) {
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const result = await processInboundWebhook(
     {
       id: integration.id,
+      name: integration.name,
       storeId: integration.storeId,
       dataTypes: integration.dataTypes,
       events: integration.events,

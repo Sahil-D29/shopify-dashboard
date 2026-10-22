@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Webhook, Loader2, TrendingUp } from 'lucide-react';
 import { useTenant } from '@/lib/tenant/tenant-context';
 import dynamic from 'next/dynamic';
+import { EventSourceBadges } from '@/components/events/EventSourceBadges';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface TrendItem {
   date: string;
@@ -17,6 +19,7 @@ interface TopEvent {
   eventName: string;
   displayName: string;
   count: number;
+  sources?: EventSource[];
 }
 
 interface CustomEventsAnalytics {
@@ -29,6 +32,7 @@ interface CustomEventsAnalytics {
     displayName: string;
     totalCount: number;
     lastSeenAt: string | null;
+    sources?: EventSource[];
   }>;
 }
 
@@ -152,6 +156,7 @@ export function CustomEventsChart() {
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs font-mono">{event.eventName}</Badge>
                     <span className="text-muted-foreground">{event.displayName}</span>
+                    <EventSourceBadges sources={event.sources} />
                   </div>
                   <span className="font-medium">{event.count.toLocaleString()}</span>
                 </div>

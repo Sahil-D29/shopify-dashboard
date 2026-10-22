@@ -19,6 +19,7 @@ export interface Contact {
   optInStatus: 'OPTED_IN' | 'OPTED_OUT' | 'PENDING';
   lastMessageAt?: string | null;
   createdAt: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Hide synthetic alias keys (email:/nitro:) from the Phone column. */
@@ -37,10 +38,19 @@ interface ContactsTableProps {
 
 const sourceColors: Record<string, string> = {
   SHOPIFY: 'bg-green-50 text-green-700 border-green-200',
-  CSV: 'bg-purple-50 text-purple-700 border-purple-200',
+  CSV_IMPORT: 'bg-purple-50 text-purple-700 border-purple-200',
   MANUAL: 'bg-gray-50 text-gray-700 border-gray-200',
-  WHATSAPP: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  WHATSAPP_INBOUND: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  WEBHOOK: 'bg-sky-50 text-sky-700 border-sky-200',
 };
+
+function webhookSourceNames(contact: Contact): string[] {
+  const sources = contact.metadata?.webhookSources;
+  if (!sources || typeof sources !== 'object' || Array.isArray(sources)) return [];
+  return Object.values(sources as Record<string, unknown>)
+    .map(source => source && typeof source === 'object' && !Array.isArray(source) ? (source as Record<string, unknown>).name : null)
+    .filter((name): name is string => typeof name === 'string' && Boolean(name));
+}
 
 const optInColors: Record<string, string> = {
   OPTED_IN: 'bg-green-50 text-green-700 border-green-200',
@@ -119,8 +129,11 @@ export default function ContactsTable({
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn('text-xs', sourceColors[contact.source])}>
-                      {contact.source}
+                      {contact.source === 'WEBHOOK' ? 'Webhook' : contact.source}
                     </Badge>
+                    {webhookSourceNames(contact).map(name => (
+                      <Badge key={name} variant="outline" className="border-sky-200 bg-sky-50 text-xs text-sky-700">{name}</Badge>
+                    ))}
                     {contact.tags.slice(0, 2).map(tag => (
                       <Badge key={tag} variant="outline" className="max-w-full truncate bg-blue-50 text-xs text-blue-700">
                         {tag}
@@ -238,8 +251,11 @@ export default function ContactsTable({
                   variant="outline"
                   className={cn('text-xs', sourceColors[contact.source])}
                 >
-                  {contact.source}
+                  {contact.source === 'WEBHOOK' ? 'Webhook' : contact.source}
                 </Badge>
+                {webhookSourceNames(contact).map(name => (
+                  <Badge key={name} variant="outline" className="ml-1 border-sky-200 bg-sky-50 text-xs text-sky-700">{name}</Badge>
+                ))}
               </TableCell>
               <TableCell onClick={() => handleRowClick(contact.id)}>
                 <Badge

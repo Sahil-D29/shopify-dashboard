@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { getWebhookSourcesByEvent } from '@/lib/custom-events/sources';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface EventDefinition {
   name: string;
@@ -9,6 +11,7 @@ interface EventDefinition {
   label: string;
   description?: string;
   properties?: Array<{ key: string; type: 'string' | 'number' | 'boolean' }>;
+  sources?: EventSource[];
 }
 
 const BUILT_IN_EVENTS: EventDefinition[] = [
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest) {
         where: { storeId, isActive: true },
         orderBy: { displayName: 'asc' },
       });
+      const sources = await getWebhookSourcesByEvent(storeId, definitions.map(def => def.eventName));
 
       customEvents = definitions.map((def) => ({
         name: `custom:${def.eventName}`,
@@ -82,6 +86,7 @@ export async function GET(request: NextRequest) {
               type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : 'string') as 'string' | 'number' | 'boolean',
             }))
           : [],
+        sources: sources.get(def.eventName) || [],
       }));
     }
 

@@ -11,6 +11,8 @@ import {
 } from '@/constants/shopifyEvents';
 import { Input } from '@/components/ui/input';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { EventSourceBadges } from '@/components/events/EventSourceBadges';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface EventSelectorProps {
   selectedEventId?: string;
@@ -44,11 +46,12 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
           setCustomEvents(
             data.events
               .filter((e: { isActive: boolean }) => e.isActive)
-              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }> }) => ({
+              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }>; sources?: EventSource[] }) => ({
                 id: `custom:${e.eventName}`,
                 label: e.displayName,
                 description: e.description || `Custom event: ${e.displayName}`,
                 category: 'custom' as EnhancedShopifyEvent['category'],
+                sources: e.sources || [],
                 properties: (e.properties || []).map((p: { name: string; type: string; description?: string }) => ({
                   name: p.name,
                   type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as 'string' | 'number' | 'boolean' | 'date',
@@ -78,7 +81,8 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
       event =>
         event.label.toLowerCase().includes(lowerQuery) ||
         event.description.toLowerCase().includes(lowerQuery) ||
-        event.id.toLowerCase().includes(lowerQuery)
+        event.id.toLowerCase().includes(lowerQuery) ||
+        Boolean(event.sources?.some(source => source.name.toLowerCase().includes(lowerQuery)))
     );
     return [...builtInResults, ...customResults];
   }, [searchQuery, allEventsIncludingCustom, customEvents]);
@@ -164,8 +168,8 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
         className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2 transition-colors hover:bg-gray-50"
         data-rule-editor-focus={focusOnMount ? 'true' : undefined}
       >
-        <span className={selectedEvent ? 'text-gray-900' : 'text-gray-500'}>
-          {selectedEvent ? selectedEvent.label : placeholder ?? 'Select event...'}
+        <span className={selectedEvent ? 'flex min-w-0 items-center gap-2 text-gray-900' : 'text-gray-500'}>
+          {selectedEvent ? <><span className="truncate">{selectedEvent.label}</span><EventSourceBadges sources={selectedEvent.sources} limit={1} /></> : placeholder ?? 'Select event...'}
         </span>
         <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -208,6 +212,7 @@ export function EventSelector({ selectedEventId, onSelectEvent, placeholder, foc
                       >
                         <span className="flex items-center gap-2 font-medium text-gray-900">
                           {event.label}
+                          <EventSourceBadges sources={event.sources} />
                           {event.id.startsWith('custom:') && (
                             <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">
                               Custom

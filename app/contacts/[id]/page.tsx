@@ -56,6 +56,7 @@ interface ContactDetail {
   createdAt: string;
   updatedAt: string;
   events?: ContactEvent[];
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Hide synthetic alias keys (email:/nitro:) from the Phone field. */
@@ -66,10 +67,23 @@ function realPhone(phone?: string | null): string | null {
 
 const sourceColors: Record<string, string> = {
   SHOPIFY: 'bg-green-50 text-green-700 border-green-200',
-  CSV: 'bg-purple-50 text-purple-700 border-purple-200',
+  CSV_IMPORT: 'bg-purple-50 text-purple-700 border-purple-200',
   MANUAL: 'bg-gray-50 text-gray-700 border-gray-200',
-  WHATSAPP: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  WHATSAPP_INBOUND: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  WEBHOOK: 'bg-sky-50 text-sky-700 border-sky-200',
 };
+
+function webhookSourceNames(metadata?: Record<string, unknown> | null): string[] {
+  const sources = metadata?.webhookSources;
+  if (!sources || typeof sources !== 'object' || Array.isArray(sources)) return [];
+  return Object.values(sources as Record<string, unknown>)
+    .map(source => source && typeof source === 'object' && !Array.isArray(source) ? (source as Record<string, unknown>).name : null)
+    .filter((name): name is string => typeof name === 'string' && Boolean(name));
+}
+
+const eventLabel = (name: string) => name === 'abandoned_cart'
+  ? 'Abandoned Cart'
+  : name.replace(/^custom:/, '').replace(/[_/]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
 const optInColors: Record<string, string> = {
   OPTED_IN: 'bg-green-50 text-green-700 border-green-200',
@@ -280,8 +294,11 @@ export default function ContactDetailPage() {
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Badge variant="outline" className={cn('text-xs', sourceColors[contact.source])}>
-                  {contact.source}
+                  {contact.source === 'WEBHOOK' ? 'Webhook' : contact.source}
                 </Badge>
+                {webhookSourceNames(contact.metadata).map(name => (
+                  <Badge key={name} variant="outline" className="border-sky-200 bg-sky-50 text-xs text-sky-700">{name}</Badge>
+                ))}
                 <Badge variant="outline" className={cn('text-xs', optInColors[contact.optInStatus])}>
                   {optInLabels[contact.optInStatus]}
                 </Badge>
@@ -430,7 +447,14 @@ export default function ContactDetailPage() {
                         <MessageSquare className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900">{ev.eventType}</p>
+                        <p className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                          {eventLabel(ev.eventType)}
+                          {typeof ev.metadata?.webhookIntegrationName === 'string' && (
+                            <Badge variant="outline" className="border-sky-200 bg-sky-50 px-1.5 py-0 text-[9px] text-sky-700">
+                              {ev.metadata.webhookIntegrationName}
+                            </Badge>
+                          )}
+                        </p>
                         {title && <p className="truncate text-xs text-gray-500">{title}</p>}
                       </div>
                       <span className="shrink-0 whitespace-nowrap text-xs text-gray-400">

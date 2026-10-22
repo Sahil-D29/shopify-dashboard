@@ -18,6 +18,7 @@ import {
   type SegmentFieldOption,
 } from '@/lib/constants/segment-fields';
 import { useSegmentFields } from './segment-fields-context';
+import { EventSourceBadges } from '@/components/events/EventSourceBadges';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   User, ShoppingCart, Package, MessageCircle, Target,
@@ -50,7 +51,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
     const result: Record<string, SegmentFieldOption[]> = {};
     for (const [group, fields] of Object.entries(grouped)) {
       const matching = fields.filter(
-        f => f.label.toLowerCase().includes(term) || f.value.toLowerCase().includes(term) || group.toLowerCase().includes(term)
+        f => f.label.toLowerCase().includes(term) || f.value.toLowerCase().includes(term) || group.toLowerCase().includes(term) || Boolean(f.sources?.some(source => source.name.toLowerCase().includes(term)))
       );
       if (matching.length > 0) result[group] = matching;
     }
@@ -82,7 +83,10 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
           aria-expanded={open}
           className={cn('justify-between text-left font-normal', !value && 'text-muted-foreground', className)}
         >
-          <span className="truncate">{displayLabel}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate">{displayLabel}</span>
+            <EventSourceBadges sources={selectedField?.sources} limit={1} />
+          </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -178,6 +182,7 @@ export function FieldSelect({ value, onValueChange, className }: FieldSelectProp
                         >
                           <Check className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'opacity-100 text-primary' : 'opacity-0')} />
                           <span className="truncate">{field.label}</span>
+                          <EventSourceBadges sources={field.sources} limit={1} />
                           <span className="ml-auto flex items-center gap-1">
                             {field.supportsSubFilters && (
                               <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-normal">

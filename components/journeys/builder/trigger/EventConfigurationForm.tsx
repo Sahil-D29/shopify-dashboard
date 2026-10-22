@@ -13,6 +13,7 @@ import type { EnhancedShopifyEvent, ShopifyEventProperty } from '@/constants/sho
 import { getEnhancedEventById } from '@/constants/shopifyEvents';
 import { useToast } from '@/lib/hooks/useToast';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface EventConfigurationFormProps {
   rule: CleverTapStyleRule;
@@ -56,11 +57,12 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
           setCustomEventsCache(
             data.events
               .filter((e: { isActive: boolean }) => e.isActive)
-              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }> }) => ({
+              .map((e: { eventName: string; displayName: string; description?: string; properties?: Array<{ name: string; type: string; description?: string }>; sources?: EventSource[] }) => ({
                 id: `custom:${e.eventName}`,
                 label: e.displayName,
                 description: e.description || `Custom event: ${e.displayName}`,
                 category: 'custom' as EnhancedShopifyEvent['category'],
+                sources: e.sources || [],
                 properties: (e.properties || []).map((p: { name: string; type: string; description?: string }) => ({
                   name: p.name,
                   type: (p.type === 'number' ? 'number' : p.type === 'boolean' ? 'boolean' : p.type === 'date' ? 'date' : 'string') as 'string' | 'number' | 'boolean' | 'date',

@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { isValidEventName, isBuiltInEvent } from '@/lib/custom-events/validation';
 import { prisma } from '@/lib/prisma';
+import { getWebhookSourcesByEvent } from '@/lib/custom-events/sources';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +24,11 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, events });
+    const sources = await getWebhookSourcesByEvent(storeId, events.map(event => event.eventName));
+    return NextResponse.json({
+      success: true,
+      events: events.map(event => ({ ...event, sources: sources.get(event.eventName) || [] })),
+    });
   } catch (error) {
     console.error('[Custom Events] List error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

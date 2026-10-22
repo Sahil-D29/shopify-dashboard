@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { ENHANCED_SHOPIFY_EVENTS, type EnhancedShopifyEvent } from '@/constants/shopifyEvents';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { eventSourceSuffix } from '@/components/events/EventSourceBadges';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface CatalogEventSelectProps {
   value: string;
@@ -40,6 +42,7 @@ interface CustomEventDef {
   eventName: string;
   displayName: string;
   isActive?: boolean;
+  sources?: EventSource[];
 }
 
 /**
@@ -67,6 +70,7 @@ export function CatalogEventSelect({ value, onChange, id, className }: CatalogEv
               label: e.displayName || e.eventName,
               description: '',
               category: 'custom' as EnhancedShopifyEvent['category'],
+              sources: e.sources || [],
             })),
         );
       })
@@ -105,7 +109,7 @@ export function CatalogEventSelect({ value, onChange, id, className }: CatalogEv
         <optgroup key={group.key} label={group.label}>
           {group.events.map(event => (
             <option key={event.id} value={event.id}>
-              {event.label}
+              {event.label}{eventSourceSuffix(event.sources)}
             </option>
           ))}
         </optgroup>

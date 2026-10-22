@@ -8,6 +8,8 @@ import { X } from 'lucide-react';
 
 import { fetchEvents } from './api';
 import { useDebouncedValue } from './useDebouncedValue';
+import { EventSourceBadges } from '@/components/events/EventSourceBadges';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface EventSelectorProps {
   selectedEvents: string[];
@@ -17,7 +19,7 @@ interface EventSelectorProps {
 
 export function EventSelector({ selectedEvents, onChange, disabled }: EventSelectorProps) {
   const [query, setQuery] = useState('');
-  const [events, setEvents] = useState<Array<{ name: string; displayName?: string }>>([]);
+  const [events, setEvents] = useState<Array<{ name: string; label?: string; displayName?: string; sources?: EventSource[] }>>([]);
   const [loading, setLoading] = useState(false);
   const debouncedQuery = useDebouncedValue(query, 300);
 
@@ -109,7 +111,8 @@ export function EventSelector({ selectedEvents, onChange, disabled }: EventSelec
             >
               <div className="flex flex-col text-sm">
                 <span className="flex items-center gap-2">
-                  {event.displayName || event.name}
+                  {event.displayName || event.label || event.name}
+                  <EventSourceBadges sources={event.sources} />
                   {event.name.startsWith('custom:') && (
                     <span className="inline-flex items-center rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
                       Custom

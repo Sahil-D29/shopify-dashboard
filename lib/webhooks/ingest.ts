@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
+import { parseShiprocketAbandonedCart, webhookFingerprint } from '@/lib/webhooks/shiprocket';
 
 /**
  * Inbound webhook ingestion core (third party → Dorza).
@@ -25,6 +26,7 @@ import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 
 export interface IngestIntegration {
   id: string;
+  name: string;
   storeId: string;
   dataTypes: string[];
   events: string[];
@@ -59,6 +61,7 @@ export interface IngestResult {
   eventType: string;
   contactId?: string;
   error?: string;
+  duplicate?: boolean;
 }
 
 const asArray = (v: unknown): string[] =>
@@ -70,6 +73,11 @@ const asObject = (v: unknown): Record<string, unknown> =>
 const firstString = (...vals: unknown[]): string | undefined => {
   for (const v of vals) if (typeof v === 'string' && v.trim()) return v.trim();
   return undefined;
+};
+
+const validDate = (value: string): Date => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 /** Infer the event name from a variety of webhook payload shapes. */
@@ -88,7 +96,7 @@ function inferEventName(body: IngestPayload): string | undefined {
 function extractIncomingContact(body: IngestPayload): IncomingContact | null {
   const nested = (body.contact || (body as any).customer || (body as any).visitor || (body as any).user || (body as any).profile) as Record<string, unknown> | undefined;
   const src: Record<string, unknown> = nested && typeof nested === 'object' ? nested : (body as Record<string, unknown>);
-  const phone = firstString(src.phone, (src as any).phoneNumber, (src as any).mobile, (src as any).msisdn, (src as any).whatsapp);
+  const phone = firstString(src.phone, (src as any).phoneNumber, (src as any).phone_number, (src as any).mobile, (src as any).msisdn, (src as any).whatsapp);
   const email = firstString(src.email, (src as any).emailAddress, (src as any).email_address);
   if (!phone && !email) return null;
   return {
@@ -116,7 +124,7 @@ const isAliasPhone = (p?: string | null): boolean =>
 async function upsertContact(
   storeId: string,
   incoming: IncomingContact,
-  extra?: { fbp?: string; fbc?: string },
+  extra: { integration: IngestIntegration; receivedAt: string; fbp?: string; fbc?: string },
 ): Promise<string | null> {
   const rawPhone = incoming.phone ? normalizePhone(incoming.phone) : '';
   const email = incoming.email?.trim().toLowerCase() || undefined;
@@ -141,29 +149,44 @@ async function upsertContact(
   const tags = asArray(incoming.tags);
 
   // Find an existing contact to merge into.
-  let existing: { id: string; phone: string; customFields: unknown } | null = null;
+  let existing: { id: string; phone: string; customFields: unknown; metadata: unknown } | null = null;
   if (externalId) {
     existing = await prisma.contact.findFirst({
       where: { storeId, customFields: { path: ['nitro_id'], equals: externalId } },
-      select: { id: true, phone: true, customFields: true },
+      select: { id: true, phone: true, customFields: true, metadata: true },
     });
   }
   if (!existing && rawPhone) {
     existing = await prisma.contact.findUnique({
       where: { storeId_phone: { storeId, phone: rawPhone } },
-      select: { id: true, phone: true, customFields: true },
+      select: { id: true, phone: true, customFields: true, metadata: true },
     });
   }
   if (!existing && email) {
     existing = await prisma.contact.findFirst({
       where: { storeId, email },
-      select: { id: true, phone: true, customFields: true },
+      select: { id: true, phone: true, customFields: true, metadata: true },
     });
   }
 
   if (existing) {
     const mergedCf = { ...asObject(existing.customFields), ...incomingCf };
-    const data: any = { customFields: mergedCf };
+    const previousMetadata = asObject(existing.metadata);
+    const previousSources = asObject(previousMetadata.webhookSources);
+    const previousSource = asObject(previousSources[extra.integration.id]);
+    const metadata = {
+      ...previousMetadata,
+      webhookSources: {
+        ...previousSources,
+        [extra.integration.id]: {
+          integrationId: extra.integration.id,
+          name: extra.integration.name,
+          firstSeenAt: firstString(previousSource.firstSeenAt) || extra.receivedAt,
+          lastSeenAt: extra.receivedAt,
+        },
+      },
+    };
+    const data: any = { customFields: mergedCf, metadata };
     if (email) data.email = email;
     if (incoming.name) data.name = incoming.name;
     if (firstName) data.firstName = firstName;
@@ -195,6 +218,16 @@ async function upsertContact(
       optInStatus: 'PENDING',
       tags,
       customFields: incomingCf as any,
+      metadata: {
+        webhookSources: {
+          [extra.integration.id]: {
+            integrationId: extra.integration.id,
+            name: extra.integration.name,
+            firstSeenAt: extra.receivedAt,
+            lastSeenAt: extra.receivedAt,
+          },
+        },
+      } as any,
     },
     select: { id: true },
   });
@@ -225,10 +258,15 @@ const propType = (v: unknown): 'number' | 'boolean' | 'string' =>
 async function recordCustomEventDefinition(
   storeId: string,
   eventName: string,
+  displayName: string,
   properties?: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const incoming = properties ? Object.keys(properties) : [];
+    const incoming = properties
+      ? Object.entries(properties)
+          .filter(([, value]) => value == null || ['string', 'number', 'boolean'].includes(typeof value))
+          .map(([name]) => name)
+      : [];
     const existing = await prisma.customEventDefinition.findUnique({
       where: { storeId_eventName: { storeId, eventName } },
       select: { properties: true },
@@ -245,7 +283,7 @@ async function recordCustomEventDefinition(
       create: {
         storeId,
         eventName,
-        displayName: eventName,
+        displayName,
         category: 'webhook',
         eventCount: 1,
         lastSeenAt: new Date(),
@@ -262,6 +300,11 @@ interface ParsedInbound {
   eventName?: string;
   contact?: IncomingContact | null;
   properties?: Record<string, unknown>;
+  displayName?: string;
+  occurredAt?: string;
+  resourceId?: string;
+  resourceTitle?: string;
+  sessionId?: string;
 }
 
 /**
@@ -318,8 +361,11 @@ export async function processInboundWebhook(
 ): Promise<IngestResult> {
   const { storeId } = integration;
 
-  // 1. Try NitroCommerce's known shapes; 2. fall back to the generic contract.
-  let parsed = parseNitroCommerce(body);
+  // Shiprocket's cart shape has no event name, so recognize it before generic parsing.
+  const shiprocket = parseShiprocketAbandonedCart(body);
+  let parsed: ParsedInbound = shiprocket
+    ? { kind: 'event', ...shiprocket }
+    : parseNitroCommerce(body);
   if (parsed.kind === 'none') {
     const generic = extractIncomingContact(body);
     const genericEvent = inferEventName(body);
@@ -333,31 +379,63 @@ export async function processInboundWebhook(
   const eventType =
     parsed.kind === 'event' ? String(parsed.eventName) : parsed.kind === 'identify' ? 'identify' : 'unknown';
   const properties = parsed.properties || {};
+  const receivedAt = parsed.occurredAt || body.occurredAt || new Date().toISOString();
 
   try {
     // Upsert the contact (events carry a nested customer; identify carries the value).
     let contactId: string | null = null;
     if (parsed.contact) {
-      contactId = await upsertContact(storeId, parsed.contact, { fbp: body.fbp, fbc: body.fbc });
+      contactId = await upsertContact(storeId, parsed.contact, {
+        integration,
+        receivedAt,
+        fbp: body.fbp,
+        fbc: body.fbc,
+      });
     }
 
     if (parsed.kind === 'event' && parsed.eventName) {
       const eventName = parsed.eventName;
-      const resourceId = properties.resource_id != null ? String(properties.resource_id) : undefined;
+      const resourceId = parsed.resourceId || (properties.resource_id != null ? String(properties.resource_id) : undefined);
+      const fingerprint = webhookFingerprint(integration.id, eventName, body);
+      const duplicate = await prisma.storefrontEvent.findFirst({
+        where: {
+          storeId,
+          eventType: eventName,
+          metadata: { path: ['webhookFingerprint'], equals: fingerprint },
+        },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        return {
+          ok: true,
+          status: 'PROCESSED',
+          eventType,
+          contactId: contactId || undefined,
+          duplicate: true,
+        };
+      }
 
       await prisma.storefrontEvent.create({
         data: {
           storeId,
           customerId: contactId,
-          sessionId: firstString((body as any).userId, (properties as any).roaming_id) || `webhook_${Date.now()}`,
+          sessionId: parsed.sessionId || firstString((body as any).userId, (properties as any).roaming_id) || `webhook_${fingerprint.slice(0, 16)}`,
           eventType: eventName,
           resourceId: resourceId || null,
-          resourceTitle: firstString((properties as any).title) || null,
-          metadata: { ...properties, source: 'nitro' } as any,
+          resourceTitle: parsed.resourceTitle || firstString((properties as any).title) || null,
+          metadata: {
+            ...properties,
+            source: 'webhook',
+            webhookIntegrationId: integration.id,
+            webhookIntegrationName: integration.name,
+            webhookFingerprint: fingerprint,
+          } as any,
+          createdAt: validDate(receivedAt),
         },
       });
 
-      await recordCustomEventDefinition(storeId, eventName, properties);
+      await recordCustomEventDefinition(storeId, eventName, parsed.displayName || eventName, properties);
 
       // Journeys: canonical "an event happened" entry point. Skipped during
       // historical backfill so old events don't retroactively fire journeys.
@@ -365,7 +443,7 @@ export async function processInboundWebhook(
         await matchAndExecuteJourneys(`custom:${eventName}`, {
           shop: null,
           payload: { ...body, storeId, contactId },
-          receivedAt: body.occurredAt || new Date().toISOString(),
+          receivedAt,
         }).catch(err => console.warn('[ingest] journey match failed (non-fatal):', err));
       }
 

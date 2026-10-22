@@ -19,6 +19,8 @@ import { Switch } from '@/components/ui/switch';
 import { Plus, Trash2, Code, Loader2, Pencil, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTenant } from '@/lib/tenant/tenant-context';
+import { EventSourceBadges } from '@/components/events/EventSourceBadges';
+import type { EventSource } from '@/lib/types/event-source';
 
 interface EventProperty {
   name: string;
@@ -38,6 +40,7 @@ interface CustomEventDef {
   eventCount: number;
   lastSeenAt: string | null;
   createdAt: string;
+  sources?: EventSource[];
 }
 
 export function CustomEventsManager() {
@@ -234,7 +237,9 @@ export function CustomEventsManager() {
               <TableBody>
                 {events.map((event) => (
                   <TableRow key={event.id}>
-                    <TableCell className="font-medium">{event.displayName}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-2">{event.displayName}<EventSourceBadges sources={event.sources} /></span>
+                    </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{event.eventName}</code>
                     </TableCell>

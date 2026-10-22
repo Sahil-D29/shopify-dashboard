@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 import type { WaitForEventConfig } from "@/lib/types/delay-config";
 import type { OperatorType } from "@/lib/types/condition-config";
+import { EventSourceBadges } from "@/components/events/EventSourceBadges";
+import type { EventSource } from "@/lib/types/event-source";
 
 interface EventDefinition {
   name: string;
@@ -18,6 +20,7 @@ interface EventDefinition {
   label: string;
   description?: string;
   properties?: Array<{ key: string; type: string }>;
+  sources?: EventSource[];
 }
 
 type RawEventDefinition = {
@@ -26,6 +29,7 @@ type RawEventDefinition = {
   label?: string;
   description?: string;
   properties?: Array<{ key: string; type: string }>;
+  sources?: EventSource[];
 };
 
 type EventsResponse = {
@@ -67,8 +71,9 @@ export function EventSelector({ value, onChange, eventFilters = [], onFiltersCha
             label: event.label ?? event.name ?? "",
             ...(event.description !== undefined && { description: event.description }),
             ...(event.properties && event.properties.length > 0 && { properties: event.properties }),
+            sources: event.sources || [],
           }))
-          .filter((event): event is EventDefinition => Boolean(event.name));
+          .filter(event => Boolean(event.name));
         setEvents(mapped);
         setError(null);
       })
@@ -83,7 +88,7 @@ export function EventSelector({ value, onChange, eventFilters = [], onFiltersCha
     const query = searchQuery.trim().toLowerCase();
     if (!query) return events;
     return events.filter(event =>
-      [event.label, event.name, event.description, event.category]
+      [event.label, event.name, event.description, event.category, ...(event.sources || []).map(source => source.name)]
         .filter(Boolean)
         .some(field => field?.toLowerCase().includes(query)),
     );
@@ -156,7 +161,7 @@ export function EventSelector({ value, onChange, eventFilters = [], onFiltersCha
                     disabled={disabled}
                   >
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-[#1E293B]">{event.label}</p>
+                      <p className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">{event.label}<EventSourceBadges sources={event.sources} /></p>
                       <span className="rounded-full bg-[#E2E8F0] px-2 py-0.5 text-[11px] uppercase tracking-wide text-[#475569]">
                         {event.category}
                       </span>

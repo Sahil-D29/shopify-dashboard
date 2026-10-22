@@ -9,7 +9,8 @@
     "dev": "next dev --turbo -p 3002",
     "build": "npx prisma generate && next build",
     "start": "next start -p ${PORT:-3000}",
-    "db:push": "npx prisma db push"
+    "db:push": "npx prisma db push",
+    "test:webhooks": "tsx --test lib/webhooks/__tests__/*.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",
