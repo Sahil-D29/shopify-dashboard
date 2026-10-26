@@ -24,7 +24,8 @@ declare global {
 }
 
 export interface EmbeddedSignupResult {
-  code: string;
+  code?: string;
+  accessToken?: string;
   wabaId?: string;
   phoneNumberId?: string;
 }
@@ -121,6 +122,7 @@ export function launchWhatsAppEmbeddedSignup(opts: {
   return new Promise<EmbeddedSignupResult>((resolve, reject) => {
     let captured: { wabaId?: string; phoneNumberId?: string } = {};
     let authCode: string | undefined;
+    let accessToken: string | undefined;
     let settled = false;
     let graceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -130,10 +132,15 @@ export function launchWhatsAppEmbeddedSignup(opts: {
     };
 
     const resolveSignup = () => {
-      if (settled || !authCode) return;
+      if (settled || (!authCode && !accessToken)) return;
       settled = true;
       cleanup();
-      resolve({ code: authCode, wabaId: captured.wabaId, phoneNumberId: captured.phoneNumberId });
+      resolve({
+        code: authCode,
+        accessToken,
+        wabaId: captured.wabaId,
+        phoneNumberId: captured.phoneNumberId,
+      });
     };
 
     const rejectSignup = (error: Error) => {
@@ -144,7 +151,7 @@ export function launchWhatsAppEmbeddedSignup(opts: {
     };
 
     const settleWhenReady = () => {
-      if (!authCode || settled) return;
+      if ((!authCode && !accessToken) || settled) return;
       if (captured.wabaId && captured.phoneNumberId) {
         resolveSignup();
         return;
@@ -162,7 +169,7 @@ export function launchWhatsAppEmbeddedSignup(opts: {
           phoneNumberId: info.phoneNumberId || captured.phoneNumberId,
         };
         settleWhenReady();
-      } else if (!authCode) {
+      } else if (!authCode && !accessToken) {
         rejectSignup(
           new Error(
             info.errorMessage ||
@@ -181,11 +188,13 @@ export function launchWhatsAppEmbeddedSignup(opts: {
         FB.login(
           (response: FBLoginResponse) => {
             const code = response?.authResponse?.code;
-            if (!code) {
-              rejectSignup(new Error('WhatsApp signup was cancelled or returned no authorization code.'));
+            const token = response?.authResponse?.accessToken;
+            if (!code && !token) {
+              rejectSignup(new Error('WhatsApp signup was cancelled or returned no authorization credential.'));
               return;
             }
             authCode = code;
+            accessToken = token;
             settleWhenReady();
           },
           {

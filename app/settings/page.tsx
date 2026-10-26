@@ -634,6 +634,18 @@ function SettingsContent() {
       });
       const data = await res.json();
 
+      if (data.fallback === 'redirect_oauth') {
+        const fallbackRes = await fetch('/api/whatsapp/embedded-signup', {
+          headers: currentStore?.id ? { 'x-store-id': currentStore.id } : {},
+        });
+        const fallbackData = await fallbackRes.json();
+        if (!fallbackRes.ok || !fallbackData.loginUrl) {
+          throw new Error(fallbackData.error || 'Failed to continue WhatsApp authorization');
+        }
+        window.location.assign(fallbackData.loginUrl);
+        return;
+      }
+
       if (data.success && data.configured) {
         setEmbeddedConnected(true);
         setWaResult({

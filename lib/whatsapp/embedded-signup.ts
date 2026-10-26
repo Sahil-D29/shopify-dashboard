@@ -52,6 +52,29 @@ export async function exchangeCodeForToken(code: string, redirectUri?: string): 
   return { accessToken: data.access_token, expiresIn: data.expires_in };
 }
 
+/** Validate a browser-provided Meta token before trusting or persisting it. */
+export async function validateEmbeddedSignupToken(accessToken: string): Promise<void> {
+  if (!META_APP_ID || !META_APP_SECRET) {
+    throw new Error('Meta app credentials are not configured');
+  }
+
+  const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
+  const response = await fetch(
+    graphUrl(`${META_GRAPH_API_VERSION}/debug_token`, appToken, { input_token: accessToken }),
+    { headers: { Authorization: `Bearer ${appToken}` } },
+  );
+  const payload = await response.json();
+  const tokenData = payload?.data;
+  if (
+    !response.ok ||
+    payload?.error ||
+    !tokenData?.is_valid ||
+    String(tokenData.app_id || '') !== String(META_APP_ID)
+  ) {
+    throw new Error('Meta returned an invalid signup token');
+  }
+}
+
 /**
  * Fetch WABAs and phone numbers granted by the token.
  *

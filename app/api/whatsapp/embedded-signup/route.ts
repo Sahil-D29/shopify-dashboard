@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-import { getEmbeddedSignupUrl, exchangeCodeForToken, fetchWABAInfo, saveWhatsAppConfig } from '@/lib/whatsapp/embedded-signup';
+import { getEmbeddedSignupUrl, exchangeCodeForToken, fetchWABAInfo, saveWhatsAppConfig, validateEmbeddedSignupToken } from '@/lib/whatsapp/embedded-signup';
 import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const storeId = await resolveStoreId(request, session.user.id);
 
     const body = await request.json();
-    const { code, wabaId, phoneNumberId, signupToken } = body;
+    const { code, accessToken: browserAccessToken, wabaId, phoneNumberId, signupToken } = body;
 
     // Handle second step: user selected a WABA from a previous multi-option response
     if (signupToken && wabaId && phoneNumberId) {
@@ -127,8 +127,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, configured: true });
     }
 
-    if (!code) {
-      return NextResponse.json({ error: 'Authorization code required' }, { status: 400 });
+    if (!code && !browserAccessToken) {
+      return NextResponse.json({ error: 'Authorization credential required' }, { status: 400 });
     }
 
     // Popup flow (FB JS SDK with config_id) sends wabaId+phoneNumberId alongside
@@ -138,7 +138,17 @@ export async function POST(request: NextRequest) {
     const redirectUri = isPopupFlow
       ? undefined
       : `${process.env.NEXTAUTH_URL || request.nextUrl.origin}/api/whatsapp/embedded-signup/callback`;
-    const { accessToken } = await exchangeCodeForToken(code, redirectUri);
+    let accessToken: string;
+    try {
+      if (!code) throw new Error('No authorization code returned');
+      accessToken = (await exchangeCodeForToken(code, redirectUri)).accessToken;
+    } catch (exchangeError) {
+      // Some Meta JS SDK responses include a directly usable access token. It
+      // avoids redirect_uri mismatches, but must be verified against our app.
+      if (!browserAccessToken) throw exchangeError;
+      await validateEmbeddedSignupToken(browserAccessToken);
+      accessToken = browserAccessToken;
+    }
 
     // Happy path: the popup's session-info listener already returned the
     // business' WABA id + phone number id, so save immediately.
@@ -186,6 +196,16 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Embedded signup error:', error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Signup failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Signup failed';
+    const requiresRedirectFallback = /redirect_uri|verification code/i.test(message);
+    return NextResponse.json(
+      {
+        error: requiresRedirectFallback
+          ? 'Meta requires one more authorization step to finish connecting.'
+          : message,
+        ...(requiresRedirectFallback ? { fallback: 'redirect_oauth' } : {}),
+      },
+      { status: requiresRedirectFallback ? 409 : 500 },
+    );
   }
 }
