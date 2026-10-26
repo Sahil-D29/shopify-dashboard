@@ -86,7 +86,7 @@ import { JourneyEdge } from './JourneyEdge';
 import { JourneyNodeInspector } from './JourneyNodeInspector';
 import { JourneySettingsDrawer } from './JourneySettingsDrawer';
 import { journeyNodeTypes, type JourneyNodeData } from './nodes';
-import { JourneySidebar } from './JourneySidebar';
+import { JourneySidebar, type JourneySidebarNodePayload } from './JourneySidebar';
 import { JourneyToolbar } from './JourneyToolbar';
 import { JOURNEY_NODE_CATALOG } from './nodeCatalog';
 import TriggerConfigModal from '../modals/TriggerConfigModal';
@@ -420,7 +420,7 @@ function summariseExperimentConfig(config: ExperimentConfig): string {
 }
 
 const edgeTypes = { journey: JourneyEdge as any };
-const DEFAULT_FIT_VIEW_OPTIONS = { padding: 0.1 } as const;
+const DEFAULT_FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
 const DEFAULT_EDGE_OPTIONS = { type: 'journey', animated: true } as const;
 
 const jsonEquals = (left: unknown, right: unknown): boolean => {
@@ -1559,16 +1559,6 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
   const journeyFetchControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      const panel = sidebarPanelRef.current;
-      if (panel && !panel.isCollapsed()) {
-        panel.collapse();
-      }
-      setIsSidebarCollapsed(true);
-    });
-  }, []);
-
-  useEffect(() => {
     const panel = inspectorPanelRef.current;
     if (panel) {
       setIsInspectorCollapsed(panel.isCollapsed());
@@ -2066,27 +2056,8 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
     [setEdges]
   );
 
-  const onDrop = useCallback(
-    (event: DragEvent) => {
-      event.preventDefault();
-      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
-      if (!isCanvasReady || !reactFlowBounds) return;
-
-      const transfer = event.dataTransfer?.getData('application/reactflow');
-      if (!transfer) return;
-
-      const parsed = JSON.parse(transfer) as Partial<JourneyNodeData> & { subtype?: string; meta?: JsonMap };
-
-      let position = { x: 360, y: 240 };
-      try {
-        position = reactFlow.screenToFlowPosition({
-          x: event.clientX ?? 0,
-          y: event.clientY ?? 0,
-        });
-      } catch (error) {
-        console.warn('Falling back to default drop position', error);
-      }
-
+  const addPaletteNode = useCallback(
+    (parsed: Partial<JourneyNodeData> & { subtype?: string; meta?: JsonMap }, position: { x: number; y: number }) => {
       const id = `node_${crypto.randomUUID()}`;
       const catalogNode = JOURNEY_NODE_CATALOG.flatMap(category => category.nodes).find(
         node => node.subtype === parsed.subtype
@@ -2138,7 +2109,56 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
       setNodes(nds => nds.concat(newNode));
       setSelectedNodeId(id);
     },
-    [isCanvasReady, reactFlow, setNodes, setSelectedNodeId, unifiedTriggerEnabled]
+    [setNodes, unifiedTriggerEnabled]
+  );
+
+  const onDrop = useCallback(
+    (event: DragEvent) => {
+      event.preventDefault();
+      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!isCanvasReady || !reactFlowBounds) return;
+
+      const transfer = event.dataTransfer?.getData('application/reactflow');
+      if (!transfer) return;
+
+      const parsed = JSON.parse(transfer) as Partial<JourneyNodeData> & { subtype?: string; meta?: JsonMap };
+
+      let position = { x: 360, y: 240 };
+      try {
+        position = reactFlow.screenToFlowPosition({
+          x: event.clientX ?? 0,
+          y: event.clientY ?? 0,
+        });
+      } catch (error) {
+        console.warn('Falling back to default drop position', error);
+      }
+
+      addPaletteNode(parsed, position);
+    },
+    [addPaletteNode, isCanvasReady, reactFlow]
+  );
+
+  const handleSidebarAddNode = useCallback(
+    (payload: JourneySidebarNodePayload) => {
+      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!isCanvasReady || !reactFlowBounds) return;
+
+      let position = { x: 360, y: 240 };
+      try {
+        position = reactFlow.screenToFlowPosition({
+          x: reactFlowBounds.left + reactFlowBounds.width / 2,
+          y: reactFlowBounds.top + reactFlowBounds.height / 2,
+        });
+      } catch (error) {
+        console.warn('Falling back to default node position', error);
+      }
+
+      addPaletteNode(payload, position);
+      if (isMobile) {
+        setLeftSidebarOpen(false);
+      }
+    },
+    [addPaletteNode, isCanvasReady, isMobile, reactFlow]
   );
 
   const onDragOver = useCallback((event: DragEvent) => {
@@ -2185,7 +2205,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
     if (nodes.length <= 3) {
       requestAnimationFrame(() => {
         try {
-          instance.fitView({ padding: 0.3, duration: 200 });
+          instance.fitView({ padding: 0.3, maxZoom: 1, duration: 200 });
         } catch (error) {
           console.warn('Unable to auto-fit view', error);
         }
@@ -3700,7 +3720,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <JourneySidebar className="h-full" />
+                <JourneySidebar className="h-full" onAddNode={handleSidebarAddNode} />
               </div>
             </aside>
 
@@ -3824,20 +3844,20 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
           >
             <Panel
               ref={sidebarPanelRef}
-              defaultSize={6}
-              minSize={15}
+              defaultSize={20}
+              minSize={20}
               maxSize={32}
               collapsible
-              collapsedSize={6}
+              collapsedSize={0}
               className="flex h-full flex-col overflow-hidden"
             >
-              <JourneySidebar className="h-full" />
+              <JourneySidebar className="h-full" onAddNode={handleSidebarAddNode} />
             </Panel>
 
             <ResizeHandle />
 
             <Panel
-              defaultSize={selectedNodeId ? 52 : 68}
+              defaultSize={52}
               minSize={28}
               className="flex h-full min-w-0 flex-col bg-white transition-[flex-grow,flex-basis,width] duration-200 ease-in-out"
             >

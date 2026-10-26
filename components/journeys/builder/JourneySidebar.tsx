@@ -38,6 +38,14 @@ import { fallbackMessage } from '@/lib/utils/errors';
 
 type JsonMap = Record<string, unknown>;
 
+export type JourneySidebarNodePayload = JsonMap & {
+  variant: JourneyNodeData['variant'];
+  subtype: string;
+  label: string;
+  description?: string;
+  meta?: JsonMap;
+};
+
 interface SegmentSummary {
   id: string;
   name: string;
@@ -285,9 +293,10 @@ const SidebarSection = ({ title, count, isOpen, onToggle, children }: SidebarSec
 
 interface JourneySidebarProps {
   className?: string;
+  onAddNode?: (payload: JourneySidebarNodePayload) => void;
 }
 
-export function JourneySidebar({ className }: JourneySidebarProps) {
+export function JourneySidebar({ className, onAddNode }: JourneySidebarProps) {
   const { featureFlags } = useAppConfig();
   const abandonedCartsHidden = featureFlags.disabledItems.includes('abandoned_carts');
   const [segments, setSegments] = useState<SegmentSummary[]>([]);
@@ -614,23 +623,25 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
                         const tone = block.variant ? blockPalette[block.variant as PaletteVariant] : blockPalette[group.variant];
                         const variant = block.variant ?? group.variant;
                         const isWait = variant === 'wait';
+                        const payload: JourneySidebarNodePayload = {
+                          variant,
+                          subtype: block.subtype,
+                          label: block.label,
+                          description: block.description,
+                          meta: {
+                            ...((block.meta as JsonMap) || {}),
+                            label: block.label,
+                          },
+                        };
                         return (
-                          <div
+                          <button
+                            type="button"
                             key={`${group.id}_${block.subtype}_${block.label}`}
                             draggable
                             title={block.description}
-                            onDragStart={event =>
-                              handleDragStart(event, {
-                                variant,
-                                subtype: block.subtype,
-                                label: block.label,
-                                description: block.description,
-                                meta: {
-                                  ...((block.meta as JsonMap) || {}),
-                                  label: block.label,
-                                },
-                              })
-                            }
+                            aria-label={`Add ${block.label} to journey`}
+                            onClick={() => onAddNode?.(payload)}
+                            onDragStart={event => handleDragStart(event, payload)}
                             className={cn(
                               'group flex w-full cursor-grab items-center gap-2.5 border bg-white px-3 py-2 text-xs font-medium text-[#4A4139] shadow-sm transition duration-150 hover:-translate-y-0.5 hover:shadow-md',
                               isWait ? 'rounded-full' : 'rounded-lg'
@@ -644,7 +655,7 @@ export function JourneySidebar({ className }: JourneySidebarProps) {
                               <Icon className="h-3.5 w-3.5" />
                             </span>
                             <p className="text-[12px] font-semibold leading-snug truncate">{block.label}</p>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
