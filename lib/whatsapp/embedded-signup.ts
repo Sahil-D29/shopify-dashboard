@@ -82,7 +82,7 @@ export async function validateEmbeddedSignupToken(accessToken: string): Promise<
  * while older OAuth tokens expose owned WABAs through /me/businesses. We merge
  * both paths because /me/businesses is often empty for Embedded Signup tokens.
  */
-export async function fetchWABAInfo(accessToken: string): Promise<{
+export async function fetchWABAInfo(accessToken: string, hintedWabaIds: string[] = []): Promise<{
   businesses: Array<{
     id: string;
     name: string;
@@ -128,6 +128,13 @@ export async function fetchWABAInfo(accessToken: string): Promise<{
       })),
     });
   };
+
+  // The completion message is the most authoritative source for the selected
+  // account. Reconnect/coexistence tokens do not always list it on the generic
+  // business and token-debug discovery edges.
+  for (const wabaId of hintedWabaIds) {
+    await addWaba(wabaId).catch(() => undefined);
+  }
 
   if (META_APP_ID && META_APP_SECRET) {
     try {

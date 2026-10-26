@@ -18,6 +18,38 @@ test('parses Meta Embedded Signup FINISH data', () => {
   });
 });
 
+test('parses the existing WhatsApp Business App completion event', () => {
+  const result = parseEmbeddedSignupMessage('https://www.facebook.com', JSON.stringify({
+    type: 'WA_EMBEDDED_SIGNUP',
+    event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+    version: 3,
+    data: { waba_id: 'waba-existing' },
+  }));
+
+  assert.deepEqual(result, {
+    event: 'FINISH',
+    wabaId: 'waba-existing',
+    phoneNumberId: undefined,
+    errorMessage: undefined,
+  });
+});
+
+test('parses nested v4 signup result identifiers', () => {
+  const result = parseEmbeddedSignupMessage('https://business.facebook.com', {
+    type: 'WA_EMBEDDED_SIGNUP',
+    event: 'FINISH',
+    data: {
+      result: {
+        whatsapp_business_account_id: 'waba-v4',
+        phone_number_id: 'phone-v4',
+      },
+    },
+  });
+
+  assert.equal(result?.wabaId, 'waba-v4');
+  assert.equal(result?.phoneNumberId, 'phone-v4');
+});
+
 test('rejects spoofed Embedded Signup messages', () => {
   const result = parseEmbeddedSignupMessage('https://facebook.com.evil.example', {
     type: 'WA_EMBEDDED_SIGNUP',

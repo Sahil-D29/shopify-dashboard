@@ -63,18 +63,30 @@ export function parseEmbeddedSignupMessage(
     const message = data as Record<string, any>;
     if (message.type !== 'WA_EMBEDDED_SIGNUP') return null;
 
-    const event = String(message.event || '').toUpperCase();
+    const rawEvent = String(message.event || '').toUpperCase();
+    // Existing WhatsApp Business App (coexistence/reconnect) signups use a
+    // longer completion event name and may only return the WABA id. Treat it
+    // as a normal finish; the backend can resolve its phone number via Graph.
+    const event = rawEvent === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+      ? 'FINISH'
+      : rawEvent;
     if (!['FINISH', 'CANCEL', 'ERROR'].includes(event)) return null;
+    const result = message.data?.result || message.data || {};
     return {
       event: event as EmbeddedSignupSessionInfo['event'],
-      wabaId: typeof message.data?.waba_id === 'string' ? message.data.waba_id : undefined,
+      wabaId:
+        typeof result.waba_id === 'string'
+          ? result.waba_id
+          : typeof result.whatsapp_business_account_id === 'string'
+            ? result.whatsapp_business_account_id
+            : undefined,
       phoneNumberId:
-        typeof message.data?.phone_number_id === 'string'
-          ? message.data.phone_number_id
+        typeof result.phone_number_id === 'string'
+          ? result.phone_number_id
           : undefined,
       errorMessage:
-        typeof message.data?.error_message === 'string'
-          ? message.data.error_message
+        typeof result.error_message === 'string'
+          ? result.error_message
           : undefined,
     };
   } catch {

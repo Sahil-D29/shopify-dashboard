@@ -157,7 +157,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch available WABAs
-    const { businesses } = await fetchWABAInfo(accessToken);
+    const { businesses } = await fetchWABAInfo(accessToken, wabaId ? [wabaId] : []);
+
+    console.info('[embedded-signup] account discovery', {
+      storeId,
+      browserReturnedWaba: Boolean(wabaId),
+      browserReturnedPhone: Boolean(phoneNumberId),
+      wabaCount: businesses.length,
+      phoneCount: businesses.reduce((sum, business) => sum + business.phoneNumbers.length, 0),
+    });
 
     if (businesses.length === 0) {
       return NextResponse.json({ error: 'No WhatsApp Business Accounts found' }, { status: 404 });
