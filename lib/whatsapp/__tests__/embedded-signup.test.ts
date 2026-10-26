@@ -81,9 +81,14 @@ test('uses the Embedded Signup v4 launch shape', () => {
     auth_type: 'rerequest',
     response_type: 'code',
     override_default_response_type: true,
-    extras: { setup: {} },
+    extras: {
+      setup: {},
+      version: 'v4',
+      sessionInfoVersion: '3',
+      featureType: 'whatsapp_business_app_onboarding',
+    },
   });
   const extras = options.extras as Record<string, unknown>;
-  assert.equal('sessionInfoVersion' in extras, false);
-  assert.equal('featureType' in extras, false);
+  assert.equal(extras.sessionInfoVersion, '3');
+  assert.equal(extras.featureType, 'whatsapp_business_app_onboarding');
 });
