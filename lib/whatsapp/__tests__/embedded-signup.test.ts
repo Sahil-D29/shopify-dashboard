@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseEmbeddedSignupMessage } from '../embedded-signup-client';
+import { buildEmbeddedSignupOptions, parseEmbeddedSignupMessage } from '../embedded-signup-client';
 import { extractWabaIdsFromTokenDebug } from '../embedded-signup-data';
 
 test('parses Meta Embedded Signup FINISH data', () => {
@@ -39,4 +39,19 @@ test('extracts and deduplicates WABA ids from granular scopes', () => {
   });
 
   assert.deepEqual(ids, ['waba-1', 'waba-2']);
+});
+
+test('uses the Embedded Signup v4 launch shape', () => {
+  const options = buildEmbeddedSignupOptions('config-v4');
+
+  assert.deepEqual(options, {
+    config_id: 'config-v4',
+    auth_type: 'rerequest',
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: { setup: {} },
+  });
+  const extras = options.extras as Record<string, unknown>;
+  assert.equal('sessionInfoVersion' in extras, false);
+  assert.equal('featureType' in extras, false);
 });

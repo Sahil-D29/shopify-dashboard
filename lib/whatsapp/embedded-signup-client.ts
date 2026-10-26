@@ -6,6 +6,18 @@
 const GRAPH_VERSION = 'v21.0';
 const SDK_SRC = 'https://connect.facebook.net/en_US/sdk.js';
 
+export function buildEmbeddedSignupOptions(configId: string): Record<string, unknown> {
+  return {
+    config_id: configId,
+    auth_type: 'rerequest',
+    response_type: 'code',
+    override_default_response_type: true,
+    // Embedded Signup v4 is driven by the Facebook Login for Business
+    // configuration. Do not send the retired v2/v3 flow parameters.
+    extras: { setup: {} },
+  };
+}
+
 interface FBLoginResponse {
   authResponse?: { code?: string; accessToken?: string } | null;
   status?: string;
@@ -156,7 +168,7 @@ export function launchWhatsAppEmbeddedSignup(opts: {
         resolveSignup();
         return;
       }
-      if (!graceTimer) graceTimer = setTimeout(resolveSignup, 5000);
+      if (!graceTimer) graceTimer = setTimeout(resolveSignup, 10000);
     };
 
     const sessionInfoListener = (event: MessageEvent) => {
@@ -197,12 +209,7 @@ export function launchWhatsAppEmbeddedSignup(opts: {
             accessToken = token;
             settleWhenReady();
           },
-          {
-            config_id: configId,
-            response_type: 'code',
-            override_default_response_type: true,
-            extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
-          },
+          buildEmbeddedSignupOptions(configId),
         );
       })
       .catch((error) => {

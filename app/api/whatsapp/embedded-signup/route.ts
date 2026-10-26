@@ -135,14 +135,10 @@ export async function POST(request: NextRequest) {
     // Popup flow (FB JS SDK with config_id) sends wabaId+phoneNumberId alongside
     // the code — no redirect_uri needed. The old redirect flow only sends `code`
     // and requires the redirect_uri to match exactly.
-    const isPopupFlow = !!(wabaId && phoneNumberId);
-    const redirectUri = isPopupFlow
-      ? undefined
-      : `${process.env.NEXTAUTH_URL || request.nextUrl.origin}/api/whatsapp/embedded-signup/callback`;
     let accessToken: string;
     try {
       if (!code) throw new Error('No authorization code returned');
-      accessToken = (await exchangeCodeForToken(code, redirectUri)).accessToken;
+      accessToken = (await exchangeCodeForToken(code)).accessToken;
     } catch (exchangeError) {
       // Some Meta JS SDK responses include a directly usable access token. It
       // avoids redirect_uri mismatches, but must be verified against our app.
@@ -208,15 +204,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Embedded signup error:', error);
     const message = error instanceof Error ? error.message : 'Signup failed';
-    const requiresRedirectFallback = /redirect_uri|verification code/i.test(message);
+    const invalidEmbeddedConfiguration = /redirect_uri|verification code/i.test(message);
     return NextResponse.json(
       {
-        error: requiresRedirectFallback
-          ? 'Meta requires one more authorization step to finish connecting.'
+        error: invalidEmbeddedConfiguration
+          ? 'The Meta login configuration is outdated or is not a WhatsApp Embedded Signup v4 configuration.'
           : message,
-        ...(requiresRedirectFallback ? { fallback: 'redirect_oauth' } : {}),
       },
-      { status: requiresRedirectFallback ? 409 : 500 },
+      { status: invalidEmbeddedConfiguration ? 409 : 500 },
     );
   }
 }
