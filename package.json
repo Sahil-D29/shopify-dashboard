@@ -10,7 +10,8 @@
     "build": "npx prisma generate && next build",
     "start": "next start -p ${PORT:-3000}",
     "db:push": "npx prisma db push",
-    "test:webhooks": "tsx --test lib/webhooks/__tests__/*.test.ts"
+    "test:webhooks": "tsx --test lib/webhooks/__tests__/*.test.ts",
+    "test:whatsapp": "tsx --test lib/whatsapp/__tests__/*.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",

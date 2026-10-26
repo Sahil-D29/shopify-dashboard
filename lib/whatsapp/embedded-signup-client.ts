@@ -1,21 +1,10 @@
 /**
  * Client-side WhatsApp Embedded Signup helper (Facebook JavaScript SDK).
- *
- * Implements the official WhatsApp Embedded Signup popup flow:
- *   1. Load + init the Facebook JS SDK (connect.facebook.net/en_US/sdk.js).
- *   2. Listen for the `message` event whose data is the WA_EMBEDDED_SIGNUP
- *      session info — this carries the customer's `waba_id` and
- *      `phone_number_id`.
- *   3. Call `FB.login()` with the Embedded Signup `config_id` and
- *      `response_type: 'code'` so the popup returns an exchangeable code.
- *   4. Resolve with `{ code, wabaId, phoneNumberId }` for the backend to
- *      exchange + persist.
- *
- * Requires env: NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_META_CONFIG_ID.
+ * Captures Meta's FINISH session data and returns an exchangeable auth code.
  */
 
 const GRAPH_VERSION = 'v21.0';
-const SDK_SRC = `https://connect.facebook.net/en_US/sdk.js`;
+const SDK_SRC = 'https://connect.facebook.net/en_US/sdk.js';
 
 interface FBLoginResponse {
   authResponse?: { code?: string; accessToken?: string } | null;
@@ -24,10 +13,7 @@ interface FBLoginResponse {
 
 interface FBStatic {
   init(params: { appId: string; cookie?: boolean; xfbml?: boolean; version: string }): void;
-  login(
-    cb: (response: FBLoginResponse) => void,
-    opts: Record<string, unknown>,
-  ): void;
+  login(cb: (response: FBLoginResponse) => void, opts: Record<string, unknown>): void;
 }
 
 declare global {
@@ -43,9 +29,49 @@ export interface EmbeddedSignupResult {
   phoneNumberId?: string;
 }
 
+export interface EmbeddedSignupSessionInfo {
+  event: 'FINISH' | 'CANCEL' | 'ERROR';
+  wabaId?: string;
+  phoneNumberId?: string;
+  errorMessage?: string;
+}
+
+/** Parse only postMessage payloads emitted by Meta's Embedded Signup UI. */
+export function parseEmbeddedSignupMessage(
+  origin: string,
+  payload: unknown,
+): EmbeddedSignupSessionInfo | null {
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    if (hostname !== 'facebook.com' && !hostname.endsWith('.facebook.com')) return null;
+
+    const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    if (!data || typeof data !== 'object') return null;
+    const message = data as Record<string, any>;
+    if (message.type !== 'WA_EMBEDDED_SIGNUP') return null;
+
+    const event = String(message.event || '').toUpperCase();
+    if (!['FINISH', 'CANCEL', 'ERROR'].includes(event)) return null;
+    return {
+      event: event as EmbeddedSignupSessionInfo['event'],
+      wabaId: typeof message.data?.waba_id === 'string' ? message.data.waba_id : undefined,
+      phoneNumberId:
+        typeof message.data?.phone_number_id === 'string'
+          ? message.data.phone_number_id
+          : undefined,
+      errorMessage:
+        typeof message.data?.error_message === 'string'
+          ? message.data.error_message
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 let sdkPromise: Promise<FBStatic> | null = null;
 
-/** Inject + initialize the Facebook JS SDK exactly once. */
+/** Inject and initialize the Facebook JS SDK exactly once. */
 export function loadFacebookSdk(appId: string): Promise<FBStatic> {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('Facebook SDK can only load in the browser'));
@@ -58,16 +84,12 @@ export function loadFacebookSdk(appId: string): Promise<FBStatic> {
       try {
         window.FB!.init({ appId, cookie: true, xfbml: false, version: GRAPH_VERSION });
         resolve(window.FB!);
-      } catch (err) {
-        reject(err);
+      } catch (error) {
+        reject(error);
       }
     };
 
-    // Avoid injecting the script twice.
-    if (document.getElementById('facebook-jssdk')) {
-      // Script tag exists but FB not ready yet — fbAsyncInit will fire.
-      return;
-    }
+    if (document.getElementById('facebook-jssdk')) return;
 
     const script = document.createElement('script');
     script.id = 'facebook-jssdk';
@@ -86,8 +108,9 @@ export function loadFacebookSdk(appId: string): Promise<FBStatic> {
 }
 
 /**
- * Launch the Embedded Signup popup and resolve with the auth code plus the
- * captured WABA + phone number ids.
+ * Launch Embedded Signup and resolve with the code plus selected WABA ids.
+ * Meta can return the FB.login callback just before its FINISH postMessage, so
+ * the listener stays alive for a short grace period to avoid losing those ids.
  */
 export function launchWhatsAppEmbeddedSignup(opts: {
   appId: string;
@@ -97,43 +120,73 @@ export function launchWhatsAppEmbeddedSignup(opts: {
 
   return new Promise<EmbeddedSignupResult>((resolve, reject) => {
     let captured: { wabaId?: string; phoneNumberId?: string } = {};
+    let authCode: string | undefined;
+    let settled = false;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const sessionInfoListener = (event: MessageEvent) => {
-      // Only trust messages from Facebook's domain.
-      if (!event.origin || !/\.facebook\.com$/.test(new URL(event.origin).hostname)) {
+    const cleanup = () => {
+      window.removeEventListener('message', sessionInfoListener);
+      if (graceTimer) clearTimeout(graceTimer);
+    };
+
+    const resolveSignup = () => {
+      if (settled || !authCode) return;
+      settled = true;
+      cleanup();
+      resolve({ code: authCode, wabaId: captured.wabaId, phoneNumberId: captured.phoneNumberId });
+    };
+
+    const rejectSignup = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const settleWhenReady = () => {
+      if (!authCode || settled) return;
+      if (captured.wabaId && captured.phoneNumberId) {
+        resolveSignup();
         return;
       }
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data?.type === 'WA_EMBEDDED_SIGNUP') {
-          // data.event: 'FINISH' | 'CANCEL' | 'ERROR'
-          if (data.event === 'FINISH' || data.data) {
-            captured = {
-              wabaId: data.data?.waba_id,
-              phoneNumberId: data.data?.phone_number_id,
-            };
-          }
-        }
-      } catch {
-        // Non-JSON messages are not ours — ignore.
+      if (!graceTimer) graceTimer = setTimeout(resolveSignup, 5000);
+    };
+
+    const sessionInfoListener = (event: MessageEvent) => {
+      const info = parseEmbeddedSignupMessage(event.origin, event.data);
+      if (!info) return;
+
+      if (info.event === 'FINISH') {
+        captured = {
+          wabaId: info.wabaId || captured.wabaId,
+          phoneNumberId: info.phoneNumberId || captured.phoneNumberId,
+        };
+        settleWhenReady();
+      } else if (!authCode) {
+        rejectSignup(
+          new Error(
+            info.errorMessage ||
+              (info.event === 'CANCEL'
+                ? 'WhatsApp signup was cancelled.'
+                : 'Meta could not complete WhatsApp signup.'),
+          ),
+        );
       }
     };
 
     window.addEventListener('message', sessionInfoListener);
 
-    const cleanup = () => window.removeEventListener('message', sessionInfoListener);
-
     loadFacebookSdk(appId)
       .then((FB) => {
         FB.login(
           (response: FBLoginResponse) => {
-            cleanup();
             const code = response?.authResponse?.code;
             if (!code) {
-              reject(new Error('WhatsApp signup was cancelled or returned no authorization code.'));
+              rejectSignup(new Error('WhatsApp signup was cancelled or returned no authorization code.'));
               return;
             }
-            resolve({ code, wabaId: captured.wabaId, phoneNumberId: captured.phoneNumberId });
+            authCode = code;
+            settleWhenReady();
           },
           {
             config_id: configId,
@@ -143,9 +196,10 @@ export function launchWhatsAppEmbeddedSignup(opts: {
           },
         );
       })
-      .catch((err) => {
-        cleanup();
-        reject(err);
+      .catch((error) => {
+        rejectSignup(
+          error instanceof Error ? error : new Error('Failed to start WhatsApp signup.'),
+        );
       });
   });
 }
