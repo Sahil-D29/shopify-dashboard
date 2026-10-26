@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       }
       pendingSignups.delete(signupToken);
       await saveWhatsAppConfig(storeId, wabaId, phoneNumberId, pending.accessToken);
+      await trySubscribeApp(wabaId, pending.accessToken);
       await tryRegisterNumber(phoneNumberId, pending.accessToken);
       return NextResponse.json({ success: true, configured: true });
     }
@@ -154,6 +155,7 @@ export async function POST(request: NextRequest) {
     // business' WABA id + phone number id, so save immediately.
     if (wabaId && phoneNumberId) {
       await saveWhatsAppConfig(storeId, wabaId, phoneNumberId, accessToken);
+      await trySubscribeApp(wabaId, accessToken);
       await tryRegisterNumber(phoneNumberId, accessToken);
       return NextResponse.json({ success: true, configured: true });
     }
@@ -165,9 +167,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No WhatsApp Business Accounts found' }, { status: 404 });
     }
 
+    const businessesWithPhones = businesses.filter((business) => business.phoneNumbers.length > 0);
+    if (businessesWithPhones.length === 0) {
+      return NextResponse.json(
+        { error: 'WhatsApp accounts were found, but Meta did not grant access to any phone numbers. Assign your Facebook user Full control for the WhatsApp account and try again.' },
+        { status: 404 },
+      );
+    }
+
     // If only one WABA with one phone, auto-configure
-    if (businesses.length === 1 && businesses[0].phoneNumbers.length === 1) {
-      const biz = businesses[0];
+    if (businessesWithPhones.length === 1 && businessesWithPhones[0].phoneNumbers.length === 1) {
+      const biz = businessesWithPhones[0];
       await saveWhatsAppConfig(
         storeId,
         biz.wabaId || biz.id,
@@ -175,6 +185,7 @@ export async function POST(request: NextRequest) {
         accessToken,
         biz.name
       );
+      await trySubscribeApp(biz.wabaId || biz.id, accessToken);
       await tryRegisterNumber(biz.phoneNumbers[0].id, accessToken);
       return NextResponse.json({ success: true, configured: true, businessName: biz.name, phoneNumber: biz.phoneNumbers[0].displayPhoneNumber });
     }
@@ -191,7 +202,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       configured: false,
-      businesses,
+      businesses: businessesWithPhones,
       signupToken: token,
     });
   } catch (error) {
@@ -207,5 +218,16 @@ export async function POST(request: NextRequest) {
       },
       { status: requiresRedirectFallback ? 409 : 500 },
     );
+  }
+}
+
+async function trySubscribeApp(wabaId: string, accessToken: string): Promise<void> {
+  try {
+    await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${wabaId}/subscribed_apps`, accessToken), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    });
+  } catch {
+    // Non-fatal: the connection can still be saved and retried later.
   }
 }

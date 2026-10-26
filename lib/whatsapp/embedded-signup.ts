@@ -144,15 +144,17 @@ export async function fetchWABAInfo(accessToken: string): Promise<{
   try {
     const businessData = await graphGet('me/businesses', accessToken, { fields: 'id,name' });
     for (const business of businessData?.data || []) {
-      const wabaData = await graphGet(
-        `${business.id}/owned_whatsapp_business_accounts`,
-        accessToken,
-        { fields: 'id,name' },
-      );
-      for (const waba of wabaData?.data || []) {
-        await addWaba(String(waba.id), waba.name || business.name, String(business.id)).catch(
-          () => undefined,
-        );
+      for (const edge of ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts']) {
+        const wabaData = await graphGet(
+          `${business.id}/${edge}`,
+          accessToken,
+          { fields: 'id,name' },
+        ).catch(() => ({ data: [] }));
+        for (const waba of wabaData?.data || []) {
+          await addWaba(String(waba.id), waba.name || business.name, String(business.id)).catch(
+            () => undefined,
+          );
+        }
       }
     }
   } catch {

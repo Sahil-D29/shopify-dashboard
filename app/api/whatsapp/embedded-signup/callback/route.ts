@@ -23,6 +23,17 @@ async function tryRegisterNumber(phoneNumberId: string, accessToken: string): Pr
   }
 }
 
+async function trySubscribeApp(wabaId: string, accessToken: string): Promise<void> {
+  try {
+    await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${wabaId}/subscribed_apps`, accessToken), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    });
+  } catch {
+    // Non-fatal: the connection can still be saved and retried later.
+  }
+}
+
 /**
  * Facebook redirects here after the user grants access in the OAuth dialog.
  *
@@ -70,8 +81,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Auto-select the first WABA + phone number
-    const biz = businesses[0];
+    // Old or test WABAs can be returned before the active account.
+    const biz = businesses.find((business) => business.phoneNumbers.length > 0);
+    if (!biz) {
+      return NextResponse.redirect(
+        `${settingsUrl}&error=${encodeURIComponent('WhatsApp accounts were found, but Meta did not grant access to any phone numbers. In Meta Business Settings, assign your user Full control for the WhatsApp account and try again.')}`
+      );
+    }
     const phone = biz.phoneNumbers?.[0];
 
     if (!biz.wabaId && !biz.id) {
@@ -93,6 +109,8 @@ export async function GET(request: NextRequest) {
       accessToken,
       biz.name
     );
+
+    await trySubscribeApp(biz.wabaId || biz.id, accessToken);
 
     // Register the number for Cloud API sending so messages work immediately.
     await tryRegisterNumber(phone.id, accessToken);
