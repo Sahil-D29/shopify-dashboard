@@ -7,44 +7,11 @@ import { auth } from '@/lib/auth';
 import { validateTenantAccess } from '@/lib/tenant/tenant-middleware';
 import { TemplateValidator } from '@/lib/utils/template-validator';
 import { getDraftById, deleteDraft } from '@/lib/whatsapp/template-drafts';
-import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
+import { buildMetaPayload } from '@/lib/whatsapp/template-submission';
+import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
 interface SubmitRequestBody {
   storeId?: string;
-}
-
-type MetaComponent =
-  | {
-      type: 'HEADER';
-      format: string;
-      text?: string;
-      example?: { header_text: string[][] };
-    }
-  | {
-      type: 'BODY';
-      text: string;
-      example?: { body_text: string[][] };
-    }
-  | {
-      type: 'FOOTER';
-      text: string;
-    }
-  | {
-      type: 'BUTTONS';
-      buttons: Array<
-        | { type: 'URL'; text: string; url: string }
-        | { type: 'PHONE_NUMBER'; text: string; phone_number: string }
-        | { type: 'QUICK_REPLY'; text: string }
-      >;
-    };
-
-type MetaButtons = Extract<MetaComponent, { type: 'BUTTONS' }>['buttons'];
-
-interface MetaSubmitPayload {
-  name: string;
-  language: string;
-  category: string;
-  components: MetaComponent[];
 }
 
 interface MetaSubmitError {
@@ -60,204 +27,8 @@ interface MetaSubmitResponse {
   error?: MetaSubmitError;
 }
 
-const VALID_CATEGORIES = new Set(['MARKETING', 'UTILITY', 'AUTHENTICATION']);
-
 function withDefault<T>(value: T | undefined, fallback: T): T {
   return value === undefined || value === null ? fallback : value;
-}
-
-function toUpperCaseButtonType(button: TemplateButton): TemplateButton['type'] {
-  return (typeof button.type === 'string' ? button.type : '').toUpperCase() as TemplateButton['type'];
-}
-
-function toMetaLanguageCode(language: string | undefined): string {
-  if (!language) return 'en_US';
-  if (language === 'en') return 'en_US';
-  if (language.length === 2) return language;
-  return language;
-}
-
-function isValidButtonUrl(url: string | undefined): url is string {
-  if (!url) return false;
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isValidPhoneNumber(phoneNumber: string | undefined): phoneNumber is string {
-  return typeof phoneNumber === 'string' && /^\+?[1-9]\d{1,14}$/.test(phoneNumber);
-}
-
-function convertTemplateButtons(buttons: TemplateButton[]): MetaButtons {
-  return buttons.map(button => {
-    const label = button.text ?? button.label ?? '';
-    const type = toUpperCaseButtonType(button);
-
-    if (type === 'URL') {
-      if (!isValidButtonUrl(button.url)) {
-        throw new Error('URL button requires a valid URL');
-      }
-      return {
-        type: 'URL' as const,
-        text: label,
-        url: button.url,
-      };
-    }
-
-    if (type === 'PHONE_NUMBER') {
-      const phoneNumber = button.phoneNumber ?? button.phone;
-      if (!isValidPhoneNumber(phoneNumber)) {
-        throw new Error('PHONE_NUMBER button requires a valid phone number');
-      }
-      return {
-        type: 'PHONE_NUMBER' as const,
-        text: label,
-        phone_number: phoneNumber,
-      };
-    }
-
-    return {
-      type: 'QUICK_REPLY' as const,
-      text: label,
-    };
-  });
-}
-
-function buildVariableIndex(template: WhatsAppTemplate): Map<string, number> {
-  const entries = new Map<string, number>();
-  (template.variables ?? []).forEach((variable, index) => {
-    entries.set(variable, index + 1);
-  });
-  return entries;
-}
-
-function convertToNumericPlaceholders(
-  text: string | undefined,
-  template: WhatsAppTemplate,
-  variableIndex: Map<string, number>,
-): { text: string; orderedValues: string[] } {
-  if (!text) return { text: '', orderedValues: [] };
-
-  const orderedValues: string[] = [];
-
-  const converted = text.replace(/\{\{(\w+)\}\}/g, (_match, variableName: string) => {
-    const index = variableIndex.get(variableName);
-    if (index) {
-      orderedValues[index - 1] = template.sampleValues?.[variableName] ?? '';
-      return `{{${index}}}`;
-    }
-
-    const numeric = Number(variableName);
-    if (!Number.isNaN(numeric) && numeric > 0) {
-      return `{{${numeric}}}`;
-    }
-
-    return `{{${variableName}}}`;
-  });
-
-  for (let i = 0; i < orderedValues.length; i += 1) {
-    if (typeof orderedValues[i] === 'undefined') {
-      orderedValues[i] = '';
-    }
-  }
-
-  return { text: converted, orderedValues };
-}
-
-function buildBodyExample(template: WhatsAppTemplate, orderedValues: string[]): string[][] | undefined {
-  if (orderedValues.length > 0) {
-    const filtered = orderedValues.filter(value => value.trim().length > 0);
-    if (filtered.length > 0) return [filtered];
-  }
-
-  const sampleValues = template.variables
-    ?.map(variable => template.sampleValues?.[variable] ?? `sample_${variable}`)
-    .filter((value): value is string => Boolean(value && value.trim().length > 0));
-
-  if (sampleValues && sampleValues.length > 0) {
-    return [sampleValues];
-  }
-
-  return undefined;
-}
-
-function buildComponents(template: WhatsAppTemplate): MetaComponent[] {
-  const components: MetaComponent[] = [];
-  const variableIndex = buildVariableIndex(template);
-
-  if (template.header?.content) {
-    const header = convertToNumericPlaceholders(template.header.content, template, variableIndex);
-
-    const headerComponent: MetaComponent = {
-      type: 'HEADER',
-      format: template.header.type ?? 'TEXT',
-    };
-
-    if (template.header.type === 'TEXT') {
-      const examples = header.orderedValues.filter(value => value.trim().length > 0);
-      (headerComponent as MetaComponent & { text?: string }).text = header.text;
-      if (examples.length > 0) {
-        (headerComponent as MetaComponent & { example?: { header_text: string[][] } }).example = {
-          header_text: [examples],
-        };
-      }
-    }
-
-    components.push(headerComponent);
-  }
-
-  const body = convertToNumericPlaceholders(template.body, template, variableIndex);
-  if (!body.text || body.text.trim().length === 0) {
-    throw new Error('Body text is required and cannot be empty');
-  }
-
-  const bodyComponent: MetaComponent = {
-    type: 'BODY',
-    text: body.text,
-  };
-
-  const bodyExample = buildBodyExample(template, body.orderedValues);
-  if (bodyExample) {
-    bodyComponent.example = { body_text: bodyExample };
-  }
-
-  components.push(bodyComponent);
-
-  if (template.footer) {
-    components.push({
-      type: 'FOOTER',
-      text: template.footer,
-    });
-  }
-
-  if (template.buttons && template.buttons.length > 0) {
-    components.push({
-      type: 'BUTTONS',
-      buttons: convertTemplateButtons(template.buttons),
-    });
-  }
-
-  return components;
-}
-
-function buildMetaPayload(template: WhatsAppTemplate): MetaSubmitPayload {
-  const language = toMetaLanguageCode(template.language);
-
-  if (!VALID_CATEGORIES.has(template.category)) {
-    throw new Error(`Invalid category. Must be one of: ${Array.from(VALID_CATEGORIES).join(', ')}`);
-  }
-
-  const components = buildComponents(template);
-
-  return {
-    name: String(template.name).toLowerCase(),
-    language,
-    category: template.category,
-    components,
-  };
 }
 
 function parseRequestBody(body: unknown): SubmitRequestBody {
@@ -324,6 +95,7 @@ export async function POST(
         type: String(button.type).toUpperCase() as 'URL' | 'PHONE_NUMBER' | 'QUICK_REPLY',
         text: button.text ?? button.label ?? '',
         url: button.url,
+        urlExample: button.urlExample,
         phoneNumber: button.phoneNumber ?? button.phone,
       })),
     });

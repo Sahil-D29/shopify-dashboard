@@ -1,3 +1,5 @@
+import { validateDynamicUrlButton } from '@/lib/whatsapp/template-submission';
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -10,6 +12,7 @@ interface TemplateButton {
   type: TemplateButtonType;
   text: string;
   url?: string;
+  urlExample?: string;
   phoneNumber?: string;
 }
 
@@ -118,6 +121,11 @@ export class TemplateValidator {
         
         if (btn.type === 'URL' && (!btn.url || !this.isValidUrl(btn.url))) {
           errors.push(`Button ${index + 1} has invalid URL`);
+        }
+
+        if (btn.type === 'URL' && btn.url) {
+          const dynamicUrl = validateDynamicUrlButton(btn.url, btn.urlExample);
+          if (dynamicUrl.error) errors.push(`Button ${index + 1}: ${dynamicUrl.error}`);
         }
         
         if (btn.type === 'PHONE_NUMBER' && (!btn.phoneNumber || !this.isValidPhoneNumber(btn.phoneNumber))) {

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import TemplatePreview from './TemplatePreview';
 import { CreateTemplateRequest, TemplateCategory, HeaderType, ButtonType, WhatsAppTemplate } from '@/lib/types/template';
 import { TemplateValidator } from '@/lib/utils/template-validator';
+import { validateDynamicUrlButton } from '@/lib/whatsapp/template-submission';
 import { useTenant } from '@/lib/tenant/tenant-context';
 import { X, Plus, Trash2, Eye, Bold, Italic, Code, Smile, Image as ImageIcon, Video, FileText } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
@@ -274,6 +275,44 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
     variables.forEach(varName => {
       if (!formData.sampleValues[varName]?.trim()) {
         newErrors[`var_${varName}`] = `Sample value for {{${varName}}} is required`;
+      }
+    });
+
+    buttons.forEach((button, index) => {
+      if (!button.text?.trim()) {
+        newErrors[`button_${index}_text`] = 'Button text is required';
+      } else if (button.text.length > 20) {
+        newErrors[`button_${index}_text`] = 'Button text cannot exceed 20 characters';
+      }
+
+      if (button.type === 'URL') {
+        if (!button.url?.trim()) {
+          newErrors[`button_${index}_url`] = 'Button URL is required';
+        } else {
+          try {
+            const parsedUrl = new URL(button.url);
+            if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+              newErrors[`button_${index}_url`] = 'Button URL must use HTTP or HTTPS';
+            }
+          } catch {
+            newErrors[`button_${index}_url`] = 'Enter a valid button URL';
+          }
+
+          if (!newErrors[`button_${index}_url`]) {
+            const dynamicUrl = validateDynamicUrlButton(button.url, button.urlExample);
+            if (dynamicUrl.error) {
+              const isUrlShapeError =
+                dynamicUrl.error.includes('placeholder') || dynamicUrl.error.includes('before {{1}}');
+              newErrors[
+                isUrlShapeError ? `button_${index}_url` : `button_${index}_urlExample`
+              ] = dynamicUrl.error;
+            }
+          }
+        }
+      }
+
+      if (button.type === 'PHONE_NUMBER' && !/^\+?[1-9]\d{1,14}$/.test(button.phoneNumber ?? '')) {
+        newErrors[`button_${index}_phoneNumber`] = 'Enter a valid international phone number';
       }
     });
 
@@ -912,23 +951,64 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
                             placeholder="Button text (e.g., Track Order, Call Us)"
                             className="text-base"
                           />
+                          {errors[`button_${idx}_text`] && (
+                            <p className="text-sm text-red-600">{errors[`button_${idx}_text`]}</p>
+                          )}
 
                           {button.type === 'URL' && (
-                            <Input
-                              value={button.url || ''}
-                              onChange={(e) => updateButton(idx, 'url', e.target.value)}
-                              placeholder="https://example.com or https://example.com/{{1}}"
-                              className="text-base"
-                            />
+                            <div className="space-y-3">
+                              <Input
+                                value={button.url || ''}
+                                onChange={(e) => updateButton(idx, 'url', e.target.value)}
+                                placeholder="https://example.com or https://example.com/{{1}}"
+                                className="text-base"
+                              />
+                              {errors[`button_${idx}_url`] && (
+                                <p className="text-sm text-red-600">{errors[`button_${idx}_url`]}</p>
+                              )}
+
+                              {button.url?.includes('{{') && (
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                  <Label
+                                    htmlFor={`button-${idx}-url-example`}
+                                    className="mb-1 block text-sm font-medium text-blue-900"
+                                  >
+                                    Full example URL for Meta approval *
+                                  </Label>
+                                  <Input
+                                    id={`button-${idx}-url-example`}
+                                    value={button.urlExample || ''}
+                                    onChange={(e) => updateButton(idx, 'urlExample', e.target.value)}
+                                    placeholder="https://example.com/cart"
+                                    className="bg-white text-base"
+                                  />
+                                  <p className="mt-1 text-xs text-blue-700">
+                                    Replace {'{{1}}'} with a real, non-customer example. Meta uses this URL during review.
+                                  </p>
+                                  {errors[`button_${idx}_urlExample`] && (
+                                    <p className="mt-1 text-sm text-red-600">
+                                      {errors[`button_${idx}_urlExample`]}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           {button.type === 'PHONE_NUMBER' && (
-                            <Input
-                              value={button.phoneNumber || ''}
-                              onChange={(e) => updateButton(idx, 'phoneNumber', e.target.value)}
-                              placeholder="+919876543210"
-                              className="text-base"
-                            />
+                            <div>
+                              <Input
+                                value={button.phoneNumber || ''}
+                                onChange={(e) => updateButton(idx, 'phoneNumber', e.target.value)}
+                                placeholder="+919876543210"
+                                className="text-base"
+                              />
+                              {errors[`button_${idx}_phoneNumber`] && (
+                                <p className="mt-1 text-sm text-red-600">
+                                  {errors[`button_${idx}_phoneNumber`]}
+                                </p>
+                              )}
+                            </div>
                           )}
                         </div>
 

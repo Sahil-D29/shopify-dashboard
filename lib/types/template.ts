@@ -7,6 +7,7 @@ export interface TemplateButton {
   type: ButtonType;
   text: string;
   url?: string;
+  urlExample?: string;
   phoneNumber?: string;
 }
 

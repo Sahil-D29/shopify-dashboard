@@ -14,6 +14,7 @@ export interface TemplateButton {
   label?: string;
   text?: string;
   url?: string;
+  urlExample?: string;
   phone?: string;
   phoneNumber?: string;
 }

@@ -5,6 +5,7 @@ import { graphUrl, getAppSecretProof } from '@/lib/whatsapp/graph';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getTemplates, setTemplates } from '@/lib/whatsapp/templates-store';
 import type { TemplateButton, WhatsAppTemplate } from '@/lib/types/whatsapp-config';
+import { META_TEMPLATE_FIELDS } from '@/lib/whatsapp/template-submission';
 
 type MetaComponentType = 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
 
@@ -13,6 +14,7 @@ interface MetaButton {
   text: string;
   url?: string;
   phone_number?: string;
+  example?: string[];
 }
 
 interface MetaComponent {
@@ -65,6 +67,7 @@ function mapButtons(metaButtons: MetaButton[] | undefined): TemplateButton[] | u
         : 'QUICK_REPLY',
     text: button.text,
     url: button.url,
+    urlExample: button.example?.[0],
     phoneNumber: button.phone_number,
   }));
 }
@@ -194,7 +197,7 @@ export async function POST(request: NextRequest) {
     let nextPageUrl: string | null = graphUrl(
       `${META_GRAPH_API_VERSION}/${wabaId}/message_templates`,
       accessToken,
-      { limit: '100' },
+      { limit: '100', fields: META_TEMPLATE_FIELDS },
     );
     const syncProof = getAppSecretProof(accessToken);
 

@@ -5,6 +5,7 @@ import { Edit, Trash2, Send, Copy, MoreVertical, Calendar, ChevronDown, ChevronU
 import { useState } from 'react';
 import TemplateStatusBadge from './TemplateStatusBadge';
 import { format } from 'date-fns';
+import { formatTemplateRejectionReason } from '@/lib/whatsapp/template-submission';
 
 interface TemplateCardProps {
   template: WhatsAppTemplate;
@@ -289,7 +290,10 @@ export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: 
         {template.status === 'REJECTED' && template.rejectionReason && (
           <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
             <strong className="block mb-0.5">Rejection reason:</strong>
-            <span className="line-clamp-1">{template.rejectionReason}</span>
+            <span className="block">{formatTemplateRejectionReason(template.rejectionReason)}</span>
+            <span className="mt-1 block font-mono text-[11px] text-red-700">
+              Meta code: {template.rejectionReason}
+            </span>
           </div>
         )}
       </div>

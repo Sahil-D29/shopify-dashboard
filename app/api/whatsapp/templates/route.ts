@@ -6,6 +6,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 
 import type { TemplateButton, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
 import { getDrafts, addDraft } from '@/lib/whatsapp/template-drafts';
+import { META_TEMPLATE_FIELDS } from '@/lib/whatsapp/template-submission';
 
 function matchesStatus(template: WhatsAppTemplate, status: string | null): boolean {
   if (!status || status === 'ALL') return true;
@@ -80,6 +81,7 @@ interface MetaComponentType {
     text: string;
     url?: string;
     phone_number?: string;
+    example?: string[];
   }>;
 }
 
@@ -124,6 +126,7 @@ function mapButtons(metaButtons: MetaComponentType['buttons']): TemplateButton[]
         : 'QUICK_REPLY',
     text: button.text,
     url: button.url,
+    urlExample: button.example?.[0],
     phoneNumber: button.phone_number,
   }));
 }
@@ -181,7 +184,7 @@ async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): 
   let nextPageUrl: string | null = graphUrl(
     `${META_GRAPH_API_VERSION}/${wabaId}/message_templates`,
     accessToken,
-    { limit: '100' },
+    { limit: '100', fields: META_TEMPLATE_FIELDS },
   );
   const proof = getAppSecretProof(accessToken);
 
