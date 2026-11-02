@@ -6,6 +6,7 @@ import { nextDeliveryStatus } from '../delivery-status';
 import { campaignTemplateInput } from '../campaign-config';
 import { whatsappNodeConfig } from '../node-config';
 import { legacyIssues, issueHref } from '../issue-records';
+import { templateView } from '../template-view';
 
 const definition = (components: MetaTemplateDefinition['components'], extra = {}): MetaTemplateDefinition => ({ id: '123', name: 'sahil_test', language: 'en_US', status: 'APPROVED', components, ...extra });
 function rejects(fn: () => unknown, field: string) {
@@ -14,6 +15,13 @@ function rejects(fn: () => unknown, field: string) {
 
 test('variable-free templates omit runtime components', () => {
   assert.deepEqual(buildTemplatePayload(definition([{ type: 'BODY', text: 'Hello!' }]), {}), { name: 'sahil_test', language: { code: 'en_US' } });
+});
+test('live Meta template details retain required header and dynamic button fields for the editor', () => {
+  const view = templateView(definition([{ type: 'HEADER', format: 'TEXT', text: '{{name}}' }, { type: 'BODY', text: 'Hello' }, { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Shop Now', url: 'https://mymaatram.com/{{1}}' }] }]));
+  assert.equal(view.id, 'meta_123');
+  assert.equal(view.header?.content, '{{name}}');
+  assert.equal(view.buttons?.[0].id, 'url_Shop Now');
+  assert.equal(view.buttons?.[0].url, 'https://mymaatram.com/{{1}}');
 });
 test('positional variables use numeric order, deduplicate placeholders and ignore object insertion order', () => {
   const payload = buildTemplatePayload(definition([{ type: 'BODY', text: '{{2}} {{1}} {{2}} {{10}}' }]), { variables: { '10': 'ten', '2': 'two', '1': 'one' } });

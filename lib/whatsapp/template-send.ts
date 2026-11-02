@@ -10,7 +10,7 @@ async function fetchDefinitions(storeId: string, name?: string): Promise<MetaTem
   if (!resolved.valid) throw new SendValidationError([configurationIssue(resolved)]);
   const config = resolved.config;
   let url: string | undefined = graphUrl(META_GRAPH_API_VERSION + '/' + config.wabaId + '/message_templates', config.accessToken, {
-    fields: 'id,name,language,status,parameter_format,components', limit: '100', ...(name ? { name } : {}),
+    fields: 'id,name,category,language,status,parameter_format,components', limit: '100', ...(name ? { name } : {}),
   });
   const definitions: MetaTemplateDefinition[] = [];
   while (url) {

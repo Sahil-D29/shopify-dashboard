@@ -6,6 +6,9 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import { getDraftById, updateDraft, deleteDraft, getDrafts } from '@/lib/whatsapp/template-drafts';
 import { META_GRAPH_API_VERSION, resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
+import { resolveTemplate } from '@/lib/whatsapp/template-send';
+import { templateView } from '@/lib/whatsapp/template-view';
+import { errorIssues } from '@/lib/whatsapp/issues';
 
 type Params = { id: string };
 
@@ -44,14 +47,18 @@ export async function GET(
   try {
     const { id } = await params;
     const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
+    if (id.startsWith('meta_')) {
+      return NextResponse.json({ template: templateView(await resolveTemplate(storeId, { templateId: id })) });
+    }
     const template = await getDraftById(storeId, id);
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
     return NextResponse.json({ template });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch template';
-    return NextResponse.json({ error: message }, { status: 500 });
+    const issues = errorIssues(error);
+    return NextResponse.json({ error: issues[0].message, issues }, { status: 422 });
   }
 }
 
