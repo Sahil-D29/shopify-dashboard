@@ -7,7 +7,7 @@ import type {
   FailureHandlingConfig,
   TemplateButton,
 } from '@/lib/types/whatsapp-config';
-import { getTemplates } from '@/lib/whatsapp/templates-store';
+import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 
 export type StepId = 'template' | 'variables' | 'media' | 'buttons' | 'send' | 'preview';
 
@@ -41,7 +41,7 @@ function normalizeVariableToken(token: string): string {
   return token.replace(/^\{\{|\}\}$/g, '').trim();
 }
 
-export function validateWhatsAppConfig(config: WhatsAppActionConfig): ValidationResponse {
+export function validateWhatsAppConfig(config: WhatsAppActionConfig, definition?: WhatsAppTemplate): ValidationResponse {
   const errors: ValidationError[] = [];
 
   // Step 1: Template Selection
@@ -52,8 +52,7 @@ export function validateWhatsAppConfig(config: WhatsAppActionConfig): Validation
       message: 'Template must be selected.',
     });
   } else {
-    const templates = getTemplates();
-    const template = templates.find(t => t.id === config.templateId);
+    const template = definition;
 
     if (!template) {
       errors.push({
@@ -63,7 +62,7 @@ export function validateWhatsAppConfig(config: WhatsAppActionConfig): Validation
       });
     } else {
       // Enforce APPROVED status for production use
-      const status = config.templateStatus ?? template.status;
+      const status = template.status;
       if (status !== 'APPROVED') {
         errors.push({
           step: 'template',
@@ -75,7 +74,7 @@ export function validateWhatsAppConfig(config: WhatsAppActionConfig): Validation
   }
 
   // Step 2: Variable Mapping
-  const template = getTemplates().find(t => t.id === config.templateId);
+  const template = definition;
   if (template && template.variables && template.variables.length > 0) {
     if (!config.variableMappings || config.variableMappings.length === 0) {
       errors.push({

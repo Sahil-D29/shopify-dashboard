@@ -539,6 +539,8 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
             phoneNumber: phone,
             variables: templateVariablesForSend(),
             language: formData.language,
+            mediaUrl: ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) ? headerContent : undefined,
+            buttonActions: Object.fromEntries(buttons.map((button, index) => [String(index), button.urlExample ?? ''])),
           }
         : { phoneNumber: phone, message: renderForTest() };
       const res = await fetch(endpoint, {
@@ -564,7 +566,7 @@ export default function CreateTemplateModal({ open, onClose, onCreated, editTemp
           void pollTestStatus(dbMessageId, normalizedPhone, pollToken);
         }
       } else {
-        const raw = String(data.userMessage || data.error || '');
+        const raw = String(data.issues?.map((item: any) => item.message + ' ' + item.action).join(' ') || data.userMessage || data.error || '');
         const message = /133010|not registered/i.test(raw)
           ? 'Your WhatsApp number is not registered for sending yet. Go to Settings > WhatsApp > Register for sending, then try again.'
           : raw || (isApprovedTemplate

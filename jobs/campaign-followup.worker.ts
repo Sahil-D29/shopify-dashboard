@@ -1,3 +1,5 @@
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues, issue, SendValidationError } from '@/lib/whatsapp/issues';
 /**
  * Campaign Follow-Up Worker
  *
@@ -10,8 +12,7 @@
  * Run via cron endpoint every 5 minutes.
  */
 import { prisma } from '@/lib/prisma';
-import { sendWithSmartWindow, findContactByPhone } from '@/lib/utils/smart-window';
-import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
+import { sendWithSmartWindow } from '@/lib/utils/smart-window';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -127,10 +128,6 @@ export async function runFollowUpWorkerStep(): Promise<ProcessingResult> {
     details: [],
   };
 
-  const config = getWhatsAppConfig();
-  if (!config.phoneNumberId || !config.accessToken) {
-    return result; // WhatsApp not configured — nothing to do
-  }
 
   try {
     // Find campaigns with active follow-up steps
@@ -216,40 +213,13 @@ async function processFollowUpStep(step: FollowUpStep & {
 
     for (const log of eligibleLogs) {
       try {
+        const claim = await prisma.campaignLog.updateMany({ where: { id: log.id, followUpSent: false }, data: { followUpSent: true } });
+        if (!claim.count) continue;
         // We need a phone number to send. customerId stores Shopify customer ID.
         // Try to find phone from Contact model
-        const contact = await findContactByPhone(log.customerId, step.campaign.storeId);
-
-        // Also try direct lookup by shopifyCustomerId
-        let phone: string | null = null;
-        if (contact) {
-          const contactRecord = await prisma.contact.findFirst({
-            where: { id: contact.id },
-            select: { phone: true },
-          });
-          phone = contactRecord?.phone || null;
-        } else {
-          // Try finding contact by shopifyCustomerId field
-          const contactByShopify = await prisma.contact.findFirst({
-            where: {
-              storeId: step.campaign.storeId,
-              shopifyCustomerId: log.customerId,
-            },
-            select: { id: true, phone: true, lastMessageAt: true },
-          });
-          phone = contactByShopify?.phone || null;
-        }
-
-        if (!phone) {
-          stats.skipped++;
-          // Mark as follow-up sent to avoid reprocessing
-          await prisma.campaignLog.update({
-            where: { id: log.id },
-            data: { followUpSent: true },
-          });
-          continue;
-        }
-
+        const contact = await prisma.contact.findFirst({ where: { storeId: step.campaign.storeId, OR: [{ id: log.customerId.replace(/^contact_/, '') }, { shopifyCustomerId: log.customerId }] } });
+        const phone = contact?.phone ?? (log.metadata as any)?.phone;
+        if (!phone) throw new SendValidationError([issue('MISSING_PHONE', 'This follow-up recipient has no phone number.', 'phone')]);
         // Personalize message
         const personalizedBody = personalizeBody(step.messageBody, log.customerId);
 
@@ -261,6 +231,9 @@ async function processFollowUpStep(step: FollowUpStep & {
           storeId: step.campaign.storeId,
           contactId: contact?.id,
           windowExpiresAt: log.windowExpiresAt,
+          forceTemplate: !step.useSmartWindow,
+          templateInput: { ...campaignTemplateInput(step.campaign), templateId: undefined, mediaUrl: (step as any).mediaUrl ?? (step.campaign as any).whatsappConfig?.mediaUrl },
+          context: { customer: contact },
         });
 
         // Mark original log as follow-up sent
@@ -281,9 +254,8 @@ async function processFollowUpStep(step: FollowUpStep & {
               stepIndex: step.stepIndex,
               stepId: step.id,
               usedFreeForm: sendResult.usedFreeForm,
-              windowExpiresAt: sendResult.usedFreeForm
-                ? log.windowExpiresAt // Preserve existing window
-                : new Date(Date.now() + 24 * 60 * 60 * 1000),
+              windowExpiresAt: null,
+              metadata: { phone },
             },
           });
 
@@ -310,6 +282,7 @@ async function processFollowUpStep(step: FollowUpStep & {
               customerId: log.customerId,
               status: 'FAILED',
               error: sendResult.error ?? 'Follow-up send failed',
+              metadata: JSON.parse(JSON.stringify({ phone, templateName: step.templateName, issues: sendResult.issues })),
               stepIndex: step.stepIndex,
               stepId: step.id,
               usedFreeForm: sendResult.usedFreeForm,
@@ -320,6 +293,7 @@ async function processFollowUpStep(step: FollowUpStep & {
       } catch (err) {
         console.error(`[FollowUp Worker] Error processing log ${log.id}:`, err);
         stats.failed++;
+        await prisma.campaignLog.create({ data: { campaignId: step.campaignId, customerId: log.customerId, status: 'FAILED', stepIndex: step.stepIndex, stepId: step.id, error: errorIssues(err)[0].message, metadata: JSON.parse(JSON.stringify({ issues: errorIssues(err) })) } });
         // Mark as processed to avoid infinite retry
         await prisma.campaignLog.update({
           where: { id: log.id },

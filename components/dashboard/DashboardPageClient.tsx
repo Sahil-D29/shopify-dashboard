@@ -1,5 +1,6 @@
 'use client';
 
+import SendIssuesPanel from '@/components/SendIssuesPanel';
 import Image from 'next/image';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigurationGuard } from '@/components/ConfigurationGuard';
@@ -993,6 +994,7 @@ function DashboardContent() {
           <SettingsIncompleteBanner missingConfigs={settingsStatus.missingConfigs} />
         )}
         <ConnectionStatus shopUrl={currentStore?.shopDomain} />
+        <SendIssuesPanel />
 
         {data ? (
           <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">

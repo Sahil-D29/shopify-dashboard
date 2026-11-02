@@ -1,3 +1,6 @@
+import { sendTemplate } from '@/lib/whatsapp/template-send';
+import { errorIssues, type SendIssue } from '@/lib/whatsapp/issues';
+import type { TemplateInput } from '@/lib/whatsapp/template-payload';
 import { shopifyClient, type ShopifyCustomerResponse, type ShopifyOrderListResponse } from '@/lib/shopify/client';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
@@ -69,6 +72,8 @@ export interface SendWhatsAppPayload {
   language: string;
   components?: WhatsAppTemplateComponent[];
   storeId?: string;
+  input?: TemplateInput;
+  context?: Record<string, any>;
 }
 
 export interface SendWhatsAppResult {
@@ -80,53 +85,18 @@ export interface SendWhatsAppResult {
   error?: string;
   userMessage?: string;
   stub?: boolean;
+  issues?: SendIssue[];
 }
 
 export async function sendWhatsAppMessage(payload: SendWhatsAppPayload): Promise<SendWhatsAppResult> {
   try {
-    const { resolveWhatsAppConfig, META_GRAPH_API_VERSION } = await import('@/lib/config/whatsapp-config-resolver');
-    const { graphUrl } = await import('@/lib/whatsapp/graph');
-    const validation = await resolveWhatsAppConfig(payload.storeId);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-
-    const config = validation.config;
-    const messagePayload = {
-      messaging_product: 'whatsapp',
-      to: payload.to,
-      type: 'template',
-      template: {
-        name: payload.template,
-        language: { code: payload.language },
-        components: payload.components?.length ? payload.components : undefined,
-      },
-    };
-
-    const response = await fetch(
-      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(messagePayload),
-      },
-    );
-
-    const data = await response.json();
-    if (!response.ok) {
-      const errorMsg = data?.error?.message || 'Failed to send WhatsApp message';
-      return { success: false, error: errorMsg };
-    }
-
-    const messageId = data?.messages?.[0]?.id;
-    return { success: true, messageId, wabaMessageId: messageId, phoneNumber: payload.to };
+    const result = await sendTemplate(payload.storeId ?? '', payload.to, {
+      templateName: payload.template, templateLanguage: payload.language, components: payload.components, ...payload.input,
+    }, payload.context);
+    return { ...result, wabaMessageId: result.messageId };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('[journey-engine] Failed to send WhatsApp message:', message);
-    return { success: false, error: message };
+    const issues = errorIssues(error);
+    return { success: false, error: issues[0].message, issues };
   }
 }
 

@@ -20,14 +20,21 @@ export interface ResolvedWhatsAppConfig {
 
 export type ResolveResult =
   | { valid: true; config: ResolvedWhatsAppConfig }
-  | { valid: false; error: string };
+  | { valid: false; error: string; code?: string };
+
+class CredentialDecryptionError extends Error {}
 
 export async function resolveWhatsAppConfig(storeId?: string | null): Promise<ResolveResult> {
   // When a specific store is in context, use ONLY that store's own WhatsApp
   // config. Never fall back to the global env credentials — doing so would make
   // every store (including brand-new ones) appear connected to the same number.
   if (storeId) {
-    const dbResult = await resolveFromDb(storeId);
+    let dbResult: ResolvedWhatsAppConfig | null;
+    try { dbResult = await resolveFromDb(storeId); }
+    catch (error) {
+      if (error instanceof CredentialDecryptionError) return { valid: false, code: 'CREDENTIAL_DECRYPTION_FAILED', error: 'Saved WhatsApp credentials cannot be decrypted. Contact support to check the server encryption configuration.' };
+      throw error;
+    }
     if (dbResult) return { valid: true, config: dbResult };
     return {
       valid: false,
@@ -53,13 +60,13 @@ async function resolveFromDb(storeId: string): Promise<ResolvedWhatsAppConfig | 
     }
 
     let token = dbConfig.accessToken;
-    try {
-      const { isEncrypted, decrypt } = await import('@/lib/encryption');
-      if (isEncrypted(token)) {
+    if (/^[0-9a-f]+:[0-9a-f]+$/i.test(token)) {
+      try {
+        const { decrypt } = await import('@/lib/encryption');
         token = decrypt(token);
+      } catch {
+        throw new CredentialDecryptionError('WhatsApp credential decryption failed');
       }
-    } catch {
-      // encryption module unavailable (missing ENCRYPTION_KEY) — use token as-is
     }
 
     return {
@@ -70,6 +77,7 @@ async function resolveFromDb(storeId: string): Promise<ResolvedWhatsAppConfig | 
       source: 'db',
     };
   } catch (error) {
+    if (error instanceof CredentialDecryptionError) throw error;
     console.error('[whatsapp-config-resolver] DB lookup failed:', error);
     return null;
   }

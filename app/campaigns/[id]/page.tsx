@@ -1,5 +1,6 @@
 'use client';
 
+import SendIssuesPanel from '@/components/SendIssuesPanel';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -185,11 +186,11 @@ export default function CampaignDetailPage() {
             {error || 'The campaign you are looking for does not exist.'}
           </p>
           <div className="flex gap-3 justify-center">
-            <Button 
+            <Button
               onClick={(e) => {
                 e.preventDefault();
                 router.push('/campaigns');
-              }} 
+              }}
               variant="outline"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -205,10 +206,10 @@ export default function CampaignDetailPage() {
     );
   }
 
-  const openRate = campaign.metrics.sent > 0 
+  const openRate = (messageStats?.sent ?? campaign.metrics.sent) > 0
     ? (campaign.metrics.opened / campaign.metrics.sent * 100).toFixed(1)
     : 0;
-  
+
   const clickRate = campaign.metrics.opened > 0
     ? (campaign.metrics.clicked / campaign.metrics.opened * 100).toFixed(1)
     : 0;
@@ -218,7 +219,7 @@ export default function CampaignDetailPage() {
     : 0;
 
   const deliveryRate = campaign.metrics.sent > 0
-    ? (campaign.metrics.delivered / campaign.metrics.sent * 100).toFixed(1)
+    ? ((messageStats?.delivered ?? campaign.metrics.delivered) / campaign.metrics.sent * 100).toFixed(1)
     : 0;
 
   const calculateROI = (): string => {
@@ -242,7 +243,7 @@ export default function CampaignDetailPage() {
   const generateCSV = (): string => {
     const roi = calculateROI();
     const estimatedCost = campaign.metrics.sent * 0.5;
-    const revenuePerConversion = campaign.metrics.converted > 0 
+    const revenuePerConversion = campaign.metrics.converted > 0
       ? (campaign.metrics.revenue / campaign.metrics.converted).toFixed(0)
       : '0';
 
@@ -269,13 +270,13 @@ export default function CampaignDetailPage() {
       ['Click Rate', `${clickRate}%`],
       ['Conversions', campaign.metrics.converted.toLocaleString()],
       ['Conversion Rate', `${conversionRate}%`],
-      ['Messages Failed', campaign.metrics.failed.toLocaleString()],
-      ['Failure Rate', campaign.metrics.sent > 0 
-        ? `${((campaign.metrics.failed / campaign.metrics.sent) * 100).toFixed(1)}%` 
+      ['Messages Failed', (messageStats?.failed ?? campaign.metrics.failed).toLocaleString()],
+      ['Failure Rate', campaign.metrics.sent > 0
+        ? `${((campaign.metrics.failed / campaign.metrics.sent) * 100).toFixed(1)}%`
         : '0%'],
       ['Unsubscribed', campaign.metrics.unsubscribed.toLocaleString()],
-      ['Unsubscribe Rate', campaign.metrics.sent > 0 
-        ? `${((campaign.metrics.unsubscribed / campaign.metrics.sent) * 100).toFixed(2)}%` 
+      ['Unsubscribe Rate', campaign.metrics.sent > 0
+        ? `${((campaign.metrics.unsubscribed / campaign.metrics.sent) * 100).toFixed(2)}%`
         : '0%'],
       [''],
       ['Revenue Generated', `₹${campaign.metrics.revenue.toLocaleString()}`],
@@ -296,7 +297,7 @@ export default function CampaignDetailPage() {
       ['Tags', campaign.tags.join(', ') || 'N/A'],
     ];
 
-    return rows.map(row => 
+    return rows.map(row =>
       row.map(cell => escapeCSV(cell ?? '')).join(',')
     ).join('\n');
   };
@@ -305,14 +306,14 @@ export default function CampaignDetailPage() {
     if (!campaign) return;
 
     setExporting(true);
-    
+
     // Small delay to show "Generating..." text
     setTimeout(() => {
       try {
         const csvContent = generateCSV();
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        
+
         // Generate filename: campaign-name-report-YYYY-MM-DD.csv
         const campaignName = campaign.name
           .toLowerCase()
@@ -320,21 +321,21 @@ export default function CampaignDetailPage() {
           .replace(/^-|-$/g, ''); // Remove leading/trailing dashes
         const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         const filename = `${campaignName}-report-${date}.csv`;
-        
+
         // Create download link
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
         link.style.display = 'none';
-        
+
         // Trigger download
         document.body.appendChild(link);
         link.click();
-        
+
         // Cleanup
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        
+
         setExporting(false);
       } catch (error) {
         console.error('Error exporting CSV:', error);
@@ -381,8 +382,8 @@ export default function CampaignDetailPage() {
           </div>
           <div className="flex gap-3">
             {campaign.status === 'PAUSED' && (
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 onClick={async () => {
                   try {
                     const response = await fetch(`/api/campaigns/${campaign.id}/resume`, {
@@ -410,9 +411,9 @@ export default function CampaignDetailPage() {
               </Button>
             )}
             {campaign.status === 'RUNNING' && (
-              <Button 
+              <Button
                 variant="outline"
-                size="sm" 
+                size="sm"
                 onClick={async () => {
                   try {
                     const response = await fetch(`/api/campaigns/${campaign.id}`, {
@@ -432,9 +433,9 @@ export default function CampaignDetailPage() {
                 Pause
               </Button>
             )}
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={exportToCSV}
               disabled={exporting}
             >
@@ -587,7 +588,7 @@ export default function CampaignDetailPage() {
             ₹{(campaign.metrics.revenue / 1000).toFixed(1)}k
           </div>
           <p className="text-sm text-gray-600">
-            {campaign.metrics.converted > 0 
+            {campaign.metrics.converted > 0
               ? `₹${(campaign.metrics.revenue / campaign.metrics.converted).toFixed(0)} per conversion`
               : 'No conversions yet'}
           </p>
@@ -615,8 +616,8 @@ export default function CampaignDetailPage() {
             {parseFloat(String(openRate)) > 0 ? (parseFloat(String(openRate)) / 10).toFixed(1) : '0.0'}/10
           </div>
           <p className="text-sm text-gray-600">
-            {parseFloat(String(openRate)) > 50 ? 'Excellent performance' : 
-             parseFloat(String(openRate)) > 30 ? 'Good performance' : 
+            {parseFloat(String(openRate)) > 50 ? 'Excellent performance' :
+             parseFloat(String(openRate)) > 30 ? 'Good performance' :
              'Needs improvement'}
           </p>
         </div>
@@ -628,7 +629,7 @@ export default function CampaignDetailPage() {
           <div className="text-sm text-gray-600 mb-2">Failed Messages</div>
           <div className="text-2xl font-bold text-red-600">{campaign.metrics.failed}</div>
           <div className="text-xs text-gray-500 mt-1">
-            {campaign.metrics.sent > 0 
+            {campaign.metrics.sent > 0
               ? `${((campaign.metrics.failed / campaign.metrics.sent) * 100).toFixed(1)}% failure rate`
               : '0%'}
           </div>
@@ -638,7 +639,7 @@ export default function CampaignDetailPage() {
           <div className="text-sm text-gray-600 mb-2">Unsubscribed</div>
           <div className="text-2xl font-bold text-orange-600">{campaign.metrics.unsubscribed}</div>
           <div className="text-xs text-gray-500 mt-1">
-            {campaign.metrics.sent > 0 
+            {campaign.metrics.sent > 0
               ? `${((campaign.metrics.unsubscribed / campaign.metrics.sent) * 100).toFixed(2)}% unsubscribe rate`
               : '0%'}
           </div>
@@ -762,7 +763,7 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-4 bg-[#e5ddd5] min-h-[200px]">
               <div className="bg-white rounded-lg p-3 shadow-sm max-w-[85%]">
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">
@@ -858,6 +859,7 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      <SendIssuesPanel kind="campaign" resourceId={campaignId} />
       {/* Failed Messages Modal */}
       {showFailedModal && messageStats && messageStats.failed > 0 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -876,12 +878,7 @@ export default function CampaignDetailPage() {
               <p className="text-sm text-gray-600 mb-4">
                 {messageStats.failed} message(s) failed to send. Check error details below.
               </p>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-800">
-                  Failed messages are tracked in the campaign logs database.
-                  Check the error field in CampaignLog entries for details.
-                </p>
-              </div>
+              <SendIssuesPanel kind="campaign" resourceId={campaignId} failuresOnly />
               <div className="flex justify-end mt-6">
                 <Button variant="outline" onClick={() => setShowFailedModal(false)}>
                   Close

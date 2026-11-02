@@ -1,5 +1,6 @@
 "use client";
 
+import SendIssuesPanel from '@/components/SendIssuesPanel';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -323,6 +324,7 @@ export default function JourneyDetailPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
+      <SendIssuesPanel kind="journey" resourceId={journey.id} />
       {/* Header */}
       <header className="border-b border-slate-200 bg-white/85 py-4 backdrop-blur sm:py-5">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">

@@ -150,6 +150,7 @@ export interface WhatsAppActionConfig {
   templateLanguage?: string;
   templateCategory?: string;
   variableMappings: VariableMapping[];
+  variables?: Record<string, string>;
   bodyFields: WhatsAppBodyField[];
   mediaUrl?: string;
   useDynamicMedia?: boolean;

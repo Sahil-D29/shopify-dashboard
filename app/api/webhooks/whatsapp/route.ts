@@ -1,3 +1,4 @@
+import { applyDeliveryReceipt } from '@/lib/whatsapp/delivery-receipts';
 export const dynamic = 'force-dynamic';
 import crypto from 'crypto';
 
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
   try {
     const bodyText = await request.text();
     const signature = request.headers.get('x-hub-signature-256')?.replace('sha256=', '') || null;
-    const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET ?? '';
+    const webhookSecret = process.env.META_APP_SECRET ?? process.env.WHATSAPP_WEBHOOK_SECRET ?? '';
 
     if (webhookSecret && !verifyWebhookSignature(bodyText, signature, webhookSecret)) {
       logWebhook({
@@ -195,7 +196,7 @@ export async function POST(request: NextRequest) {
             let campaignMessages = toCampaignMessages();
             let enrollments = toJourneyEnrollments();
 
-            statuses.forEach(status => {
+            for (const status of statuses) {
               const statusRecord = toJsonRecord(status);
               const messageId = toTrimmedString(statusRecord.id);
               const statusType = toTrimmedString(statusRecord.status) as CampaignMessage['status'] | undefined;
@@ -207,17 +208,9 @@ export async function POST(request: NextRequest) {
               const errorCode = toTrimmedString((err as any)?.code);
               const errorMessage = toTrimmedString((err as any)?.title);
 
-              if (!messageId || !statusType) return;
+              if (!messageId || !statusType) continue;
 
-              // ─── PHASE 2: Update Prisma Message status ────────
-              const prismaStatusMap: Record<string, string> = { sent: 'SENT', delivered: 'DELIVERED', read: 'READ', failed: 'FAILED' };
-              const prismaStatus = prismaStatusMap[statusType];
-              if (prismaStatus) {
-                prisma.message.updateMany({
-                  where: { whatsappMessageId: messageId },
-                  data: { status: prismaStatus as any, errorMessage: statusType === 'failed' ? errorMessage : undefined },
-                }).catch(err => console.error('[Webhook] Prisma message update error:', err));
-              }
+              await applyDeliveryReceipt(statusRecord, String((value.metadata as any)?.phone_number_id ?? ''));
 
               campaignMessages = updateCampaignMessageStatus(campaignMessages, {
                 messageId,
@@ -230,7 +223,7 @@ export async function POST(request: NextRequest) {
               if (statusType === 'read') {
                 enrollments = appendJourneyAction(enrollments, messageId);
               }
-            });
+            }
 
             writeJsonFile('campaign-messages.json', campaignMessages.slice(0, MAX_CAMPAIGN_LOGS));
             writeJsonFile('journey-enrollments.json', enrollments);

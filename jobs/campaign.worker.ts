@@ -1,3 +1,9 @@
+import { sendTemplate, resolveTemplate } from '@/lib/whatsapp/template-send';
+import { buildTemplatePayload } from '@/lib/whatsapp/template-payload';
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues, issue, SendValidationError } from '@/lib/whatsapp/issues';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+import { resolveSegmentCustomers } from '@/lib/segments/resolve-customers';
 /**
  * Campaign worker - process one pending CampaignQueueItem per invocation.
  * Supports multi-segment targeting, sending speed rate-limiting, and preserves
@@ -5,12 +11,9 @@
  */
 import { ShopifyClient } from '@/lib/shopify/client';
 import { prisma } from '@/lib/prisma';
-import { graphUrl } from '@/lib/whatsapp/graph';
 import { logError } from '@/lib/logger';
 import { sendEmail } from '@/lib/email';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
-import type { SegmentGroup } from '@/lib/types/segment';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 
 const currentPeriod = (): string => {
   const now = new Date();
@@ -35,112 +38,15 @@ function personalizeBody(body: string, customer: ShopifyCustomer): string {
     .replace(/\{\{email\}\}/g, customer.email ?? '');
 }
 
-function sanitizePhone(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const digits = value.replace(/[\s\-+()]/g, '');
-  if (!digits) return null;
-  if (digits.startsWith('0')) return null;
-  return digits;
-}
-
-async function sendWhatsAppText(phone: string, body: string, storeId: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const config = await prisma.whatsAppConfig.findUnique({
-    where: { storeId },
-  });
-  if (!config?.phoneNumberId || !config?.accessToken) {
-    return { success: false, error: 'WhatsApp not configured' };
-  }
-  const formatted = phone.replace(/[\s\-+()]/g, '');
-  if (!formatted) return { success: false, error: 'Invalid phone' };
-
-  // Embedded Signup tokens are stored encrypted — decrypt before use.
-  let accessToken = config.accessToken;
-  try {
-    const { isEncrypted, decrypt } = await import('@/lib/encryption');
-    if (isEncrypted(accessToken)) accessToken = decrypt(accessToken);
-  } catch {
-    // use as-is
-  }
-
-  try {
-    const res = await fetch(
-      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, accessToken),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: formatted,
-          type: 'text',
-          text: { preview_url: false, body },
-        }),
-      },
-    );
-    const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string } };
-    if (res.ok && data.messages?.[0]?.id) return { success: true, messageId: data.messages[0].id };
-    return { success: false, error: data.error?.message ?? 'Send failed' };
-  } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-async function sendWhatsAppTemplate(
-  phone: string,
-  templateName: string,
-  language: string,
-  storeId: string,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const config = await prisma.whatsAppConfig.findUnique({ where: { storeId } });
-  if (!config?.phoneNumberId || !config?.accessToken) {
-    return { success: false, error: 'WhatsApp not configured' };
-  }
-  const formatted = phone.replace(/[\s\-+()]/g, '');
-  if (!formatted) return { success: false, error: 'Invalid phone' };
-
-  let accessToken = config.accessToken;
-  try {
-    const { isEncrypted, decrypt } = await import('@/lib/encryption');
-    if (isEncrypted(accessToken)) accessToken = decrypt(accessToken);
-  } catch {
-    // use as-is
-  }
-
-  try {
-    const res = await fetch(
-      graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, accessToken),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: formatted,
-          type: 'template',
-          template: { name: templateName, language: { code: language || 'en' } },
-        }),
-      },
-    );
-    const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string } };
-    if (res.ok && data.messages?.[0]?.id) return { success: true, messageId: data.messages[0].id };
-    return { success: false, error: data.error?.message ?? 'Send failed' };
-  } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-export async function runCampaignWorkerStep(): Promise<{ processed: number; campaignId?: string; error?: string }> {
+export async function runCampaignWorkerStep(targetCampaignId?: string): Promise<{ processed: number; campaignId?: string; error?: string }> {
   const now = new Date();
   const candidate = await prisma.campaignQueueItem.findFirst({
     where: {
       status: 'PENDING',
+      ...(targetCampaignId ? { campaignId: targetCampaignId } : {}),
+      campaign: { status: { in: ['RUNNING', 'SCHEDULED'] } },
       scheduledAt: { lte: now },
     },
     orderBy: { scheduledAt: 'asc' },
@@ -151,10 +57,11 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
     return { processed: 0 };
   }
 
-  await prisma.campaignQueueItem.update({
-    where: { id: candidate.id },
+  const claim = await prisma.campaignQueueItem.updateMany({
+    where: { id: candidate.id, status: 'PENDING' },
     data: { status: 'PROCESSING', startedAt: now },
   });
+  if (!claim.count) return { processed: 0 };
 
   const { campaign, store } = candidate;
   const storeId = campaign.storeId;
@@ -168,12 +75,7 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
   const body = messageTemplate.body ?? messageTemplate.messageContent?.body ?? '';
   const subject = messageTemplate.subject ?? messageTemplate.messageContent?.subject ?? '';
 
-  // Prefer sending the approved WhatsApp template (required outside the 24h
-  // session window). Falls back to free text only when no template was chosen.
-  const waConfig = (campaign as { whatsappConfig?: { templateName?: string; templateLanguage?: string } | null }).whatsappConfig ?? null;
-  const templateName = waConfig?.templateName ?? messageTemplate.templateName ?? '';
-  const templateLanguage = waConfig?.templateLanguage ?? messageTemplate.language ?? 'en';
-
+  const templateInput = campaignTemplateInput(campaign);
   // Rate-limiting delay based on sendingSpeed
   const sendingSpeed = (campaign as any).sendingSpeed ?? 'MEDIUM';
   const delayBetweenMessages = SPEED_DELAY_MS[sendingSpeed] ?? SPEED_DELAY_MS.MEDIUM;
@@ -187,50 +89,12 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
       accessToken: store?.accessToken ?? '',
     });
 
-    // Multi-segment support: use segmentIds array if available, fallback to single segmentId
-    const segmentIds: string[] = (campaign as any).segmentIds ?? [];
-    const allSegmentIds = segmentIds.length > 0
-      ? segmentIds
-      : campaign.segmentId
-        ? [campaign.segmentId]
-        : [];
-
-    // Resolve the audience via the shared, Contact-aware engine (Contacts ⋃
-    // Shopify customers, deduped). Recipients can come from any source — webhook
-    // contacts, custom events, or Shopify — and the segment filters are applied
-    // the same way the segment preview applies them.
-    const { calculateSegmentStats } = await import('@/lib/utils/segment-stats');
-    const segments = allSegmentIds.length > 0
-      ? await prisma.segment.findMany({ where: { id: { in: allSegmentIds } } })
-      : [];
-
-    let matchingCustomers: ShopifyCustomer[];
-    if (allSegmentIds.length === 0) {
-      // No segment selected → whole audience (all contacts + customers).
-      const stats = await calculateSegmentStats({ client, storeId, conditionGroups: [], forceRefresh: false });
-      matchingCustomers = (stats.customers ?? []) as ShopifyCustomer[];
-    } else {
-      // Resolve each segment to its members, then intersect (a recipient must be
-      // in ALL selected segments — matches the prior AND semantics).
-      const pool = new Map<string, ShopifyCustomer>();
-      let matchedIds: Set<string> | null = null;
-      for (const segId of allSegmentIds) {
-        const seg = segments.find(s => s.id === segId);
-        const conditionGroups = (seg?.filters as { conditionGroups?: SegmentGroup[] } | null)?.conditionGroups ?? [];
-        const stats = await calculateSegmentStats({ client, storeId, segmentId: segId, conditionGroups, forceRefresh: false });
-        const members = (stats.customers ?? []) as ShopifyCustomer[];
-        members.forEach(c => pool.set(String(c.id), c));
-        const ids = new Set<string>(members.map(c => String(c.id)));
-        if (matchedIds === null) {
-          matchedIds = ids;
-        } else {
-          const prev: Set<string> = matchedIds;
-          matchedIds = new Set<string>(Array.from(prev).filter(id => ids.has(id)));
-        }
-      }
-      matchingCustomers = matchedIds ? Array.from(pool.values()).filter(c => matchedIds!.has(String(c.id))) : [];
-    }
-
+    const matchingCustomers = await resolveSegmentCustomers({ client, storeId,
+      segmentIds: campaign.segmentIds?.length ? campaign.segmentIds : campaign.segmentId ? [campaign.segmentId] : [], forceRefresh: true });
+    if (!matchingCustomers.length) throw new SendValidationError([issue('EMPTY_AUDIENCE', 'No recipients match the selected segment. Review your audience.', 'segmentIds')]);
+    const isWhatsApp = !['EMAIL', 'SMS', 'PUSH'].includes(campaign.type);
+    const definition = isWhatsApp ? await resolveTemplate(storeId, templateInput) : undefined;
+    if (definition) buildTemplatePayload(definition, templateInput, {}, true);
     let sent = 0;
     let delivered = 0;
     let failed = 0;
@@ -248,17 +112,18 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
             message: msg ?? undefined,
             whatsappMessageId: msg ?? undefined,
             stepIndex: 0,
-            windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            windowExpiresAt: null,
           },
         });
       };
-      const logFailure = async (err: string) => {
+      const logFailure = async (err: string, issues = [issue('SEND_FAILED', err)]) => {
         await prisma.campaignLog.create({
           data: {
             campaignId: campaign.id,
             customerId,
             status: 'FAILED',
             error: err,
+            metadata: JSON.parse(JSON.stringify({ issues, phone: customer.phone, templateName: templateInput.templateName })),
           },
         });
       };
@@ -285,28 +150,18 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
         } catch (e) {
           const err = e instanceof Error ? e.message : String(e);
           await logFailure(err);
-          sent++;
           failed++;
         }
       } else if (campaignType === 'WHATSAPP' || campaignType === 'ONE_TIME' || campaignType === 'RECURRING' || campaignType === 'DRIP' || campaignType === 'TRIGGER_BASED') {
         // All new campaign types default to WhatsApp delivery
-        const phone = sanitizePhone(
-          customer.phone ?? (customer as { default_address?: { phone?: string } })?.default_address?.phone ?? null,
-        );
-        if (!phone) {
-          await logFailure('No phone');
-          failed++;
-          continue;
-        }
-        const result = templateName
-          ? await sendWhatsAppTemplate(phone, templateName, templateLanguage, storeId)
-          : await sendWhatsAppText(phone, personalizedBody, storeId);
-        if (result.success) {
+        const phone = normalizePhone(customer.phone ?? customer.default_address?.phone ?? '');
+        try {
+          const result = await sendTemplate(storeId, phone, templateInput, { customer }, definition);
           await logSuccess(result.messageId);
           sent++;
-        } else {
-          await logFailure(result.error ?? 'Send failed');
-          sent++;
+        } catch (error) {
+          const issues = errorIssues(error);
+          await logFailure(issues[0].message, issues);
           failed++;
         }
       } else if (campaignType === 'SMS' || campaignType === 'PUSH') {
@@ -324,8 +179,9 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
     await prisma.campaign.update({
       where: { id: campaign.id },
       data: {
-        status: 'COMPLETED',
-        completedAt: now,
+        status: sent === 0 && failed > 0 ? 'FAILED' : 'COMPLETED',
+        estimatedReach: matchingCustomers.length,
+        completedAt: new Date(),
         executedAt: campaign.executedAt ?? now,
         totalSent: { increment: sent },
         totalDelivered: { increment: delivered },
@@ -337,7 +193,7 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
     await prisma.campaignQueueItem.update({
       where: { id: candidate.id },
       data: {
-        status: 'COMPLETED',
+        status: sent === 0 && failed > 0 ? 'FAILED' : 'COMPLETED',
       },
     });
 
@@ -372,7 +228,9 @@ export async function runCampaignWorkerStep(): Promise<{ processed: number; camp
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const retryCount = (candidate.retryCount ?? 0) + 1;
-    const maxRetries = parseInt(process.env.CAMPAIGN_RETRY_LIMIT ?? '3', 10);
+    // Never replay a whole batch: some recipients may already have been accepted.
+    const maxRetries = 1;
+    await prisma.campaignLog.create({ data: { campaignId: campaign.id, customerId: 'campaign', status: 'FAILED', error: errorIssues(e)[0].message, metadata: JSON.parse(JSON.stringify({ issues: errorIssues(e), scope: 'campaign' })) } });
 
     if (retryCount >= maxRetries) {
       await prisma.campaignQueueItem.update({

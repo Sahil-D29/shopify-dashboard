@@ -226,11 +226,13 @@ async function fetchTemplatesFromWhatsApp(wabaId: string, accessToken: string): 
 
 export async function GET(request: NextRequest) {
   try {
+    const authorizedStoreId = await getCurrentStoreId(request);
+    if (!authorizedStoreId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     let wabaId: string | undefined;
     let accessToken: string | undefined;
 
     // Resolve the store + its saved WhatsApp connection (Embedded Signup).
-    let storeId: string | null = null;
+    let storeId: string | null = authorizedStoreId;
     try {
       storeId = await getCurrentStoreId(request);
       if (!wabaId || !accessToken) {
@@ -243,10 +245,6 @@ export async function GET(request: NextRequest) {
     } catch {
       // fall through to env
     }
-
-    // Fallback to environment variables
-    wabaId = wabaId ?? process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-    accessToken = accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN ?? process.env.META_ACCESS_TOKEN;
 
     // Local drafts (persisted per-store in the DB).
     const drafts = await getDrafts(storeId);

@@ -1,3 +1,4 @@
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,6 +12,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const resolved = (await params);
     const body = await request.json().catch(() => ({}));
     const status = body?.status as 'ACTIVE' | 'PAUSED' | undefined;
@@ -20,7 +23,7 @@ export async function POST(
     }
 
     const journey = await getJourneyById(resolved.id);
-    if (!journey) {
+    if (!journey || journey.storeId !== storeId) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
 

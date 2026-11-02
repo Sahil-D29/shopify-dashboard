@@ -2713,6 +2713,18 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
     [],
   );
 
+  const issueLinkHandled = useRef(false);
+  useEffect(() => {
+    if (!initialised || issueLinkHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const nodeId = params.get('nodeId');
+    if (!nodeId || !nodes.some(node => node.id === nodeId)) return;
+    issueLinkHandled.current = true;
+    const field = params.get('field') ?? '';
+    const step: StepId = field === 'templateId' || field === 'templateLanguage' ? 'template' : 'variables';
+    handleOpenWhatsAppConfig(nodeId, step);
+  }, [initialised, nodes, handleOpenWhatsAppConfig]);
+
   const handleEditNode = useCallback(
     (nodeId: string) => {
       // Set selected node first to ensure inspector panel shows correct node

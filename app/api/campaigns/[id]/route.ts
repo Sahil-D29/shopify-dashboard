@@ -1,3 +1,7 @@
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues } from '@/lib/whatsapp/issues';
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Campaign } from '@/lib/types/campaign';
@@ -9,13 +13,15 @@ export const runtime = 'nodejs';
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const { id } = await params;
-    const dbCampaign = await prisma.campaign.findUnique({
-      where: { id },
+    const dbCampaign = await prisma.campaign.findFirst({
+      where: { id, storeId },
       include: {
         segment: true,
         store: true,
@@ -72,6 +78,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const { id } = await params;
     let updates: Partial<Campaign>;
     try {
@@ -83,23 +91,27 @@ export async function PUT(
       );
     }
     
-    const existingCampaign = await prisma.campaign.findUnique({ where: { id } });
+    const existingCampaign = await prisma.campaign.findFirst({ where: { id, storeId } });
     if (!existingCampaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
+    if (['RUNNING', 'COMPLETED'].includes(existingCampaign.status)) return NextResponse.json({ error: 'Duplicate a running or completed campaign to change its content.' }, { status: 409 });
+    if (existingCampaign.status === 'FAILED' && await prisma.campaignLog.count({ where: { campaignId: id, whatsappMessageId: { not: null } } })) return NextResponse.json({ error: 'This campaign has accepted messages. Duplicate it to send again.' }, { status: 409 });
+    if (updates.status === 'RUNNING' || updates.status === 'COMPLETED') return NextResponse.json({ error: 'Use the campaign launch action to send a draft.' }, { status: 409 });
+    if (updates.status === 'SCHEDULED' || (updates.status !== 'DRAFT' && existingCampaign.status === 'SCHEDULED')) {
+      try { await prepareTemplate(storeId, campaignTemplateInput({ ...existingCampaign, ...updates }), {}, true); }
+      catch (error) { const issues = errorIssues(error); return NextResponse.json({ error: issues[0].message, issues }, { status: 422 }); }
+    }
     // Transform updates to database format
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.status !== undefined) {
-      dbUpdates.status = updates.status === 'RUNNING' ? 'RUNNING' : 
-                         updates.status === 'SCHEDULED' ? 'SCHEDULED' : 
-                         updates.status === 'COMPLETED' ? 'COMPLETED' : 
-                         updates.status === 'FAILED' ? 'FAILED' : 'DRAFT';
+      dbUpdates.status = updates.status;
     }
-    if (updates.segmentIds && updates.segmentIds.length > 0) {
-      dbUpdates.segmentId = updates.segmentIds[0];
+    if (updates.segmentIds) {
+      dbUpdates.segmentId = updates.segmentIds[0] ?? null;
     }
     if (updates.messageContent !== undefined && updates.messageContent !== null) {
       dbUpdates.messageTemplate = {
@@ -114,15 +126,11 @@ export async function PUT(
     if (updates.scheduledAt !== undefined) {
       dbUpdates.scheduledAt = updates.scheduledAt ? new Date(updates.scheduledAt) : null;
     }
-    if (updates.metrics !== undefined && updates.metrics !== null) {
-      dbUpdates.totalSent = updates.metrics?.sent || 0;
-      dbUpdates.totalDelivered = updates.metrics?.delivered || 0;
-      dbUpdates.totalOpened = updates.metrics?.opened || 0;
-      dbUpdates.totalClicked = updates.metrics?.clicked || 0;
+    for (const field of ['whatsappConfig', 'templateId', 'segmentIds', 'sendingSpeed', 'scheduleType', 'timezone']) {
+      if ((updates as any)[field] !== undefined) dbUpdates[field] = (updates as any)[field];
     }
-
     const dbCampaign = await prisma.campaign.update({
-      where: { id },
+      where: { id, storeId },
       data: dbUpdates,
       include: {
         segment: true,
@@ -137,6 +145,13 @@ export async function PUT(
       },
     });
 
+    if (dbCampaign.status === 'SCHEDULED') {
+      const scheduledAt = dbCampaign.scheduledAt ?? new Date();
+      const queued = await prisma.campaignQueueItem.updateMany({ where: { campaignId: id, storeId, status: 'PENDING' }, data: { scheduledAt } });
+      if (!queued.count) await prisma.campaignQueueItem.create({ data: { campaignId: id, storeId, status: 'PENDING', scheduledAt } });
+    } else if (dbCampaign.status === 'DRAFT') {
+      await prisma.campaignQueueItem.updateMany({ where: { campaignId: id, storeId, status: 'PENDING' }, data: { status: 'FAILED', lastError: 'Schedule cancelled: campaign saved as draft.' } });
+    }
     // Sync follow-up steps if provided
     const followUpSteps = (updates as any).followUpSteps as
       | Array<{
@@ -188,18 +203,20 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const { id } = await params;
     
-    const existingCampaign = await prisma.campaign.findUnique({ where: { id } });
+    const existingCampaign = await prisma.campaign.findFirst({ where: { id, storeId } });
     if (!existingCampaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    await prisma.campaign.delete({ where: { id } });
+    await prisma.campaign.delete({ where: { id, storeId } });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

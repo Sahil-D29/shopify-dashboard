@@ -15,6 +15,7 @@ interface TemplateCardProps {
 }
 
 export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: TemplateCardProps) {
+  const [testError, setTestError] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -42,6 +43,25 @@ export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: 
       variableValues[varName] = value;
     }
 
+    let mediaUrl: string | undefined;
+    if (template.header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.header.type)) {
+      mediaUrl = prompt('Enter the HTTPS URL for the template header media:') || undefined;
+      if (!mediaUrl) return;
+    }
+    for (const match of template.header?.type === 'TEXT' ? template.header.content.matchAll(/\{\{([^{}]+)\}\}/g) : []) {
+      const value = prompt('Enter header value for {{' + match[1] + '}}:');
+      if (value === null) return;
+      variableValues['header.' + match[1]] = value;
+    }
+    const buttonActions: Record<string, string> = {};
+    for (const [index, button] of (template.buttons ?? []).entries()) {
+      if (button.type === 'URL' && button.url?.includes('{{')) {
+        const value = prompt('Enter dynamic URL value for button ' + (index + 1) + ':');
+        if (value === null) return;
+        buttonActions[String(index)] = value;
+      }
+    }
+    setTestError('');
     try {
       const response = await fetch('/api/whatsapp/send-template', {
         method: 'POST',
@@ -51,11 +71,12 @@ export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: 
           phoneNumber,
           variables: variableValues,
           language: template.language,
+          mediaUrl, buttonActions,
         }),
       });
 
       if (response.ok) {
-        alert('✅ Test message sent successfully!');
+        alert('✅ Test accepted by WhatsApp. Check delivery status in the inbox.');
       } else {
         const error = await response.json();
         alert(`❌ Failed to send: ${error.error}`);
@@ -100,6 +121,7 @@ export default function TemplateCard({ template, onDelete, onRefresh, onEdit }: 
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col min-h-[240px] group cursor-pointer">
+      {testError && <p role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{testError}</p>}
       {/* Header - Template Name & Status Badges */}
       <div className="p-5 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">

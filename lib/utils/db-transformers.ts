@@ -52,6 +52,7 @@ export function transformCampaign(dbCampaign: DbCampaign): Campaign {
 
     // Content
     templateId: dbCampaign.templateId || undefined,
+    whatsappConfig: (dbCampaign.whatsappConfig as any) ?? undefined,
     messageContent: messageTemplate?.messageContent || {
       body: messageTemplate?.body || '',
       subject: messageTemplate?.subject,

@@ -8,6 +8,9 @@ import { prisma } from '@/lib/prisma';
 import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from './graph';
 import { normalizePhone } from './normalize-phone';
+import { prepareTemplate } from './template-send';
+import type { TemplateInput } from './template-payload';
+import { configurationIssue, errorIssues, providerIssue, SendValidationError, type SendIssue } from './issues';
 export type SendMessageType = 'text' | 'template' | 'image' | 'video' | 'document' | 'audio';
 
 export interface SendMessageOptions {
@@ -22,6 +25,7 @@ export interface SendMessageOptions {
   templateName?: string;
   templateLanguage?: string;
   templateComponents?: unknown[];
+  templateInput?: TemplateInput;
   // Media message
   mediaUrl?: string;
   mediaType?: string;
@@ -35,6 +39,7 @@ export interface SendMessageResult {
   whatsappMessageId?: string;
   dbMessageId?: string;
   error?: string;
+  issues?: SendIssue[];
 }
 
 /**
@@ -43,7 +48,7 @@ export interface SendMessageResult {
 export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
   const validation = await resolveWhatsAppConfig(opts.storeId);
   if (!validation.valid) {
-    return { success: false, error: validation.error };
+    return { success: false, error: validation.error, issues: [configurationIssue(validation)] };
   }
 
   const config = validation.config;
@@ -56,6 +61,12 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
   try {
     // Build the message payload based on type
     const payload = buildMessagePayload(opts, formattedPhone);
+    if (opts.type === 'template') {
+      payload.template = await prepareTemplate(opts.storeId, {
+        templateName: opts.templateName, templateLanguage: opts.templateLanguage,
+        components: opts.templateComponents, ...opts.templateInput,
+      });
+    }
 
     // Send via Meta Graph API (appsecret_proof appended when app secret is set)
     const response = await fetch(
@@ -73,7 +84,8 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
     const result = await response.json();
 
     if (!response.ok) {
-      const errorMsg = result?.error?.message || 'Failed to send message';
+      const sendIssue = providerIssue(result?.error);
+      const errorMsg = sendIssue.message;
 
       // Still create message record with FAILED status
       const dbMessage = await prisma.message.create({
@@ -87,17 +99,18 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
           mediaUrl: opts.mediaUrl || null,
           mediaType: opts.mediaType || null,
           templateName: opts.templateName || null,
-          templateData: opts.templateComponents ? (opts.templateComponents as any) : null,
+          templateData: { issues: [sendIssue], components: opts.templateComponents ?? [] } as any,
           status: 'FAILED',
           sentBy: opts.sentBy || null,
           errorMessage: errorMsg,
         },
       });
 
-      return { success: false, error: errorMsg, dbMessageId: dbMessage.id };
+      return { success: false, error: errorMsg, issues: [sendIssue], dbMessageId: dbMessage.id };
     }
 
     const whatsappMessageId = result?.messages?.[0]?.id || null;
+    if (!whatsappMessageId) throw new SendValidationError([providerIssue(undefined)]);
     const messageContent = opts.content || opts.caption || opts.templateName || '';
     const preview = messageContent.substring(0, 100);
 
@@ -113,7 +126,7 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
         mediaUrl: opts.mediaUrl || null,
         mediaType: opts.mediaType || null,
         templateName: opts.templateName || null,
-        templateData: opts.templateComponents ? (opts.templateComponents as any) : null,
+        templateData: opts.type === 'template' ? (payload.template as any) : null,
         whatsappMessageId,
         status: 'SENT',
         sentBy: opts.sentBy || null,
@@ -151,11 +164,9 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
       dbMessageId: dbMessage.id,
     };
   } catch (error) {
-    console.error('[sendWhatsAppMessage] Error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error sending message',
-    };
+    const issues = errorIssues(error);
+    return { success: false, error: issues[0].message, issues };
+
   }
 }
 

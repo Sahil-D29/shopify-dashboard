@@ -1,10 +1,12 @@
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { errorIssues } from '@/lib/whatsapp/issues';
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 import type { WhatsAppActionConfig } from '@/lib/types/whatsapp-config';
 import { getJourneyById, updateJourney } from '@/lib/journey-engine/storage';
-import { validateWhatsAppConfig } from '@/lib/whatsapp/validate-config';
 
 type Params = { id: string; nodeId: string };
 
@@ -37,14 +39,16 @@ function ensureNodeMeta(node: JourneyNode) {
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<Params> },
 ) {
   const { id, nodeId } = await params;
   const journeyId = id;
 
-  const journey = await getJourneyById(journeyId);
-  if (!journey) {
+  const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
+    const journey = await getJourneyById(journeyId);
+  if (!journey || journey.storeId !== storeId) {
     return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
   }
 
@@ -80,24 +84,15 @@ export async function POST(
       );
     }
 
-    // Server-side validation before save (defense-in-depth)
-    const validation = validateWhatsAppConfig(body);
-    if (!validation.valid) {
-      return NextResponse.json(
-        {
-          error: 'Configuration validation failed.',
-          firstInvalidStep: validation.firstInvalidStep,
-          errors: validation.errors,
-        },
-        { status: 400 },
-      );
-    }
-
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const journey = await getJourneyById(journeyId);
-    if (!journey) {
+    if (!journey || journey.storeId !== storeId) {
       return NextResponse.json({ error: 'Journey not found.' }, { status: 404 });
     }
 
+    try { await prepareTemplate(storeId, body, {}, true); }
+    catch (error) { const issues = errorIssues(error); return NextResponse.json({ error: issues[0].message, issues }, { status: 422 }); }
     const nodes = journey.nodes || [];
     const nodeIndex = nodes.findIndex(item => item.id === nodeId);
 
@@ -140,6 +135,7 @@ export async function POST(
       ...nodeData,
       meta: {
         ...nodeMeta,
+      whatsappActionDraft: undefined,
         actionType: 'whatsapp',
         templateId: body.templateId,
         templateName: body.templateName,

@@ -1,3 +1,6 @@
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues } from '@/lib/whatsapp/issues';
 export const dynamic = 'force-dynamic';
 import type { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
@@ -259,6 +262,10 @@ export async function POST(request: NextRequest) {
         ? 'SCHEDULED'
         : 'DRAFT';
 
+    if (status !== 'DRAFT') {
+      try { await prepareTemplate(storeId, campaignTemplateInput({ ...data, messageTemplate: data.messageContent }), {}, true); }
+      catch (error) { const issues = errorIssues(error); return NextResponse.json({ success: false, error: issues[0].message, issues }, { status: 422 }); }
+    }
     const userId = userContext.userId || 'user_1';
 
     const messageContent = normaliseMessageContent(
@@ -382,6 +389,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    let sendError: string | undefined;
     // Enqueue the campaign for delivery. Without a queue item the send worker
     // has nothing to process, which is why campaigns previously sat on RUNNING
     // with 0 sent and no error.
@@ -396,19 +404,21 @@ export async function POST(request: NextRequest) {
           },
         });
       } catch (enqueueError) {
-        console.error('[API] Failed to enqueue campaign:', enqueueError);
+        const issues = errorIssues(enqueueError);
+        sendError = issues[0].message;
+        await prisma.campaign.update({ where: { id: dbCampaign.id }, data: { status: 'FAILED' } });
+        await prisma.campaignLog.create({ data: { campaignId: dbCampaign.id, customerId: 'campaign', status: 'FAILED', error: sendError, metadata: JSON.parse(JSON.stringify({ issues })) } });
       }
     }
 
     // Immediate campaigns: run the worker inline so the user gets instant
     // feedback (sent counts, or a FAILED status with the reason) instead of a
     // campaign that silently stays on RUNNING.
-    let sendError: string | undefined;
     if (status === 'RUNNING') {
       try {
         const { runCampaignWorkerStep } = await import('@/jobs/campaign.worker');
         for (let i = 0; i < 3; i++) {
-          const result = await runCampaignWorkerStep();
+          const result = await runCampaignWorkerStep(dbCampaign.id);
           if (result.error && result.campaignId === dbCampaign.id) {
             sendError = result.error;
             break;
@@ -439,7 +449,7 @@ export async function POST(request: NextRequest) {
 
     const campaign = transformCampaign(refreshed ?? dbCampaign);
 
-    return NextResponse.json({ campaign, success: true, sendError });
+    return NextResponse.json({ campaign, success: campaign.status !== 'FAILED', sendError, issues: sendError ? errorIssues(new Error(sendError)) : [] });
   } catch (error) {
     console.error('[API] Error creating campaign:', error);
     return NextResponse.json(

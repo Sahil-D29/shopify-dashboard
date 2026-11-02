@@ -25,9 +25,10 @@ export async function GET(
     const { id: campaignId } = await params;
     const storeId = await getCurrentStoreId(request);
 
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     // Load campaign from Prisma
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, storeId: storeId || undefined },
+      where: { id: campaignId, storeId },
     });
 
     if (!campaign) {
@@ -52,10 +53,11 @@ export async function GET(
     const read = statusCounts['READ'] ?? 0;
     const failed = statusCounts['FAILED'] ?? 0;
 
-    // Also factor in campaign-level metrics for backward compat
-    const totalSent = Math.max(sent, campaign.totalSent ?? 0);
-    const totalDelivered = Math.max(delivered, campaign.totalDelivered ?? 0);
-    const totalFailed = Math.max(failed, campaign.totalFailed ?? 0);
+    const hasLogs = logStats.length > 0;
+    const accepted = await prisma.campaignLog.count({ where: { campaignId, OR: [ { whatsappMessageId: { not: null } }, { status: { in: ['SUCCESS', 'DELIVERED', 'READ', 'CLICKED', 'REPLIED', 'CONVERTED'] } } ] } });
+    const totalSent = hasLogs ? accepted : campaign.totalSent ?? 0;
+    const totalDelivered = hasLogs ? await prisma.campaignLog.count({ where: { campaignId, OR: [{ deliveredAt: { not: null } }, { status: { in: ['DELIVERED', 'READ'] } }] } }) : campaign.totalDelivered ?? 0;
+    const totalFailed = hasLogs ? failed : campaign.totalFailed ?? 0;
 
     const sentRate = toSend > 0 ? (totalSent / toSend) * 100 : 0;
     const deliveryRate = totalSent > 0 ? (totalDelivered / totalSent) * 100 : 0;

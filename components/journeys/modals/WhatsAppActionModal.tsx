@@ -1,5 +1,6 @@
 "use client";
 
+import TemplateRuntimeFields from '@/components/templates/TemplateRuntimeFields';
 import {
   useCallback,
   useEffect,
@@ -138,6 +139,7 @@ const normalizeTemplate = (value: unknown): WhatsAppTemplate | null => {
     buttons,
     body: getString(value.body),
     footer: getString(value.footer),
+    header: isJsonMap(value.header) ? value.header as unknown as WhatsAppTemplate['header'] : undefined,
     sampleValues: isJsonMap(value.sampleValues)
       ? Object.entries(value.sampleValues).reduce<Record<string, string>>((acc, [key, sample]) => {
           const normalised = getString(sample) ?? (typeof sample === "number" ? String(sample) : undefined);
@@ -443,7 +445,7 @@ function deriveButtonActions(buttons: TemplateButton[] | undefined, existing: Re
   if (!buttons) return {};
   const record: Record<string, string> = {};
   buttons.forEach(button => {
-    record[button.id] = existing?.[button.id] ?? button.url ?? button.phone ?? "";
+    record[button.id] = existing?.[button.id] ?? (button.url?.includes("{{") ? "" : button.url) ?? button.phone ?? "";
   });
   return record;
 }
@@ -1112,7 +1114,7 @@ export default function WhatsAppActionModal({
           template_language: selectedTemplate.language,
           template_category: selectedTemplate.category,
           phone,
-          variables,
+          variables: { ...variables, ...config.variables },
           body_fields: bodyFieldsPayload ?? bodyFields,
           render_preview: true,
           button_actions: derivedButtonActions,
@@ -1337,6 +1339,7 @@ export default function WhatsAppActionModal({
               triggerContext={triggerContext}
               useEnhancedMapper={true}
             />
+            <TemplateRuntimeFields template={selectedTemplate} config={config} onChange={updates => setConfig(prev => ({ ...prev, ...updates }))} />
             {templateSupportsMedia && (
               <section className="space-y-4 rounded-2xl border border-[#E8E4DE] bg-white p-5 shadow-sm">
                 <header className="space-y-1">

@@ -1,215 +1,31 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import { prisma } from '@/lib/prisma';
-import { transformCampaign } from '@/lib/utils/db-transformers';
-import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
-import { graphUrl } from '@/lib/whatsapp/graph';
-import { getShopifyClientAsync } from '@/lib/shopify/api-helper';
-import { resolveSegmentCustomers } from '@/lib/segments/resolve-customers';
-import { auth } from '@/lib/auth';
 import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
-
-export const runtime = 'nodejs';
-
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-const sanitizePhoneNumber = (value: string | null | undefined): string | null => {
-  if (!value) return null;
-  const digits = value.replace(/[\s\-+()]/g, '');
-  if (!digits) return null;
-  if (digits.startsWith('0')) return null;
-  return digits;
-};
-
-const personalizeMessageBody = (body: string, customer: ShopifyCustomer): string => {
-  const firstName = customer.first_name ?? 'Customer';
-  const lastName = customer.last_name ?? '';
-  const fullName = `${firstName} ${lastName}`.trim() || 'Customer';
-
-  return body
-    .replace(/\{\{name\}\}/g, fullName)
-    .replace(/\{\{first_name\}\}/g, firstName)
-    .replace(/\{\{last_name\}\}/g, lastName)
-    .replace(/\{\{email\}\}/g, customer.email ?? '');
-};
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues } from '@/lib/whatsapp/issues';
+import { runCampaignWorkerStep } from '@/jobs/campaign.worker';
+import { transformCampaign } from '@/lib/utils/db-transformers';
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id: campaignId } = await params;
     const storeId = await getCurrentStoreId(request);
-
-    // Load campaign from Prisma
-    const dbCampaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, storeId: storeId || undefined },
-      include: { segment: true, store: true, creator: { select: { id: true, name: true, email: true } } },
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
+    const { id } = await params;
+    const campaign = await prisma.campaign.findFirst({ where: { id, storeId } });
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    if (campaign.status !== 'DRAFT') return NextResponse.json({ error: 'Only draft campaigns can be launched. Duplicate this campaign to send again.' }, { status: 409 });
+    await prepareTemplate(storeId, campaignTemplateInput(campaign), {}, true);
+    await prisma.$transaction(async tx => {
+      const claimed = await tx.campaign.updateMany({ where: { id, storeId, status: 'DRAFT' }, data: { status: 'RUNNING', executedAt: new Date() } });
+      if (!claimed.count) throw new Error('Campaign has already been launched');
+      await tx.campaignQueueItem.create({ data: { campaignId: id, storeId, status: 'PENDING', scheduledAt: new Date() } });
     });
-
-    if (!dbCampaign) {
-      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
-    }
-
-    const campaign = transformCampaign(dbCampaign);
-
-    // Prevent double-sends
-    if (dbCampaign.status === 'RUNNING' || dbCampaign.status === 'COMPLETED') {
-      return NextResponse.json(
-        { error: `Campaign already ${dbCampaign.status.toLowerCase()}` },
-        { status: 409 },
-      );
-    }
-
-    // Validate WhatsApp config
-    const whatsappValidation = await resolveWhatsAppConfig(storeId);
-    if (!whatsappValidation.valid) {
-      return NextResponse.json(
-        { error: 'WhatsApp not configured', details: whatsappValidation.error },
-        { status: 400 },
-      );
-    }
-
-    const whatsappConfig = whatsappValidation.config;
-
-    // Resolve recipients with enrichment-correct segment matching (orders, storefront
-    // events, campaign history, RFM, sub-filters all evaluated — see resolveSegmentCustomers).
-    const client = await getShopifyClientAsync(request);
-    const matchingCustomers = await resolveSegmentCustomers({
-      client,
-      storeId: storeId || undefined,
-      segmentIds: campaign.segmentIds,
-      forceRefresh: true,
-    });
-
-    // Update campaign status to RUNNING
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: {
-        status: 'RUNNING',
-        executedAt: dbCampaign.executedAt ?? new Date(),
-      },
-    });
-
-    let sentCount = 0;
-    let failedCount = 0;
-
-    for (let i = 0; i < matchingCustomers.length; i++) {
-      const customer = matchingCustomers[i];
-      const phone = sanitizePhoneNumber(
-        customer.phone ?? customer.default_address?.phone ?? null,
-      );
-      if (!phone) continue;
-
-      if (i > 0) await new Promise(r => setTimeout(r, 100));
-
-      try {
-        const messageBody = personalizeMessageBody(
-          campaign.messageContent.body ?? '',
-          customer,
-        );
-        const payload = {
-          messaging_product: 'whatsapp',
-          to: phone,
-          type: 'text',
-          text: { body: messageBody },
-        };
-
-        const apiUrl = graphUrl(`${META_GRAPH_API_VERSION}/${whatsappConfig.phoneNumberId}/messages`, whatsappConfig.accessToken);
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${whatsappConfig.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const json = (await response.json()) as {
-          messages?: Array<{ id: string }>;
-          error?: { code?: unknown; message?: string };
-        };
-
-        if (response.ok && json.messages?.[0]?.id) {
-          sentCount++;
-          const waMessageId = json.messages[0].id;
-          // Log success to Prisma with follow-up tracking fields
-          await prisma.campaignLog.create({
-            data: {
-              campaignId,
-              customerId: String(customer.id),
-              status: 'SUCCESS',
-              message: waMessageId,
-              whatsappMessageId: waMessageId,
-              stepIndex: 0,
-              windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-              metadata: { phone, messageBody: messageBody.slice(0, 200) },
-            },
-          });
-        } else {
-          failedCount++;
-          const errorMessage = json.error?.message ?? 'Failed to send message';
-          await prisma.campaignLog.create({
-            data: {
-              campaignId,
-              customerId: String(customer.id),
-              status: 'FAILED',
-              error: errorMessage,
-              metadata: { phone, errorCode: String(json.error?.code ?? '') },
-            },
-          });
-        }
-      } catch (error) {
-        failedCount++;
-        await prisma.campaignLog.create({
-          data: {
-            campaignId,
-            customerId: String(customer.id),
-            status: 'FAILED',
-            error: getErrorMessage(error),
-            metadata: { phone },
-          },
-        });
-      }
-    }
-
-    // Update campaign metrics in Prisma
-    const updatedCampaign = await prisma.campaign.update({
-      where: { id: campaignId },
-      data: {
-        totalSent: { increment: sentCount },
-        totalFailed: { increment: failedCount },
-        status: 'COMPLETED',
-        completedAt: new Date(),
-      },
-      include: { segment: true, store: true, creator: { select: { id: true, name: true, email: true } } },
-    });
-
-    return NextResponse.json({
-      campaign: transformCampaign(updatedCampaign),
-      success: true,
-      message: 'Campaign launched successfully',
-      stats: {
-        sent: sentCount,
-        failed: failedCount,
-        total: matchingCustomers.length,
-      },
-    });
+    await runCampaignWorkerStep(id);
+    const updated = await prisma.campaign.findUniqueOrThrow({ where: { id } });
+    return NextResponse.json({ campaign: transformCampaign(updated as any), success: updated.status !== 'FAILED', message: updated.status === 'FAILED' ? 'Campaign failed. Open Issues for details.' : 'Campaign processed. Check delivery status for results.' });
   } catch (error) {
-    console.error('[API] Error launching campaign:', error);
-    return NextResponse.json(
-      {
-        error: 'Failed to launch campaign',
-        details: getErrorMessage(error),
-      },
-      { status: 500 },
-    );
+    const issues = errorIssues(error);
+    return NextResponse.json({ success: false, error: issues[0].message, issues }, { status: 422 });
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import TemplateRuntimeFields from '@/components/templates/TemplateRuntimeFields';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -110,6 +111,8 @@ interface CampaignFormData {
   whatsappConfig?: {
     variableMappings?: any[];
     bodyFields?: any[];
+    variables?: Record<string, string>;
+    buttonActions?: Record<string, string>;
     sendWindow?: any;
     rateLimiting?: any;
     failureHandling?: any;
@@ -183,6 +186,7 @@ const defaultCampaignData: CampaignFormData = {
 };
 
 export default function CampaignWizard({ campaignId, onComplete }: CampaignWizardProps) {
+  useEffect(() => { if (campaignId && new URLSearchParams(window.location.search).get('step') === '3') setCurrentStep(3); }, [campaignId]);
   const router = useRouter();
   const toast = useToast();
   const { featureFlags } = useAppConfig();
@@ -252,6 +256,7 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
         labels: campaign.labels ?? [],
         useSmartTiming: campaign.useSmartTiming ?? false,
         templateId: campaign.templateId,
+        whatsappConfig: campaign.whatsappConfig,
         goalTracking: campaign.goalTracking as GoalTracking | undefined,
         abTest: campaign.abTest as ABTestConfig | undefined,
         recurringConfig: campaign.recurringConfig as RecurringConfig | undefined,
@@ -319,11 +324,18 @@ export default function CampaignWizard({ campaignId, onComplete }: CampaignWizar
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(campaignData),
+        body: JSON.stringify({ ...campaignData, ...(isEditMode ? { status: campaignData.scheduleType === 'IMMEDIATE' ? 'DRAFT' : 'SCHEDULED' } : {}) }),
       });
       const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & { sendError?: string };
-      if (!response.ok) throw new Error(payload.error ?? payload.message ?? 'Unable to save campaign');
-      if (payload.sendError) {
+      if (!response.ok) throw new Error((payload as any).issues?.map((item: any) => item.message + ' ' + item.action).join(' ') || payload.error || payload.message || 'Unable to save campaign');
+      if (isEditMode && campaignData.scheduleType === 'IMMEDIATE') {
+        const launched = await fetch('/api/campaigns/' + campaignId + '/send', { method: 'POST' });
+        const result = await launched.json();
+        if (!launched.ok || result.success === false) throw new Error(result.issues?.map((item: any) => item.message + ' ' + item.action).join(' ') || result.error || result.message || 'Campaign failed. Open Issues for details.');
+      }
+      if ((payload as any).success === false && !payload.sendError) {
+        toast.error('Campaign failed. Open its Sending issues panel for details.');
+      } else if (payload.sendError) {
         toast.error(`Campaign saved, but sending failed: ${payload.sendError}`);
       } else {
         toast.success(isEditMode ? 'Campaign updated successfully' : 'Campaign launched successfully');
@@ -780,18 +792,21 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
         template_language: selectedTemplate.language,
         template_category: selectedTemplate.category,
         phone,
-        variables: variablePreview,
+        variables: { ...variablePreview, ...(campaignData.whatsappConfig as any)?.variables },
         body_fields: bodyFields,
+        mediaUrl: campaignData.whatsappConfig?.mediaUrl,
+        buttonActions: (campaignData.whatsappConfig as any)?.buttonActions,
       }),
     });
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { userMessage?: string; error?: string };
-      throw new Error(payload.userMessage ?? payload.error ?? 'Failed to send test');
+      throw new Error((payload as any).issues?.map((item: any) => item.message + ' ' + item.action).join(' ') || payload.userMessage || payload.error || 'Failed to send test');
     }
   };
 
   const whatsappConfig: any = {
     templateId: selectedTemplate?.id || '', templateName: selectedTemplate?.name || '', templateStatus: selectedTemplate?.status || 'APPROVED', templateLanguage: selectedTemplate?.language || '', templateCategory: selectedTemplate?.category || '',
+    ...(campaignData.whatsappConfig ?? {}),
     variableMappings, bodyFields,
     sendWindow: campaignData.whatsappConfig?.sendWindow || { daysOfWeek: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '21:00', timezone: 'customer' },
     rateLimiting: campaignData.whatsappConfig?.rateLimiting || { maxPerDay: 3, maxPerWeek: 10 },
@@ -856,6 +871,7 @@ function StepMessage({ campaignData, setCampaignData }: { campaignData: Campaign
       </div>
 
       {/* ─── Advanced (Delivery + Validate) ─── */}
+      <TemplateRuntimeFields template={selectedTemplate} config={campaignData.whatsappConfig ?? {}} onChange={handleConfigChange} />
       <AdvancedWhatsAppSettings config={whatsappConfig} selectedTemplate={selectedTemplate} bodyFields={bodyFields} variableMappings={variableMappings} variablePreview={variablePreview} onConfigChange={handleConfigChange} onBodyFieldChange={(f) => { setBodyFields(f); handleConfigChange({ bodyFields: f }); }} onVariableMappingsChange={(m) => { setVariableMappings(m); handleConfigChange({ variableMappings: m }); }} onSendTest={handleSendTest} dataSources={[]} triggerContext="generic" />
 
       {/* ─── A/B Variants ─── */}

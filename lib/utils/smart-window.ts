@@ -1,207 +1,51 @@
-/**
- * Smart Window — 24-hour free messaging window detection and smart sending.
- *
- * Meta allows free-form text messages within 24 hours of a customer's last
- * inbound message. Outside this window, only pre-approved templates can be sent
- * (at higher cost). This utility decides the cheapest/best way to send.
- */
 import { prisma } from '@/lib/prisma';
-import { getWhatsAppConfig } from '@/lib/config/whatsapp-env';
-import { META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
+import { resolveWhatsAppConfig, META_GRAPH_API_VERSION } from '@/lib/config/whatsapp-config-resolver';
 import { graphUrl } from '@/lib/whatsapp/graph';
-
-export interface SmartSendResult {
-  success: boolean;
-  usedFreeForm: boolean;
-  messageId?: string;
-  error?: string;
+import { sendTemplate } from '@/lib/whatsapp/template-send';
+import type { TemplateInput } from '@/lib/whatsapp/template-payload';
+import { configurationIssue, errorIssues, issue, providerIssue, type SendIssue } from '@/lib/whatsapp/issues';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+export interface SmartSendResult { success: boolean; usedFreeForm: boolean; messageId?: string; error?: string; issues?: SendIssue[] }
+export async function isInFreeWindow(contactId?: string, storeId?: string, _windowExpiresAt?: Date | null): Promise<boolean> {
+  if (!contactId || !storeId) return false;
+  // Only an inbound customer message opens the service window. Outbound sends and read receipts do not.
+  const inbound = await prisma.message.findFirst({ where: { storeId, contactId, direction: 'INBOUND', createdAt: { gt: new Date(Date.now() - 86400000) } }, select: { id: true } });
+  return !!inbound;
 }
-
-/**
- * Check if a customer is currently within the 24-hour free messaging window.
- */
-export async function isInFreeWindow(
-  contactId?: string,
-  storeId?: string,
-  windowExpiresAt?: Date | null,
-): Promise<boolean> {
-  // If we have an explicit window expiry, check it
-  if (windowExpiresAt) {
-    return windowExpiresAt.getTime() > Date.now();
-  }
-
-  // Fallback: check Contact.lastMessageAt
-  if (contactId && storeId) {
-    const contact = await prisma.contact.findFirst({
-      where: { id: contactId, storeId },
-      select: { lastMessageAt: true },
-    });
-
-    if (contact?.lastMessageAt) {
-      return (Date.now() - contact.lastMessageAt.getTime()) < 24 * 60 * 60 * 1000;
-    }
-  }
-
-  return false;
+export async function findContactByPhone(phone: string, storeId: string) {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+  return prisma.contact.findFirst({ where: { storeId, phone: { in: [normalized, '+' + normalized] } }, select: { id: true, lastMessageAt: true } });
 }
-
-/**
- * Find contact by phone number for window checking.
- */
-export async function findContactByPhone(
-  phone: string,
-  storeId: string,
-): Promise<{ id: string; lastMessageAt: Date | null } | null> {
-  // Normalize phone — strip non-digits
-  const normalizedPhone = phone.replace(/[\s\-+()]/g, '');
-  if (!normalizedPhone) return null;
-
-  const contact = await prisma.contact.findFirst({
-    where: {
-      storeId,
-      phone: { contains: normalizedPhone },
-    },
-    select: { id: true, lastMessageAt: true },
-  });
-
-  return contact;
-}
-
-/**
- * Send a message using the smart window strategy:
- * - If customer is within 24hr window → send free-form text (no template cost)
- * - If outside window and template is configured → send template
- * - If outside window and no template → skip (return success: false)
- */
 export async function sendWithSmartWindow(params: {
-  phone: string;
-  freeFormBody: string;
-  templateName?: string;
-  templateLanguage?: string;
-  templateComponents?: Array<Record<string, unknown>>;
-  storeId: string;
-  contactId?: string;
-  windowExpiresAt?: Date | null;
+  phone: string; freeFormBody: string; templateName?: string; templateLanguage?: string;
+  templateComponents?: Array<Record<string, unknown>>; storeId: string; contactId?: string;
+  windowExpiresAt?: Date | null; templateInput?: TemplateInput; context?: Record<string, any>; forceTemplate?: boolean;
 }): Promise<SmartSendResult> {
-  const config = getWhatsAppConfig();
-  if (!config.phoneNumberId || !config.accessToken) {
-    return { success: false, usedFreeForm: false, error: 'WhatsApp not configured' };
-  }
-
-  const formatted = params.phone.replace(/[\s\-+()]/g, '');
-  if (!formatted) {
-    return { success: false, usedFreeForm: false, error: 'Invalid phone' };
-  }
-
-  // Check if customer is in 24hr free window
-  const inWindow = await isInFreeWindow(
-    params.contactId,
-    params.storeId,
-    params.windowExpiresAt,
-  );
-
-  if (inWindow) {
-    // ─── Send FREE-FORM text (no template cost!) ────────
-    try {
-      const res = await fetch(
-        graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${config.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: formatted,
-            type: 'text',
-            text: { preview_url: false, body: params.freeFormBody },
-          }),
-        },
-      );
-      const data = (await res.json()) as {
-        messages?: Array<{ id: string }>;
-        error?: { message?: string };
-      };
-      if (res.ok && data.messages?.[0]?.id) {
-        return { success: true, usedFreeForm: true, messageId: data.messages[0].id };
-      }
-      return { success: false, usedFreeForm: true, error: data.error?.message ?? 'Send failed' };
-    } catch (e) {
-      return { success: false, usedFreeForm: true, error: e instanceof Error ? e.message : String(e) };
+  const usedFreeForm = !params.forceTemplate && await isInFreeWindow(params.contactId, params.storeId);
+  try {
+    if (!usedFreeForm) {
+      const sent = await sendTemplate(params.storeId, params.phone, { ...params.templateInput, templateName: params.templateName, templateLanguage: params.templateLanguage ?? params.templateInput?.templateLanguage, components: params.templateComponents }, params.context);
+      return { success: true, usedFreeForm: false, messageId: sent.messageId };
     }
-  }
-
-  // ─── Outside window: send via TEMPLATE ────────
-  if (params.templateName) {
-    try {
-      const templatePayload: Record<string, unknown> = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: formatted,
-        type: 'template',
-        template: {
-          name: params.templateName,
-          language: { code: params.templateLanguage || 'en' },
-          ...(params.templateComponents && params.templateComponents.length > 0
-            ? { components: params.templateComponents }
-            : {}),
-        },
-      };
-
-      const res = await fetch(
-        graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${config.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(templatePayload),
-        },
-      );
-      const data = (await res.json()) as {
-        messages?: Array<{ id: string }>;
-        error?: { message?: string };
-      };
-      if (res.ok && data.messages?.[0]?.id) {
-        return { success: true, usedFreeForm: false, messageId: data.messages[0].id };
-      }
-      return { success: false, usedFreeForm: false, error: data.error?.message ?? 'Template send failed' };
-    } catch (e) {
-      return { success: false, usedFreeForm: false, error: e instanceof Error ? e.message : String(e) };
+    const resolved = await resolveWhatsAppConfig(params.storeId);
+    if (!resolved.valid) return { success: false, usedFreeForm, error: resolved.error, issues: [configurationIssue(resolved)] };
+    const { config } = resolved;
+    const response = await fetch(graphUrl(META_GRAPH_API_VERSION + '/' + config.phoneNumberId + '/messages', config.accessToken), {
+      method: 'POST', headers: { Authorization: 'Bearer ' + config.accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: normalizePhone(params.phone), type: 'text', text: { body: params.freeFormBody } }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.messages?.[0]?.id) {
+      const failure = providerIssue(result.error); return { success: false, usedFreeForm, error: failure.message, issues: [failure] };
     }
-  }
-
-  // No template configured and outside window — skip
-  return { success: false, usedFreeForm: false, error: 'Outside 24hr window and no template configured' };
+    return { success: true, usedFreeForm, messageId: result.messages[0].id };
+  } catch (error) { const issues = errorIssues(error); return { success: false, usedFreeForm, error: issues[0].message, issues }; }
 }
-
-/**
- * Estimate how many customers are currently in the free messaging window
- * for a given store and segment.
- */
-export async function countInWindowCustomers(storeId: string): Promise<{
-  total: number;
-  inWindow: number;
-  outOfWindow: number;
-}> {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-  const [total, inWindow] = await Promise.all([
+export async function countInWindowCustomers(storeId: string) {
+  const [total, contacts] = await Promise.all([
     prisma.contact.count({ where: { storeId } }),
-    prisma.contact.count({
-      where: {
-        storeId,
-        lastMessageAt: { gte: cutoff },
-      },
-    }),
+    prisma.message.findMany({ where: { storeId, direction: 'INBOUND', createdAt: { gt: new Date(Date.now() - 86400000) } }, distinct: ['contactId'], select: { contactId: true } }),
   ]);
-
-  return {
-    total,
-    inWindow,
-    outOfWindow: total - inWindow,
-  };
+  return { total, inWindow: contacts.length, outOfWindow: Math.max(0, total - contacts.length) };
 }

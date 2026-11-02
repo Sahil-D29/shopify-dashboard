@@ -55,6 +55,7 @@ export interface Campaign {
   
   // Content
   templateId?: string;
+  whatsappConfig?: import('./whatsapp-config').WhatsAppActionConfig;
   messageContent: CampaignMessageContent;
   
   // Scheduling

@@ -40,16 +40,15 @@ export async function resolveSegmentCustomers(
 ): Promise<ShopifyCustomer[]> {
   const { client, storeId, segmentIds, customers, forceRefresh } = options;
 
-  const pool: ShopifyCustomer[] = customers
-    ? customers
-    : await client.fetchAll<ShopifyCustomer>('customers', { limit: 250 });
-
-  if (!segmentIds || segmentIds.length === 0) return pool;
-
+  if (!storeId) throw new Error('Store context required for audience resolution');
+  if (!segmentIds?.length) {
+    const stats = await calculateSegmentStats({ client, storeId, customers, conditionGroups: [], forceRefresh });
+    return (stats.customers ?? []) as ShopifyCustomer[];
+  }
   const { prisma } = await import('@/lib/prisma');
-  const segments = await prisma.segment.findMany({ where: { id: { in: segmentIds } } });
-  if (segments.length === 0) return pool;
-
+  const segments = await prisma.segment.findMany({ where: { id: { in: segmentIds }, storeId } });
+  if (segments.length !== new Set(segmentIds).size) throw new Error('Selected segment is unavailable in this store');
+  const pool = new Map<string, ShopifyCustomer>();
   // Resolve each segment to its matching customer-id set, then intersect.
   let matchingIds: Set<string> | null = null;
   for (const segment of segments) {
@@ -58,9 +57,11 @@ export async function resolveSegmentCustomers(
       client,
       storeId,
       conditionGroups,
-      customers: pool,
+      customers,
+      segmentId: segment.id,
       forceRefresh: forceRefresh ?? false,
     });
+    (stats.customers ?? []).forEach(c => pool.set(String(c.id), c as ShopifyCustomer));
     const ids = new Set<string>((stats.customers ?? []).map(c => String(c.id)));
     if (matchingIds === null) {
       matchingIds = ids;
@@ -70,8 +71,8 @@ export async function resolveSegmentCustomers(
     }
   }
 
-  if (!matchingIds) return pool;
-  return pool.filter(c => matchingIds!.has(String(c.id)));
+  if (!matchingIds) return [];
+  return [...pool.values()].filter(c => matchingIds!.has(String(c.id)));
 }
 
 /**

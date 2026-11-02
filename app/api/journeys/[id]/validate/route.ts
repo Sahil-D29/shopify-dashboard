@@ -1,3 +1,4 @@
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -9,14 +10,16 @@ export const runtime = 'nodejs';
 const getErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     const resolved = await params;
     const journey = await getJourneyById(resolved.id);
 
-    if (!journey) {
+    if (!journey || journey.storeId !== storeId) {
       return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     }
 

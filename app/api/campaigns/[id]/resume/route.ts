@@ -1,3 +1,6 @@
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
+import { errorIssues } from '@/lib/whatsapp/issues';
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -23,9 +26,10 @@ export async function POST(
     const { id: campaignId } = await params;
     const storeId = await getCurrentStoreId(request);
 
+    if (!storeId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
     // Find the campaign
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, storeId: storeId || undefined },
+      where: { id: campaignId, storeId },
     });
 
     if (!campaign) {
@@ -42,6 +46,8 @@ export async function POST(
       );
     }
 
+    try { await prepareTemplate(storeId, campaignTemplateInput(campaign), {}, true); }
+    catch (error) { const issues = errorIssues(error); return NextResponse.json({ error: issues[0].message, issues }, { status: 422 }); }
     // Update to RUNNING
     const updated = await prisma.campaign.update({
       where: { id: campaignId },

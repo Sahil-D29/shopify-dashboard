@@ -204,8 +204,9 @@ export function Step5TestValidate({
             template_name: selectedTemplate?.name || config.templateName,
             template_language: selectedTemplate?.language || config.templateLanguage,
             phone: `+${normalizedPhone}`,
-            variables: variablePreview,
+            variables: { ...variablePreview, ...config.variables },
             body_fields: bodyFields,
+            button_actions: config.buttonActions,
             media: config.useDynamicMedia
               ? { type: selectedTemplate?.mediaType ?? "IMAGE", dynamic: true }
               : config.mediaUrl

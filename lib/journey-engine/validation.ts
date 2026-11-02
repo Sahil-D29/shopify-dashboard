@@ -1,3 +1,7 @@
+import type { SendIssue } from '@/lib/whatsapp/issues';
+import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
+import { prepareTemplate } from '@/lib/whatsapp/template-send';
+import { errorIssues } from '@/lib/whatsapp/issues';
 import { resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 
@@ -11,6 +15,7 @@ export interface JourneyValidationIssue {
   suggestion?: string;
   nodeId?: string;
   nodeName?: string;
+  issue?: SendIssue;
 }
 
 export interface JourneyValidationSummary {
@@ -58,6 +63,7 @@ function getNodeMeta(node: JourneyNode): Record<string, unknown> {
     Object.assign(meta, nodeData.config as Record<string, unknown>);
   }
 
+  Object.assign(meta, whatsappNodeConfig(node));
   delete meta.meta;
   delete meta.config;
 
@@ -191,7 +197,7 @@ function validateTrigger(node: JourneyNode): JourneyValidationIssue[] {
 }
 
 function validateAction(node: JourneyNode): JourneyValidationIssue[] {
-  if (node.type !== 'action') return [];
+  if (!isWhatsAppNode(node)) return [];
   const issues: JourneyValidationIssue[] = [];
   const nodeData = (node.data as JourneyNodeData | undefined) ?? {};
   const action = (node as { action?: JourneyNodeData }).action ?? nodeData;
@@ -338,7 +344,7 @@ function validateGoal(node: JourneyNode): JourneyValidationIssue[] {
   return [];
 }
 
-export async function validateJourney(journey: JourneyDefinition, storeId?: string | null): Promise<JourneyValidationResult> {
+export async function validateJourney(journey: JourneyDefinition, storeId?: string | null, checkTemplate?: (input: any) => Promise<unknown>): Promise<JourneyValidationResult> {
   const errors: JourneyValidationIssue[] = [];
   const warnings: JourneyValidationIssue[] = [];
 
@@ -459,6 +465,12 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
     }
   }
 
+  for (const node of journey.nodes.filter(isWhatsAppNode)) {
+    try { await (checkTemplate ? checkTemplate(whatsappNodeConfig(node)) : prepareTemplate(storeId ?? journey.storeId ?? '', whatsappNodeConfig(node), {}, true)); }
+    catch (error) {
+      for (const item of errorIssues(error)) errors.push({ id: node.id + '-' + item.code + '-' + (item.field ?? ''), severity: 'error', title: item.message, description: item.field, suggestion: item.action, issue: item, nodeId: node.id, nodeName: getNodeName(node) });
+    }
+  }
   const status: JourneyValidationResult['status'] =
     errors.length > 0 ? 'fail' : warnings.length > 0 ? 'needs_attention' : 'pass';
 

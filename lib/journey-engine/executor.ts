@@ -1,3 +1,5 @@
+import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
+import { errorIssues, issue, SendValidationError } from '@/lib/whatsapp/issues';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 import type { EngineCondition, ConditionContext } from './condition-evaluator';
 import type { ShopifyOrder, ShopifyOrderLineItem } from '@/lib/shopify/client';
@@ -161,6 +163,9 @@ export async function startJourneyExecution(
     conversionValue: undefined,
     context: {
       triggerEvent: eventData,
+      customer: { ...customer, ...(eventData.customer as object ?? {}) },
+      order: eventData.order,
+      product: eventData.product,
       variables: {},
     },
     waitingForEvent: null,
@@ -232,16 +237,19 @@ async function executeActionNode(
   const nodeData = node.data as JourneyNodeData | undefined;
   const subtype = node.subtype ?? (typeof nodeData?.subtype === 'string' ? nodeData.subtype : undefined) ?? (typeof config.type === 'string' ? config.type : undefined);
   try {
-    if (subtype === 'send_whatsapp' && enrollment.customerPhone) {
+    if (isWhatsAppNode(node)) {
+      if (!enrollment.customerPhone) throw new SendValidationError([issue('MISSING_PHONE', 'This recipient has no WhatsApp phone number.', 'phone')]);
       const messageResult = await sendWhatsAppMessage({
         to: enrollment.customerPhone,
-        template: config.templateName || 'default_template',
+        template: config.templateName || '',
         language: config.templateLanguage || 'en',
         components: config.components || [],
         storeId: journey.storeId,
+        input: config,
+        context: { ...enrollment.context, customer: { ...(enrollment.context.customer as object ?? {}), phone: enrollment.customerPhone, email: enrollment.customerEmail } },
       });
       if (!messageResult.success) {
-        throw new Error(`WhatsApp send failed: ${messageResult.error || 'Unknown error'}`);
+        throw new SendValidationError(messageResult.issues ?? [issue('SEND_FAILED', messageResult.error ?? 'Sending failed')]);
       }
       await logJourneyActivity(enrollment.id, 'whatsapp_sent', {
         nodeId: node.id,
@@ -281,10 +289,16 @@ async function executeActionNode(
     const attempt = await recordFailure(enrollment, node.id, error);
     await logJourneyActivity(enrollment.id, 'node_error', {
       nodeId: node.id,
-      error: String(error),
+      error: errorIssues(error)[0].message,
+      issues: errorIssues(error).map(item => ({ ...item, nodeId: node.id })),
       attempt,
     });
-    await scheduleRetryIfPossible(journey, enrollment, node, attempt, 'node_action_failure');
+    if (error instanceof SendValidationError && !error.issues.some(item => item.retryable)) {
+      enrollment.status = 'failed';
+      enrollment.exitReason = 'node_failure';
+      await updateEnrollmentRecord(enrollment);
+      await cancelScheduledExecutionsForEnrollment(enrollment.id);
+    } else await scheduleRetryIfPossible(journey, enrollment, node, attempt, 'node_action_failure');
   }
 }
 
@@ -465,6 +479,7 @@ function extractNodeConfig(node: JourneyNode): NodeConfig {
     Object.assign(combined, nodeData.config as JsonRecord);
   }
 
+  Object.assign(combined, whatsappNodeConfig(node));
   delete combined.meta;
   delete combined.config;
 
