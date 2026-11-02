@@ -2,7 +2,7 @@ import { providerIssue, type SendIssue } from './issues';
 
 export interface IssueRecord {
   id: string;
-  kind: 'campaign' | 'journey';
+  kind: 'campaign' | 'journey' | 'message';
   resourceId: string;
   resourceName: string;
   recipient?: string;
@@ -14,7 +14,8 @@ export interface IssueRecord {
 }
 
 export function legacyIssues(error?: string | null, metadata?: any): SendIssue[] {
-  if (Array.isArray(metadata?.issues) && metadata.issues.length) return metadata.issues;
+  if (Array.isArray(metadata?.issues) && metadata.issues.length) return metadata.issues.map((item: SendIssue) =>
+    item.code === '131042' && item.details ? providerIssue({ code: item.code, error_data: { details: item.details }, fbtrace_id: item.referenceId }) : item);
   const code = metadata?.errorCode ?? error?.match(/(?:#|\b)(\d{3,6})\b/)?.[1];
   // Do not turn an old, ambiguous description into a claimed specific diagnosis.
   return [providerIssue({ code, message: error, fbtrace_id: metadata?.referenceId })];
@@ -22,6 +23,7 @@ export function legacyIssues(error?: string | null, metadata?: any): SendIssue[]
 
 export function issueHref(record: Pick<IssueRecord, 'kind' | 'resourceId' | 'nodeId'>, item: SendIssue) {
   if (item.href) return item.href;
+  if (record.kind === 'message') return '/chat';
   if (item.field === 'phone') return '/customers';
   if (item.field === 'segmentIds') return '/segments';
   return record.kind === 'campaign' ? `/campaigns/${record.resourceId}/edit?step=3`

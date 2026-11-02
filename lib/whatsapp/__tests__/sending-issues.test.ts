@@ -33,5 +33,16 @@ test('issue listing scopes every source to the authorized store, paginates failu
     assert.equal(fixed.blockers.length, 0);
     assert.equal(fixed.records.length, 20); // Historical failures remain visible.
     assert.equal(fixed.records[0].issues[0].code, '131008');
+    const billingLink = 'https://business.facebook.com/billing_hub/accounts/details/?account_type=whatsapp-business-account';
+    (globalThis as any).prisma.message = {
+      findMany: async (query: any) => { assert.equal(query.where.storeId, 's1'); return [{ id: 'm1', contactId: 'contact1', templateName: 'test', errorMessage: 'Billing issue', createdAt: new Date(Date.now() + 1000), templateData: { issues: [{ code: '131042', details: 'Message failed because your WhatsApp Business account currency is not configured. Visit ' + billingLink, referenceId: 'trace-billing' }] } }]; },
+      count: async () => 1,
+    };
+    const summary = await listSendingIssues('s1', new URLSearchParams());
+    assert.equal(summary.total, 26);
+    assert.equal(summary.records[0].kind, 'message');
+    assert.equal(summary.records[0].issues[0].href, billingLink);
+    assert.equal(summary.records[0].issues[0].message, 'WhatsApp Business account currency is not configured.');
+    assert.equal(summary.records[0].issues[0].referenceId, 'trace-billing');
   } finally { globalThis.fetch = originalFetch; (globalThis as any).prisma = original; }
 });

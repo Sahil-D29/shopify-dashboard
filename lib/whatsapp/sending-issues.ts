@@ -24,10 +24,14 @@ export async function listSendingIssues(storeId: string, query: URLSearchParams)
     const journeyWhere = { enrollmentId: { in: enrollments.map(e => e.id) }, OR: [
       { data: { path: ['eventType'], equals: 'node_error' } }, { data: { path: ['eventType'], equals: 'delivery_failed' } },
     ] };
-    const [campaignFailures, journeyFailures, campaignTotal, journeyTotal] = await Promise.all([
+    const messageWhere = { storeId, direction: 'OUTBOUND' as const, status: 'FAILED' as const };
+    const [campaignFailures, journeyFailures, campaignTotal, journeyTotal, messageFailures, messageTotal] = await Promise.all([
       prisma.campaignLog.findMany({ where: campaignWhere, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take }),
       prisma.journeyActivityDoc.findMany({ where: journeyWhere, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take }),
       prisma.campaignLog.count({ where: campaignWhere }), prisma.journeyActivityDoc.count({ where: journeyWhere }),
+      kind ? Promise.resolve([]) : prisma.message.findMany({ where: messageWhere, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take,
+        select: { id: true, contactId: true, templateName: true, errorMessage: true, templateData: true, createdAt: true } }),
+      kind ? Promise.resolve(0) : prisma.message.count({ where: messageWhere }),
     ]);
     const records: IssueRecord[] = campaignFailures.map(log => ({ id: log.id, kind: 'campaign', resourceId: log.campaignId,
       resourceName: campaigns.find(c => c.id === log.campaignId)!.name, recipient: (log.metadata as any)?.phone ?? log.customerId,
@@ -39,6 +43,12 @@ export async function listSendingIssues(storeId: string, query: URLSearchParams)
       records.push({ id: log.id, kind: 'journey', resourceId: journey.id, resourceName: (journey.data as any)?.name ?? 'Journey',
         recipient: enrollment.customerId, nodeId: data.data?.nodeId, templateName: data.data?.templateName,
         at: log.createdAt.toISOString(), historical: true, issues: legacyIssues(data.data?.error, { ...data.data, referenceId: log.id }) });
+    }
+    for (const message of messageFailures) {
+      const metadata = message.templateData as any;
+      const issues = legacyIssues(message.errorMessage, { ...metadata, referenceId: message.id });
+      records.push({ id: message.id, kind: 'message', resourceId: message.id, resourceName: 'WhatsApp message',
+        recipient: message.contactId, templateName: message.templateName ?? undefined, at: message.createdAt.toISOString(), historical: true, issues });
     }
     records.sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
     const blockers: IssueRecord[] = [];
@@ -64,6 +74,6 @@ export async function listSendingIssues(storeId: string, query: URLSearchParams)
       }
     }
     return { records: records.slice((page - 1) * pageSize, take), blockers, page, pageSize,
-      total: campaignTotal + journeyTotal, configurationChecksLimited: candidates.length > 20 && !id };
+      total: campaignTotal + journeyTotal + messageTotal, configurationChecksLimited: candidates.length > 20 && !id };
   } catch (error) { throw error; }
 }

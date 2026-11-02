@@ -40,13 +40,21 @@ export function providerIssue(error: any): SendIssue {
     '131031': ['Your WhatsApp business account is restricted.', 'Review your account status in Meta.', '/settings'],
   };
   const mapped = known[code];
+  const details = error?.error_data?.details ?? error?.message;
+  if (code === '131042' && /currency is not configured/i.test(details ?? '')) {
+    const link = String(details).match(/https:\/\/business\.facebook\.com\/billing_hub\/[^\s]+/)?.[0];
+    return { code, message: 'WhatsApp Business account currency is not configured.',
+      action: 'Choose your business country and currency in Meta WhatsApp billing settings, then send a new test.',
+      href: link ?? 'https://business.facebook.com/billing_hub', customerFixable: true, retryable: false,
+      referenceId: error?.fbtrace_id ?? globalThis.crypto.randomUUID(), details };
+  }
   const transient = ['1', '2', '4', '80007', '130429', '131000', '131048', '131056', 'NETWORK_ERROR'].includes(code);
   return {
     code, message: mapped?.[0] ?? (transient ? 'WhatsApp is temporarily unable to send this message.' : 'Message sending needs technical attention.'),
     action: mapped?.[1] ?? (transient ? 'Wait and try again. Delivery is not guaranteed.' : 'Contact support with the reference below.'),
     href: mapped?.[2], customerFixable: !!mapped, retryable: transient,
     referenceId: error?.fbtrace_id ?? globalThis.crypto.randomUUID(),
-    details: error?.error_data?.details ?? error?.message,
+    details,
   };
 }
 
