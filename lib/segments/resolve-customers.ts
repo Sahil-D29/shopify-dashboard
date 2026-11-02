@@ -2,6 +2,7 @@ import type { ShopifyClient } from '@/lib/shopify/api-helper';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { SegmentGroup } from '@/lib/types/segment';
 import { calculateSegmentStats } from '@/lib/utils/segment-stats';
+import { issue, SendValidationError } from '@/lib/whatsapp/issues';
 
 /**
  * Shared, enrichment-correct segment → customer resolution.
@@ -47,7 +48,7 @@ export async function resolveSegmentCustomers(
   }
   const { prisma } = await import('@/lib/prisma');
   const segments = await prisma.segment.findMany({ where: { id: { in: segmentIds }, storeId } });
-  if (segments.length !== new Set(segmentIds).size) throw new Error('Selected segment is unavailable in this store');
+  if (segments.length !== new Set(segmentIds).size) throw new SendValidationError([issue('SEGMENT_NOT_FOUND', 'A selected segment is unavailable in this store. Select your audience again.', 'segmentIds')]);
   const pool = new Map<string, ShopifyCustomer>();
   // Resolve each segment to its matching customer-id set, then intersect.
   let matchingIds: Set<string> | null = null;
@@ -61,6 +62,7 @@ export async function resolveSegmentCustomers(
       segmentId: segment.id,
       forceRefresh: forceRefresh ?? false,
     });
+    if (stats.error) throw new SendValidationError([{ ...issue('AUDIENCE_UNAVAILABLE', 'The selected audience could not be verified against Shopify.', 'segmentIds'), action: 'Check your Shopify connection in Settings, then recheck the audience.', href: '/settings' }]);
     (stats.customers ?? []).forEach(c => pool.set(String(c.id), c as ShopifyCustomer));
     const ids = new Set<string>((stats.customers ?? []).map(c => String(c.id)));
     if (matchingIds === null) {

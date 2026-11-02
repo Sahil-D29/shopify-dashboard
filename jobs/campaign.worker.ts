@@ -86,7 +86,9 @@ export async function runCampaignWorkerStep(targetCampaignId?: string): Promise<
     // Shopify is unavailable, so a WhatsApp-only store still resolves recipients.
     const client = new ShopifyClient({
       shop: store?.shopifyDomain ?? '',
-      accessToken: store?.accessToken ?? '',
+      accessToken: store?.accessToken
+        ? (await import('@/lib/shopify-token')).getDecryptedToken({ accessToken: store.accessToken })
+        : '',
     });
 
     const matchingCustomers = await resolveSegmentCustomers({ client, storeId,
