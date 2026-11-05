@@ -19,5 +19,5 @@ export function normalizeTriggerNode(node: JourneyNode): JourneyNode {
   const conditions = (rule?.conditions ?? []).filter((c: any) => c.property).map((c: any) => ({ source: 'order', field: c.property, operator: c.operator, value: c.value }));
   return { ...node, subtype: event, data: { ...data, triggerType: event, webhookEvent: event, conditions,
     meta: { ...data?.meta, triggerType: event, webhookEvent: event, conditions } },
-    trigger: { type: 'event', eventType: event } } as unknown as JourneyNode;
+    trigger: { type: 'webhook', webhookEvent: event } } as unknown as JourneyNode;
 }
