@@ -102,3 +102,14 @@ test('legacy errors are described conservatively and fixes link to the affected 
   assert.equal(legacyIssues('(#131008) Required parameter is missing')[0].code, '131008');
   assert.equal(issueHref({ kind: 'campaign', resourceId: 'c1' }, providerIssue({ code: 132000 })), '/campaigns/c1/edit?step=3');
 });
+test('marketing delivery restrictions show actionable guidance and never trigger immediate retries', () => {
+  const failure = providerIssue({ code: 131049, error_data: { details: 'Healthy ecosystem engagement' }, fbtrace_id: 'marketing-trace' });
+  assert.equal(failure.message, 'Meta restricted delivery of this marketing message.');
+  assert.equal(failure.customerFixable, true);
+  assert.equal(failure.retryable, false);
+  assert.ok(failure.action.includes('Avoid immediate retries'));
+  const historical = legacyIssues('Message sending needs technical attention.', { issues: [{ code: '131049', details: failure.details, referenceId: failure.referenceId, customerFixable: false }] });
+  assert.equal(historical[0].message, failure.message);
+  assert.equal(historical[0].referenceId, 'marketing-trace');
+  assert.equal(historical[0].customerFixable, true);
+});

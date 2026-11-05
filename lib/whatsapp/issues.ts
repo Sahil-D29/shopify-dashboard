@@ -32,6 +32,8 @@ export function providerIssue(error: any): SendIssue {
     '132015': ['This template is paused.', 'Select another approved template or review its status in Meta.'],
     '132016': ['This template is disabled.', 'Select another approved template.'],
     '131047': ['The customer service window is closed.', 'Use an approved template to contact this recipient.'],
+    '131049': ['Meta restricted delivery of this marketing message.', 'Avoid immediate retries. Wait before trying again. For a service test, ask the recipient to message your business first, then reply within the customer service window.'],
+    '131050': ['This recipient has stopped receiving marketing messages from your business.', 'Respect the recipient’s marketing preference. Do not retry this marketing message.'],
     '131026': ['WhatsApp could not deliver this message.', 'Check the recipient number and WhatsApp availability. Meta may also restrict delivery to this recipient.'],
     '131021': ['The recipient is the sending business number.', 'Use a different WhatsApp number for the test.'],
     '190': ['WhatsApp access has expired or is invalid.', 'Reconnect WhatsApp in Settings.', '/settings'],
