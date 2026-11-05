@@ -1,7 +1,10 @@
 import type { JourneyDefinition, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 
 import { fetchShopifyCustomer } from './shopify';
-import { shopifyClient } from '@/lib/shopify/client';
+import { journeyShopifyClient } from './store-client';
+import { prisma } from '@/lib/prisma';
+import { normalizeTriggerNode } from './trigger-config';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { customerInSegment } from '@/lib/segments/resolve-customers';
 import { normalizeEventName } from '@/lib/journeys/event-catalog';
 import { evaluateConditions } from './condition-evaluator';
@@ -16,6 +19,7 @@ import type { EngineCondition, ConditionContext } from './condition-evaluator';
 type JsonRecord = Record<string, unknown>;
 
 interface EventPayload {
+  storeId?: string;
   shop?: string | null;
   payload: JsonRecord;
   receivedAt?: string;
@@ -100,7 +104,10 @@ const parseTags = (tags: string | null | undefined): string[] =>
     : [];
 
 export async function matchAndExecuteJourneys(eventType: string, eventData: EventPayload) {
-  const journeys = await getActiveJourneys();
+  const storeId = eventData.storeId;
+  if (!storeId) throw new Error('Verified event store is required');
+  if (eventType === 'custom:abandoned_cart' && !eventData.payload.cart_token && !eventData.payload.cart_id && !eventData.payload.checkout_token) throw new Error('Checkout identifier required');
+  const journeys = await getActiveJourneys(storeId);
   if (journeys.length === 0) return;
 
   for (const journey of journeys) {
@@ -108,7 +115,7 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
     if (!triggerNodes.length) continue;
 
     for (const trigger of triggerNodes) {
-      const config = extractTriggerConfig(trigger);
+      const config = extractTriggerConfig(normalizeTriggerNode(trigger));
       if (!(await triggerMatches(config, eventType, eventData))) {
         continue;
       }
@@ -116,6 +123,7 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
       const customers = await getAffectedCustomers(eventData);
       for (const customer of customers) {
         if (!customer?.id) continue;
+        if (journey.settings?.testMode && !journey.settings.testPhoneNumbers?.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) continue;
         const allowed = await canEnterJourney(journey, customer.id);
         if (!allowed) continue;
 
@@ -136,15 +144,15 @@ async function triggerMatches(config: TriggerMeta, eventType: string, eventData:
 
   const payload = eventData.payload ?? {};
   const primaryCustomer = extractPrimaryCustomer(payload);
-  const customer = primaryCustomer?.id ? await fetchShopifyCustomer(primaryCustomer.id) : null;
+  const customer = primaryCustomer?.id ? await fetchShopifyCustomer(primaryCustomer.id, eventData.storeId) : null;
 
   // Segment-membership gate: enroll only customers who are actually in the segment.
   if (config.segmentId) {
     if (!customer) return false;
     try {
-      const storeId = await resolveStoreId(eventData.shop);
+      const storeId = eventData.storeId;
       const inSegment = await customerInSegment(customer, config.segmentId, {
-        client: shopifyClient,
+        client: await journeyShopifyClient(storeId),
         storeId,
       });
       if (!inSegment) return false;
@@ -223,6 +231,7 @@ async function triggerMatches(config: TriggerMeta, eventType: string, eventData:
   if (config.conditions && config.conditions.length) {
     const logic = normaliseJoinLogic(config.conditionJoin);
     const conditionContext: ConditionContext = {
+      storeId: eventData.storeId,
       triggerEvent: eventData.payload,
       order: eventData.payload,
     };
@@ -239,9 +248,14 @@ async function triggerMatches(config: TriggerMeta, eventType: string, eventData:
 
 async function getAffectedCustomers(eventData: EventPayload): Promise<JourneyEventCustomer[]> {
   const payload = eventData.payload ?? {};
+  const contactId = payload.contactId ?? payload.customerId;
+  if (typeof contactId === 'string') {
+    const contact = await prisma.contact.findFirst({ where: { id: contactId, storeId: eventData.storeId } });
+    if (contact) return [{ id: contact.id, phone: contact.phone, email: contact.email, first_name: contact.name }];
+  }
   const customer = extractPrimaryCustomer(payload);
   if (customer?.id) {
-    const full = await fetchShopifyCustomer(customer.id);
+    const full = await fetchShopifyCustomer(customer.id, eventData.storeId);
     return [
       {
         id: customer.id,

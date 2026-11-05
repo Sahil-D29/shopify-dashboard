@@ -225,7 +225,8 @@ export async function handleInboundPayload(body: InboundMessagePayload) {
               // Enrolls the contact into any journey triggered on this event.
               try {
                 await matchAndExecuteJourneys('whatsapp_reply_received', {
-                  shop: null,
+                  storeId,
+          shop: null,
                   payload: {
                     phone: normalizedPhone,
                     customerId: contact.id,

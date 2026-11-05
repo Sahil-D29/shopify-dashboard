@@ -61,37 +61,9 @@ export async function GET(request: NextRequest) {
     // Get store ID from request
     const requestedStoreId = await getCurrentStoreId(request);
     
-    // Build store filter based on user role
-    const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
-    
-    let journeys = await getJourneys();
+    if (!requestedStoreId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
+    const journeys = (await getJourneys()).filter(j => j.storeId === requestedStoreId);
 
-    // Flexible filtering - show all data including legacy (null/default/empty storeId)
-    if (userContext.role === 'ADMIN') {
-      // Admin sees everything - no filtering
-      // journeys already contains all journeys
-    } else if (userContext.role === 'STORE_OWNER') {
-      // Store owner sees their store + any legacy data (null/default/empty storeId)
-      const userStoreId = userContext.storeId;
-      journeys = journeys.filter(j => {
-        // Include if matches user's store
-        if (j.storeId === userStoreId) return true;
-        // Include legacy data (no storeId or default values)
-        if (!j.storeId || j.storeId === 'default' || j.storeId === '' || j.storeId === null) return true;
-        return false;
-      });
-    } else {
-      // USER sees assigned store + legacy data
-      const userStoreId = userContext.assignedStoreId || userContext.storeId;
-      journeys = journeys.filter(j => {
-        // Include if matches user's assigned store
-        if (j.storeId === userStoreId) return true;
-        // Include legacy data (no storeId or default values)
-        if (!j.storeId || j.storeId === 'default' || j.storeId === '' || j.storeId === null) return true;
-        return false;
-      });
-    }
-    
     return NextResponse.json({ 
       success: true,
       journeys 
@@ -167,22 +139,9 @@ export async function POST(request: NextRequest) {
 
     // Get store ID based on role
     const requestedStoreId = await getCurrentStoreId(request);
-    const storeFilter = buildStoreFilter(userContext, requestedStoreId || undefined);
-    
-    // Determine effective store ID
-    let storeId: string;
-    if (storeFilter.allowAll) {
-      // ADMIN can create journeys for any store, use requested or default
-      storeId = requestedStoreId || userContext.storeId || 'default';
-    } else if (storeFilter.storeId) {
-      storeId = storeFilter.storeId;
-    } else {
-      return NextResponse.json(
-        { error: 'Store context required' },
-        { status: 400 }
-      );
-    }
-    
+    if (!requestedStoreId) return NextResponse.json({ error: 'Authorized store required' }, { status: 401 });
+    const storeId = requestedStoreId;
+
     let body: JourneyCreatePayload;
     try {
       body = (await request.json()) as JourneyCreatePayload;
@@ -193,7 +152,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const newJourney = normalisePayload(body);
+    const newJourney = normalisePayload({ ...body, id: uuid() });
     // Ensure storeId is added
     const journeyWithStore = ensureStoreId(newJourney, storeId);
     await updateJourney(journeyWithStore);

@@ -16,6 +16,7 @@ export interface TemplateInput {
   variableMappings?: Array<{ variable: string; dataSource?: string; property?: string; fallbackValue?: string }>;
   mediaUrl?: string;
   useDynamicMedia?: boolean;
+  useCheckoutRecoveryUrl?: boolean;
   buttonActions?: Record<string, string>;
   components?: any[];
 }
@@ -80,7 +81,7 @@ export function buildTemplatePayload(template: MetaTemplateDefinition, input: Te
             ?? supplied.find(c => c.type === 'button' && String(c.index) === String(index))?.parameters?.[0]?.text;
           const prefix = button.url?.split('{{')[0] ?? '';
           if (value?.startsWith(prefix) && prefix) value = value.slice(prefix.length);
-          if (!value?.trim() || /\{\{/.test(value)) errors.push(issue('MISSING_BUTTON_PARAMETER', `Provide the dynamic URL value for button ${index + 1}.`, `buttonActions.${index}`));
+          if (!(preflight && input.useCheckoutRecoveryUrl) && (!value?.trim() || /\{\{/.test(value))) errors.push(issue('MISSING_BUTTON_PARAMETER', `Provide the dynamic URL value for button ${index + 1}.`, `buttonActions.${index}`));
           components.push({ type: 'button', sub_type: 'url', index: String(index), parameters: [{ type: 'text', text: value ?? '' }] });
         } else if (!['URL', 'PHONE_NUMBER', 'QUICK_REPLY'].includes(button.type)) {
           errors.push(issue('UNSUPPORTED_TEMPLATE', `Button ${index + 1} requires an unsupported parameter type. Select another template.`, 'templateId'));

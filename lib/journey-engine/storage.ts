@@ -1,3 +1,4 @@
+import { normalizeTriggerNode } from './trigger-config';
 import { prisma } from '@/lib/prisma';
 
 import type { JourneyDefinition } from '@/lib/types/journey';
@@ -44,7 +45,7 @@ export interface ScheduledExecutionRecord {
   enrollmentId: string;
   nodeId: string;
   resumeAt: string;
-  status: 'pending' | 'processed' | 'failed' | 'cancelled';
+  status: 'pending' | 'processing' | 'processed' | 'failed' | 'cancelled';
   createdAt: string;
   processedAt?: string;
   error?: string;
@@ -52,7 +53,7 @@ export interface ScheduledExecutionRecord {
 }
 
 const VALID_ENROLLMENT_STATUS: JourneyEnrollmentStatus[] = ['active', 'waiting', 'completed', 'exited', 'failed'];
-const VALID_EXECUTION_STATUS: ScheduledExecutionRecord['status'][] = ['pending', 'processed', 'failed', 'cancelled'];
+const VALID_EXECUTION_STATUS: ScheduledExecutionRecord['status'][] = ['pending', 'processing', 'processed', 'failed', 'cancelled'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -250,12 +251,12 @@ function normaliseScheduledExecution(raw: unknown): ScheduledExecutionRecord | n
 
 export async function getJourneys(): Promise<JourneyDefinition[]> {
   const docs = await prisma.journeyDoc.findMany({ orderBy: { updatedAt: 'desc' } });
-  return docs.map(doc => doc.data as unknown as JourneyDefinition);
+  return docs.map(doc => ({ ...(doc.data as unknown as JourneyDefinition), storeId: doc.storeId }));
 }
 
-export async function getActiveJourneys(): Promise<JourneyDefinition[]> {
-  const docs = await prisma.journeyDoc.findMany({ where: { status: 'ACTIVE' } });
-  return docs.map(doc => doc.data as unknown as JourneyDefinition);
+export async function getActiveJourneys(storeId: string): Promise<JourneyDefinition[]> {
+  const docs = await prisma.journeyDoc.findMany({ where: { status: 'ACTIVE', storeId } });
+  return docs.map(doc => ({ ...(doc.data as unknown as JourneyDefinition), storeId: doc.storeId }));
 }
 
 /** Upsert each provided journey (does not delete others). */
@@ -267,6 +268,7 @@ export async function saveJourneys(journeys: JourneyDefinition[]): Promise<void>
 
 export async function updateJourney(journey: JourneyDefinition): Promise<void> {
   if (!journey?.id) return;
+  journey = { ...journey, nodes: journey.nodes.map(normalizeTriggerNode) };
   const status = journey.status ?? 'DRAFT';
   const storeId = (journey as { storeId?: string }).storeId ?? '';
   await prisma.journeyDoc.upsert({
@@ -282,7 +284,7 @@ export async function deleteJourney(journeyId: string): Promise<void> {
 
 export async function getJourneyById(journeyId: string): Promise<JourneyDefinition | undefined> {
   const doc = await prisma.journeyDoc.findUnique({ where: { id: journeyId } });
-  return doc ? (doc.data as unknown as JourneyDefinition) : undefined;
+  return doc ? { ...(doc.data as unknown as JourneyDefinition), storeId: doc.storeId, status: doc.status as JourneyDefinition['status'] } : undefined;
 }
 
 // ─── Enrollments ────────────────────────────────────────────────────────────
@@ -301,7 +303,7 @@ export async function saveEnrollments(enrollments: JourneyEnrollmentRecord[]): P
 }
 
 export async function appendEnrollment(enrollment: JourneyEnrollmentRecord): Promise<void> {
-  await updateEnrollmentRecord(enrollment);
+  await prisma.journeyEnrollmentDoc.create({ data: { id: enrollment.id, journeyId: enrollment.journeyId, customerId: enrollment.customerId, status: enrollment.status, data: toJson(enrollment) } });
 }
 
 export async function updateEnrollmentRecord(enrollment: JourneyEnrollmentRecord): Promise<void> {
@@ -310,22 +312,9 @@ export async function updateEnrollmentRecord(enrollment: JourneyEnrollmentRecord
     console.warn('updateEnrollmentRecord: received invalid enrollment payload');
     return;
   }
-  await prisma.journeyEnrollmentDoc.upsert({
-    where: { id: normalised.id },
-    create: {
-      id: normalised.id,
-      journeyId: normalised.journeyId,
-      customerId: normalised.customerId,
-      status: normalised.status,
-      enteredAt: new Date(normalised.enteredAt),
-      data: toJson(normalised),
-    },
-    update: {
-      journeyId: normalised.journeyId,
-      customerId: normalised.customerId,
-      status: normalised.status,
-      data: toJson(normalised),
-    },
+  await prisma.journeyEnrollmentDoc.updateMany({
+    where: { id: normalised.id, journeyId: normalised.journeyId, status: { notIn: ['exited', 'completed'] } },
+    data: { status: normalised.status, data: toJson(normalised) },
   });
 }
 

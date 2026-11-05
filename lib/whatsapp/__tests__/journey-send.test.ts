@@ -6,7 +6,8 @@ test('a journey recipient without a phone fails the action without completing it
   const activity: any[] = [];
   const enrollment: any = { id: 'e1', journeyId: 'j1', customerId: 'customer1', status: 'active', completedNodes: [], enteredAt: new Date().toISOString(), lastActivityAt: new Date().toISOString(), context: {}, metadata: {} };
   (globalThis as any).prisma = {
-    journeyEnrollmentDoc: { upsert: async () => ({}) },
+    journeyDoc: { findFirst: async () => ({ status: 'ACTIVE' }) },
+    journeyEnrollmentDoc: { findUnique: async () => enrollment, updateMany: async () => ({ count: 1 }) },
     journeyActivityDoc: { create: async ({ data }: any) => { activity.push(data.data); } },
     journeyScheduleDoc: { findMany: async () => [] },
   };

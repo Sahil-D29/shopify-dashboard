@@ -1,15 +1,16 @@
+import { journeyShopifyClient } from './store-client';
 import { sendTemplate } from '@/lib/whatsapp/template-send';
 import { errorIssues, type SendIssue } from '@/lib/whatsapp/issues';
 import type { TemplateInput } from '@/lib/whatsapp/template-payload';
-import { shopifyClient, type ShopifyCustomerResponse, type ShopifyOrderListResponse } from '@/lib/shopify/client';
+import { type ShopifyCustomerResponse, type ShopifyOrderListResponse } from '@/lib/shopify/client';
 import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
 import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 import type { WhatsAppTemplateComponent } from '@/lib/types/whatsapp-config';
 
-export async function fetchShopifyCustomer(customerId: string): Promise<ShopifyCustomer | null> {
+export async function fetchShopifyCustomer(customerId: string, storeId?: string): Promise<ShopifyCustomer | null> {
   if (!customerId) return null;
   try {
-    const response = await shopifyClient.getCustomer(customerId);
+    const response = await (await journeyShopifyClient(storeId)).getCustomer(customerId);
     return response?.customer ?? null;
   } catch (error) {
     console.error('[journey-engine] Failed to fetch customer', customerId, error);
@@ -17,10 +18,10 @@ export async function fetchShopifyCustomer(customerId: string): Promise<ShopifyC
   }
 }
 
-export async function getCustomerOrders(customerId: string) {
+export async function getCustomerOrders(customerId: string, storeId?: string) {
   if (!customerId) return [];
   try {
-    const response: ShopifyOrderListResponse = await shopifyClient.getCustomerOrders(customerId);
+    const response: ShopifyOrderListResponse = await (await journeyShopifyClient(storeId)).getCustomerOrders(customerId);
     const orders = response?.orders ?? [];
     return Array.isArray(orders) ? orders : [];
   } catch (error) {
@@ -29,15 +30,15 @@ export async function getCustomerOrders(customerId: string) {
   }
 }
 
-export async function addCustomerTag(customerId: string, tagName: string) {
+export async function addCustomerTag(customerId: string, tagName: string, storeId?: string) {
   if (!customerId || !tagName) return;
   try {
-    const customerRes: ShopifyCustomerResponse = await shopifyClient.getCustomer(customerId);
+    const customerRes: ShopifyCustomerResponse = await (await journeyShopifyClient(storeId)).getCustomer(customerId);
     const customer = customerRes?.customer;
     const tags = customer?.tags ? String(customer.tags).split(',').map(tag => tag.trim()) : [];
     if (!tags.includes(tagName)) {
       tags.push(tagName);
-      await shopifyClient.request(`/customers/${customerId}.json`, {
+      await (await journeyShopifyClient(storeId)).request(`/customers/${customerId}.json`, {
         method: 'PUT',
         body: JSON.stringify({ customer: { id: customerId, tags: tags.join(', ') } }),
       });
@@ -47,10 +48,10 @@ export async function addCustomerTag(customerId: string, tagName: string) {
   }
 }
 
-export async function updateCustomerMetafield(customerId: string, key: string, value: string) {
+export async function updateCustomerMetafield(customerId: string, key: string, value: string, storeId?: string) {
   if (!customerId || !key) return;
   try {
-    await shopifyClient.request(`/customers/${customerId}/metafields.json`, {
+    await (await journeyShopifyClient(storeId)).request(`/customers/${customerId}/metafields.json`, {
       method: 'POST',
       body: JSON.stringify({
         metafield: {

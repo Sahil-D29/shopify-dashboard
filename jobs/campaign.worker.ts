@@ -1,3 +1,4 @@
+import { replayDeliveryReceipt } from '@/lib/whatsapp/delivery-receipts';
 import { sendTemplate, resolveTemplate } from '@/lib/whatsapp/template-send';
 import { buildTemplatePayload } from '@/lib/whatsapp/template-payload';
 import { campaignTemplateInput } from '@/lib/whatsapp/campaign-config';
@@ -117,6 +118,7 @@ export async function runCampaignWorkerStep(targetCampaignId?: string): Promise<
             windowExpiresAt: null,
           },
         });
+        if (msg) await replayDeliveryReceipt(msg, storeId);
       };
       const logFailure = async (err: string, issues = [issue('SEND_FAILED', err)]) => {
         await prisma.campaignLog.create({
@@ -177,18 +179,18 @@ export async function runCampaignWorkerStep(targetCampaignId?: string): Promise<
       }
     }
 
-    // Update campaign metrics
-    await prisma.campaign.update({
-      where: { id: campaign.id },
-      data: {
-        status: sent === 0 && failed > 0 ? 'FAILED' : 'COMPLETED',
-        estimatedReach: matchingCustomers.length,
-        completedAt: new Date(),
-        executedAt: campaign.executedAt ?? now,
-        totalSent: { increment: sent },
-        totalDelivered: { increment: delivered },
-        totalFailed: { increment: failed },
-      },
+    // Serialize against receipt counter updates, then derive the final result from logs.
+    await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM campaigns WHERE id = ${campaign.id} FOR UPDATE`;
+      const outcomes = await tx.campaignLog.findMany({ where: { campaignId: campaign.id, stepIndex: 0 } });
+      const rejected = outcomes.filter(log => log.status === 'FAILED').length;
+      const accepted = outcomes.filter(log => log.whatsappMessageId || log.status === 'SUCCESS').length;
+      const confirmed = outcomes.filter(log => log.deliveredAt || log.readAt).length;
+      await tx.campaign.update({ where: { id: campaign.id }, data: {
+        status: outcomes.length > 0 && rejected === outcomes.length ? 'FAILED' : 'COMPLETED',
+        estimatedReach: matchingCustomers.length, completedAt: new Date(), executedAt: campaign.executedAt ?? now,
+        totalSent: accepted, totalDelivered: isWhatsApp ? confirmed : delivered, totalFailed: rejected,
+      } });
     });
 
     // Mark queue item as COMPLETED instead of deleting (audit trail)

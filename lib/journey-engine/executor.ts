@@ -1,3 +1,7 @@
+import { replayDeliveryReceipt } from '@/lib/whatsapp/delivery-receipts';
+import { prisma } from '@/lib/prisma';
+import { checkoutKey, checkoutPurchased, checkoutTemplateInput } from './checkout';
+import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
 import { errorIssues, issue, SendValidationError } from '@/lib/whatsapp/issues';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
@@ -147,6 +151,8 @@ export async function startJourneyExecution(
   triggerNode: JourneyNode,
   eventData: JsonRecord
 ) {
+  if (!journey.storeId) throw new Error('Journey store is required');
+  if (journey.settings?.testMode && !journey.settings.testPhoneNumbers?.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) return;
   const enrollment: JourneyEnrollmentRecord = {
     id: generateId('enroll'),
     journeyId: journey.id,
@@ -162,6 +168,7 @@ export async function startJourneyExecution(
     goalAchieved: false,
     conversionValue: undefined,
     context: {
+      storeId: journey.storeId,
       triggerEvent: eventData,
       customer: { ...customer, ...(eventData.customer as object ?? {}) },
       order: eventData.order,
@@ -175,11 +182,20 @@ export async function startJourneyExecution(
     metadata: {},
   };
 
-  await appendEnrollment(enrollment);
+  const key = checkoutKey(eventData);
+  const claimKey = key ?? (journey.settings?.allowReentry ? String(eventData.eventId ?? enrollment.id) : customer.id);
+  try {
+    await prisma.$transaction(async tx => {
+      await tx.journeyEntryClaim.create({ data: { id: crypto.randomUUID(), storeId: journey.storeId!, journeyId: journey.id, checkoutKey: claimKey, enrollmentId: enrollment.id } });
+      await tx.journeyEnrollmentDoc.create({ data: { id: enrollment.id, journeyId: journey.id, customerId: customer.id, status: enrollment.status, data: JSON.parse(JSON.stringify(enrollment)) } });
+    });
+  } catch (error) { if ((error as any).code === 'P2002') return; throw error; }
   await logJourneyActivity(enrollment.id, 'journey_started', {
     journeyId: journey.id,
     journeyName: journey.name,
     customerId: customer.id,
+    reason: key ? 'abandoned_checkout' : 'trigger_matched',
+    checkoutKey: key,
   });
 
   const nextEdge = findNextEdge(journey.edges, triggerNode.id);
@@ -198,6 +214,9 @@ export async function executeNode(
   node?: JourneyNode
 ) {
   if (!node) return;
+  const liveJourney = await prisma.journeyDoc.findFirst({ where: { id: journey.id, storeId: journey.storeId, status: 'ACTIVE' } });
+  const liveEnrollment = await prisma.journeyEnrollmentDoc.findUnique({ where: { id: enrollment.id } });
+  if (!liveJourney || !liveEnrollment || !['active', 'waiting'].includes(liveEnrollment.status)) return;
 
   enrollment.status = 'active';
   enrollment.currentNodeId = node.id;
@@ -236,26 +255,43 @@ async function executeActionNode(
   const config = extractNodeConfig(node);
   const nodeData = node.data as JourneyNodeData | undefined;
   const subtype = node.subtype ?? (typeof nodeData?.subtype === 'string' ? nodeData.subtype : undefined) ?? (typeof config.type === 'string' ? config.type : undefined);
+  let acceptedMessageId: string | undefined;
   try {
     if (isWhatsAppNode(node)) {
       if (!enrollment.customerPhone) throw new SendValidationError([issue('MISSING_PHONE', 'This recipient has no WhatsApp phone number.', 'phone')]);
+      let input = config;
+      if (journey.settings?.checkoutReminder) {
+        const event = enrollment.context.triggerEvent as Record<string, any>;
+        let purchased: boolean;
+        try { purchased = await checkoutPurchased(journey.storeId!, event); }
+        catch (error) {
+          if (error instanceof SendValidationError) throw error;
+          throw new SendValidationError([{ ...issue('PURCHASE_CHECK_FAILED', 'Could not verify whether this checkout was purchased. No message was sent.'), retryable: true, action: 'Check the Shopify connection, then revalidate this journey.' }]);
+        }
+        if (purchased) { await exitJourney(enrollment, 'purchase_completed'); return; }
+        input = await checkoutTemplateInput(journey.storeId!, config, event);
+      }
+      const current = await prisma.journeyEnrollmentDoc.findUnique({ where: { id: enrollment.id } });
+      if (!current || !['active', 'waiting'].includes(current.status)) return;
       const messageResult = await sendWhatsAppMessage({
         to: enrollment.customerPhone,
         template: config.templateName || '',
         language: config.templateLanguage || 'en',
         components: config.components || [],
         storeId: journey.storeId,
-        input: config,
+        input,
         context: { ...enrollment.context, customer: { ...(enrollment.context.customer as object ?? {}), phone: enrollment.customerPhone, email: enrollment.customerEmail } },
       });
       if (!messageResult.success) {
         throw new SendValidationError(messageResult.issues ?? [issue('SEND_FAILED', messageResult.error ?? 'Sending failed')]);
       }
+      acceptedMessageId = messageResult.messageId;
       await logJourneyActivity(enrollment.id, 'whatsapp_sent', {
         nodeId: node.id,
         template: config.templateName,
         result: messageResult,
       });
+      if (acceptedMessageId) await replayDeliveryReceipt(acceptedMessageId, journey.storeId!);
       storeCampaignMessage({
         id: generateId('msg'),
         journeyId: journey.id,
@@ -267,13 +303,13 @@ async function executeActionNode(
         meta: messageResult,
       });
     } else if (subtype === 'add_tag' && config.tagName) {
-      await addCustomerTag(enrollment.customerId, config.tagName);
+      await addCustomerTag(enrollment.customerId, config.tagName, journey.storeId);
       await logJourneyActivity(enrollment.id, 'tag_added', {
         nodeId: node.id,
         tagName: config.tagName,
       });
     } else if (subtype === 'update_property' && config.propertyKey) {
-      await updateCustomerMetafield(enrollment.customerId, config.propertyKey, config.propertyValue ?? '');
+      await updateCustomerMetafield(enrollment.customerId, config.propertyKey, config.propertyValue ?? '', journey.storeId);
       await logJourneyActivity(enrollment.id, 'property_updated', {
         nodeId: node.id,
         propertyKey: config.propertyKey,
@@ -285,6 +321,7 @@ async function executeActionNode(
     await updateEnrollmentRecord(enrollment);
     await moveToNextNode(journey, enrollment, node);
   } catch (error) {
+    if (acceptedMessageId) error = new SendValidationError([{ ...issue('SEND_OUTCOME_UNKNOWN', 'Meta accepted the message, but recording the result failed. Do not resend.'), customerFixable: false, referenceId: acceptedMessageId, action: 'Contact support to reconcile this message.' }]);
     console.error('[journey-engine] Action node failed', error);
     const attempt = await recordFailure(enrollment, node.id, error);
     await logJourneyActivity(enrollment.id, 'node_error', {
@@ -376,8 +413,9 @@ async function executeConditionNode(
     return;
   }
 
-  const customer = await fetchShopifyCustomer(enrollment.customerId);
+  const customer = await fetchShopifyCustomer(enrollment.customerId, String(enrollment.context.storeId ?? ''));
   const context: ConditionContext = {
+    storeId: journey.storeId,
     customer,
     customerId: enrollment.customerId,
     triggerEvent: (enrollment.context.triggerEvent as JsonRecord | undefined) ?? {},
@@ -455,7 +493,7 @@ export async function moveToNextNode(
 
 export async function exitJourney(
   enrollment: JourneyEnrollmentRecord,
-  reason: 'completed' | 'timeout' | 'no_path' | 'manual' | 'unsubscribed'
+  reason: 'completed' | 'timeout' | 'no_path' | 'manual' | 'unsubscribed' | 'purchase_completed'
 ) {
   enrollment.status = 'exited';
   enrollment.exitReason = reason;
@@ -782,8 +820,8 @@ async function executeExperimentNode(
 }
 
 async function checkGoalAchievement(goalConfig: NodeConfig, enrollment: JourneyEnrollmentRecord): Promise<boolean> {
-  const customer = await fetchShopifyCustomer(enrollment.customerId);
-  const orders = await getCustomerOrders(enrollment.customerId);
+  const customer = await fetchShopifyCustomer(enrollment.customerId, String(enrollment.context.storeId ?? ''));
+  const orders = await getCustomerOrders(enrollment.customerId, String(enrollment.context.storeId ?? ''));
 
   switch (goalConfig.goalType) {
     case 'order_value': {
@@ -834,8 +872,8 @@ export function getEnrollment(enrollmentId: string) {
 }
 
 export async function processScheduledExecutions(nowIso: string): Promise<{ processed: number; failed: number }> {
-  const all = await getScheduledExecutions();
-  const due = all.filter(record => record.status === 'pending' && Date.parse(record.resumeAt) <= Date.parse(nowIso));
+  const dueDocs = await prisma.journeyScheduleDoc.findMany({ where: { status: 'pending', resumeAt: { lte: new Date(nowIso) } }, orderBy: { resumeAt: 'asc' }, take: 100 });
+  const due = dueDocs.map(doc => ({ ...(doc.data as unknown as ScheduledExecutionRecord), status: doc.status as ScheduledExecutionRecord['status'] }));
   let processed = 0;
   let failed = 0;
 
@@ -855,6 +893,13 @@ export async function processScheduledExecutions(nowIso: string): Promise<{ proc
         continue;
       }
 
+      if (enrollment.journeyId !== journey.id || !journey.storeId || enrollment.context.storeId !== journey.storeId) {
+        await markScheduledExecution(record.id, 'failed', 'STORE_MISMATCH'); failed++; continue;
+      }
+      if (!['active', 'waiting'].includes(enrollment.status)) { await markScheduledExecution(record.id, 'cancelled'); continue; }
+      if (journey.status !== 'ACTIVE') continue;
+      const claim = await prisma.journeyScheduleDoc.updateMany({ where: { id: record.id, status: 'pending' }, data: { status: 'processing' } });
+      if (!claim.count) continue;
       const node = journey.nodes.find(item => item.id === record.nodeId);
       if (!node) {
         await markScheduledExecution(record.id, 'failed', 'node_not_found');
@@ -863,7 +908,6 @@ export async function processScheduledExecutions(nowIso: string): Promise<{ proc
       }
 
       const kind = record.metadata?.kind as string | undefined;
-      await markScheduledExecution(record.id, 'processed');
       processed += 1;
 
       if (kind === 'retry') {
@@ -873,6 +917,7 @@ export async function processScheduledExecutions(nowIso: string): Promise<{ proc
       } else {
         await moveToNextNode(journey, enrollment, node);
       }
+      await markScheduledExecution(record.id, 'processed');
     } catch (error) {
       console.error('[journey-engine] Failed to process scheduled execution', error);
       await markScheduledExecution(record.id, 'failed', getErrorMessage(error));

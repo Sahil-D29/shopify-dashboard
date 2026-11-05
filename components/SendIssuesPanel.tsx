@@ -8,7 +8,7 @@ export default function SendIssuesPanel({ kind, resourceId, failuresOnly = false
   const { currentStore } = useTenant();
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const [data, setData] = useState<{ records: IssueRecord[]; blockers: IssueRecord[]; total: number; configurationChecksLimited?: boolean }>();
+  const [data, setData] = useState<{ records: IssueRecord[]; blockers: IssueRecord[]; total: number; configurationChecksLimited?: boolean; automation?: { enabled: boolean; stale: boolean; lastFinishedAt?: string; error?: string; schedules: { id: string; nodeId: string; resumeAt: string; status: string; error?: string; overdue: boolean }[]; enrollments: { id: string; status: string; reason: string }[] } }>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -28,6 +28,13 @@ export default function SendIssuesPanel({ kind, resourceId, failuresOnly = false
     <div className="flex items-center justify-between gap-4"><h2 className="text-lg font-semibold">{failuresOnly ? 'Failed messages' : 'Sending issues'}</h2>
       <button type="button" className="text-sm underline" disabled={loading} onClick={() => setRevision(n => n + 1)}>Recheck issues</button></div>
     {loading && <p role="status" className="text-sm">Checking message configuration and delivery errors…</p>}
+    {!failuresOnly && data?.automation && <div className="rounded border p-3 text-sm space-y-2">
+      <p className="font-medium">Automation: {!data.automation.enabled ? 'Disabled ? contact support (SCHEDULER_DISABLED)' : data.automation.stale ? 'Scheduler needs attention (SCHEDULER_STALE)' : 'Running'}</p>
+      {data.automation.lastFinishedAt && <p>Last completed check: {new Date(data.automation.lastFinishedAt).toLocaleString()}</p>}
+      {data.automation.error && <p role="alert">Some automation checks failed. Reference: AUTOMATION_TICK_FAILED</p>}
+      {data.automation.schedules.map(s => <p key={s.id}>Node {s.nodeId}: {s.status} ? {new Date(s.resumeAt).toLocaleString()}{s.overdue ? ' ? overdue' : ''}{s.status === 'processing' ? ' ? do not resend while delivery is uncertain' : ''}{s.error ? ` ? ${s.error}` : ''}</p>)}
+      {kind === 'journey' && data.automation.enrollments.map(e => <p key={e.id}>Enrollment {e.id}: {e.status} ? {e.reason.replaceAll('_', ' ')}</p>)}
+    </div>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {!loading && !error && !records.length && <p className="text-sm text-gray-600">No sending issues found.</p>}
     {records.map(record => <article key={record.id} className="rounded-lg border p-4 space-y-2 text-sm">

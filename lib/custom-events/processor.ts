@@ -59,6 +59,7 @@ export async function processCustomEvent(input: CustomEventInput): Promise<strin
 
   // 3. Fan out to downstream systems (non-blocking)
   const eventData = {
+    storeId,
     payload: {
       storeId,
       customerId: resolvedCustomerId,

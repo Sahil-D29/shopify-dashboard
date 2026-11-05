@@ -1,3 +1,4 @@
+import { replayDeliveryReceipt } from './delivery-receipts';
 /**
  * Centralized WhatsApp message sender.
  * Sends messages via Meta Graph API AND creates Message records in Prisma.
@@ -158,6 +159,7 @@ export async function sendWhatsAppMessage(opts: SendMessageOptions): Promise<Sen
       // Don't fail the send if cost tracking fails
     }
 
+    if (whatsappMessageId) await replayDeliveryReceipt(whatsappMessageId, opts.storeId);
     return {
       success: true,
       whatsappMessageId: whatsappMessageId || undefined,

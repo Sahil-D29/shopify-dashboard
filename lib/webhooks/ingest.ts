@@ -441,6 +441,7 @@ export async function processInboundWebhook(
       // historical backfill so old events don't retroactively fire journeys.
       if (!opts?.skipJourneys) {
         await matchAndExecuteJourneys(`custom:${eventName}`, {
+          storeId,
           shop: null,
           payload: { ...body, storeId, contactId },
           receivedAt,

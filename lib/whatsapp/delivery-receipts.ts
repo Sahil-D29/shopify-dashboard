@@ -7,6 +7,9 @@ export async function applyDeliveryReceipt(status: any, phoneNumberId: string) {
   const connection = await prisma.whatsAppConfig.findFirst({ where: { phoneNumberId }, select: { storeId: true } });
   if (!connection) return;
   const storeId = connection.storeId;
+  // Retain receipts arriving before the sender has persisted the provider message id.
+  await prisma.whatsAppReceiptDoc.upsert({ where: { id: status.id + ':' + status.status },
+    create: { id: status.id + ':' + status.status, storeId, phoneNumberId, data: status }, update: {} });
   const failure = status.status === 'failed' ? providerIssue(status.errors?.[0]) : undefined;
   const seconds = Number(status.timestamp);
   const at = Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : new Date();
@@ -59,4 +62,11 @@ export async function applyDeliveryReceipt(status: any, phoneNumberId: string) {
       await tx.journeyActivityDoc.upsert({ where: { id: receiptId }, create: { id: receiptId, enrollmentId: sent.enrollmentId, data: JSON.parse(JSON.stringify(data)) }, update: { data: JSON.parse(JSON.stringify(data)) } });
     }
   });
+}
+
+export async function replayDeliveryReceipt(messageId: string, storeId: string) {
+  try {
+  const receipts = await prisma.whatsAppReceiptDoc.findMany({ where: { storeId, id: { in: ['sent', 'delivered', 'read', 'failed'].map(status => messageId + ':' + status) } }, orderBy: { createdAt: 'asc' } });
+  for (const receipt of receipts) await applyDeliveryReceipt(receipt.data, receipt.phoneNumberId);
+  } catch (error) { console.error('[whatsapp] Receipt reconciliation needs attention', messageId, error); }
 }

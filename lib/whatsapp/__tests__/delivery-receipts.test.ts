@@ -6,6 +6,7 @@ test('receipts update campaign counters once, handle read-before-delivered and r
   let log: any = { id: 'l1', campaignId: 'c1', status: 'SUCCESS', deliveredAt: null, readAt: null, metadata: {} };
   const totals = { delivered: 0, read: 0, failed: 0 };
   const tx = {
+    whatsAppReceiptDoc: { upsert: async () => ({}) },
     message: { findMany: async () => [] },
     campaignLog: {
       findMany: async (query: any) => { assert.equal(query.where.campaign.storeId, 's1'); return [{ ...log }]; },

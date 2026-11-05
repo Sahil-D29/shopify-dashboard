@@ -1,3 +1,4 @@
+import { normalizeTriggerNode } from './trigger-config';
 import type { SendIssue } from '@/lib/whatsapp/issues';
 import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
 import { prepareTemplate } from '@/lib/whatsapp/template-send';
@@ -345,6 +346,7 @@ function validateGoal(node: JourneyNode): JourneyValidationIssue[] {
 }
 
 export async function validateJourney(journey: JourneyDefinition, storeId?: string | null, checkTemplate?: (input: any) => Promise<unknown>): Promise<JourneyValidationResult> {
+  journey = { ...journey, nodes: journey.nodes.map(normalizeTriggerNode) };
   const errors: JourneyValidationIssue[] = [];
   const warnings: JourneyValidationIssue[] = [];
 
@@ -353,6 +355,11 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
   const triggers = journey.nodes.filter(node => node.type === 'trigger');
   const actions = journey.nodes.filter(node => node.type === 'action');
   const goals = journey.nodes.filter(node => node.type === 'goal');
+  if (!actions.length) errors.push({ id: 'MISSING_ACTION', severity: 'error', title: 'Add a WhatsApp action before activating this journey.', suggestion: 'Add and connect an approved template action.' });
+  for (const node of triggers) {
+    const data = node.data as any;
+    if (data?.triggerType === 'unified' || (data?.triggerConfig && !data?.webhookEvent && data?.triggerType === 'manual_entry')) errors.push({ id: 'INVALID_TRIGGER', severity: 'error', nodeId: node.id, title: 'Select one executable event trigger.', suggestion: 'Open the trigger and select the event that should start this journey.' });
+  }
 
   if (triggers.length === 0) {
     errors.push({
@@ -364,9 +371,9 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
   }
 
   if (goals.length === 0) {
-    errors.push({
+    warnings.push({
       id: 'journey-missing-goal',
-      severity: 'error',
+      severity: 'warning',
       title: 'Add a goal node',
       description: 'Define what success looks like by adding a goal node to the journey.',
     });
@@ -466,7 +473,7 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
   }
 
   for (const node of journey.nodes.filter(isWhatsAppNode)) {
-    try { await (checkTemplate ? checkTemplate(whatsappNodeConfig(node)) : prepareTemplate(storeId ?? journey.storeId ?? '', whatsappNodeConfig(node), {}, true)); }
+    try { const input = { ...whatsappNodeConfig(node), ...(journey.settings?.checkoutReminder ? { useCheckoutRecoveryUrl: true } : {}) }; await (checkTemplate ? checkTemplate(input) : prepareTemplate(storeId ?? journey.storeId ?? '', input, {}, true)); }
     catch (error) {
       for (const item of errorIssues(error)) errors.push({ id: node.id + '-' + item.code + '-' + (item.field ?? ''), severity: 'error', title: item.message, description: item.field, suggestion: item.action, issue: item, nodeId: node.id, nodeName: getNodeName(node) });
     }

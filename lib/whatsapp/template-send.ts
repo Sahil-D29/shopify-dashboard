@@ -64,10 +64,12 @@ export async function sendTemplate(storeId: string, phone: string, input: Templa
   const resolved = await resolveWhatsAppConfig(storeId);
   if (!resolved.valid) throw new SendValidationError([configurationIssue(resolved)]);
   const { config } = resolved;
-  const response = await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken), {
+  let response: Response;
+  try { response = await fetch(graphUrl(`${META_GRAPH_API_VERSION}/${config.phoneNumberId}/messages`, config.accessToken), {
     method: 'POST', signal: AbortSignal.timeout(20000), headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: formattedPhone, type: 'template', template }),
   });
+  } catch { throw new SendValidationError([{ ...issue('SEND_OUTCOME_UNKNOWN', 'The provider request timed out or lost its connection. Delivery is uncertain.'), customerFixable: false, action: 'Contact support with this reference before resending.', referenceId: crypto.randomUUID() }]); }
   const result = await response.json();
   if (!response.ok || result.error) throw new SendValidationError([providerIssue(result.error)]);
   if (!result.messages?.[0]?.id) throw new SendValidationError([providerIssue(undefined)]);

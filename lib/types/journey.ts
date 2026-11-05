@@ -149,6 +149,7 @@ export interface JourneyDefinition {
     };
     timezone?: string;
     goalDescription?: string;
+    checkoutReminder?: boolean;
     testMode?: boolean;
     allowReentry?: boolean;
     reentryCooldownDays?: number;

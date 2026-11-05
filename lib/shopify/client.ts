@@ -3,6 +3,7 @@ import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 
 interface ShopifyConfig {
+  apiVersion?: string;
   shop: string;
   accessToken: string;
 }
@@ -77,7 +78,7 @@ class ShopifyClient {
     }
 
     this.config.shop = shop;
-    this.baseUrl = `https://${this.config.shop}/admin/api/${SHOPIFY_API_VERSION}`;
+    this.baseUrl = `https://${this.config.shop}/admin/api/${config?.apiVersion ?? SHOPIFY_API_VERSION}`;
   }
 
   async requestRaw(endpoint: string, options: RequestInit = {}, _attempt = 0): Promise<Response> {

@@ -155,6 +155,7 @@ export async function POST(request: NextRequest) {
       const catalogId = STOREFRONT_TO_CATALOG[eventType] ?? eventType;
       try {
         await matchAndExecuteJourneys(catalogId, {
+          storeId,
           shop: null,
           payload: {
             customer_id: customerId || undefined,

@@ -579,6 +579,25 @@ model JourneyLog {
 // as JSON, replacing the previous (ephemeral) JSON-file storage so journeys,
 // enrollments and scheduled steps survive deploys/restarts.
 
+model AutomationHeartbeat {
+  id String @id
+  lastStartedAt DateTime
+  lastFinishedAt DateTime?
+  error String?
+  @@map("automation_heartbeats")
+}
+
+model JourneyEntryClaim {
+  id String @id
+  storeId String
+  journeyId String
+  checkoutKey String
+  enrollmentId String @unique
+  createdAt DateTime @default(now())
+  @@unique([storeId, journeyId, checkoutKey])
+  @@map("journey_entry_claims")
+}
+
 model JourneyDoc {
   id        String   @id // journey definition id
   storeId   String   @default("")
@@ -1768,3 +1787,13 @@ model SidebarVisibilityRule {
   @@map("sidebar_visibility_rules")
 }
 
+
+model WhatsAppReceiptDoc {
+  id String @id
+  storeId String
+  phoneNumberId String
+  data Json
+  createdAt DateTime @default(now())
+  @@index([storeId])
+  @@map("whatsapp_receipt_docs")
+}

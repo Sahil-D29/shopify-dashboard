@@ -257,6 +257,13 @@ export function JourneySettingsDrawer({ open, settings, onClose, onSave }: Journ
           </section>
 
           <section className="space-y-2">
+            <label className="flex items-center gap-3 text-sm font-medium">
+              <input type="checkbox" checked={Boolean(draft?.checkoutReminder)} onChange={event => handleSettingChange({ checkoutReminder: event.target.checked })} />
+              Abandoned-checkout reminder
+            </label>
+            <p className="text-sm text-slate-500">Verify purchases before sending, cancel after purchase, and use the event's checkout recovery link in the approved template button.</p>
+          </section>
+          <section className="space-y-2">
             <Label htmlFor="goalDescription">Goal description</Label>
             <Textarea
               id="goalDescription"

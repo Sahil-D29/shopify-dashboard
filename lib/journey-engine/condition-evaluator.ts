@@ -109,7 +109,7 @@ async function evaluateSingleCondition(condition: EngineCondition, context: Cond
     if (context.customer) {
       actualValue = getNestedValue(context.customer, field);
     } else if (context.customerId) {
-      const customer = await fetchShopifyCustomer(context.customerId);
+      const customer = await fetchShopifyCustomer(context.customerId, typeof context.storeId === 'string' ? context.storeId : undefined);
       actualValue = getNestedValue(customer, field);
     }
   } else if (source === 'order') {

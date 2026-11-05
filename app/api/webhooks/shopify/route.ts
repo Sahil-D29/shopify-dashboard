@@ -159,6 +159,21 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Tenant identity comes from the signed webhook shop, never from payload.storeId.
+  if (shopHeader) {
+    const store = await prisma.store.findUnique({ where: { shopifyDomain: shopHeader }, select: { id: true } });
+    if (store) {
+      try {
+        if (topic === 'orders/create' || topic === 'orders/paid') {
+          const { cancelPurchasedCheckouts } = await import('@/lib/journey-engine/checkout');
+          await cancelPurchasedCheckouts(store.id, payload);
+        }
+        const { matchAndExecuteJourneys } = await import('@/lib/journey-engine/trigger-matcher');
+        await matchAndExecuteJourneys(topic, { storeId: store.id, shop: shopHeader, payload, receivedAt: new Date().toISOString() });
+      } catch (error) { console.error('[journey] Shopify dispatch failed', error); return NextResponse.json({ error: 'Journey processing failed' }, { status: 503 }); }
+    }
+  }
+
   // Queue segment re-evaluation for customer/order events
   try {
     if (topic === 'customers/create' || topic === 'customers/update' || topic === 'orders/create') {

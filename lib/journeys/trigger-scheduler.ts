@@ -1,3 +1,4 @@
+import { journeyShopifyClient } from '@/lib/journey-engine/store-client';
 /**
  * Background evaluation for non-event journey triggers (Segment Joined, and a
  * basis for Date/Time). Event triggers (Shopify/WhatsApp/storefront/custom) are
@@ -47,8 +48,8 @@ async function enrollSegmentMembers(
   try {
     // Graceful client — calculateSegmentStats merges Contacts and degrades when
     // Shopify is unavailable.
-    const client = new ShopifyClient({ shop: '', accessToken: '' });
-    const segment = await prisma.segment.findUnique({ where: { id: segmentId } });
+    const client = await journeyShopifyClient(storeId);
+    const segment = await prisma.segment.findFirst({ where: { id: segmentId, storeId } });
     if (!segment) return 0;
     const conditionGroups = (segment.filters as { conditionGroups?: unknown } | null)?.conditionGroups ?? [];
     const stats = await calculateSegmentStats({
@@ -91,7 +92,7 @@ export async function runJourneyTriggerTick(): Promise<{ enrolled: number }> {
   let enrolled = 0;
   const docs = await prisma.journeyDoc.findMany({ where: { status: 'ACTIVE' } });
   for (const doc of docs) {
-    const journey = doc.data as unknown as JourneyDefinition;
+    const journey = { ...(doc.data as unknown as JourneyDefinition), storeId: doc.storeId };
     const triggers = (journey.nodes ?? []).filter(n => n.type === 'trigger');
     for (const trigger of triggers) {
       const meta = readTriggerMeta(trigger);
