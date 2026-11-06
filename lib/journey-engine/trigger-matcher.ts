@@ -123,7 +123,7 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
       const customers = await getAffectedCustomers(eventData);
       for (const customer of customers) {
         if (!customer?.id) continue;
-        if (journey.settings?.testMode && !journey.settings.testPhoneNumbers?.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) continue;
+        if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) continue;
         const allowed = await canEnterJourney(journey, customer.id);
         if (!allowed) continue;
 

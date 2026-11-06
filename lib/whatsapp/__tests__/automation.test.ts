@@ -62,6 +62,9 @@ test('checkout entries deduplicate atomically, wait 30 minutes, respect pause an
     assert.ok(activity.some(a => a.data.eventType === 'journey_cancelled'));
     await startJourneyExecution(journey, { id: 'someone', phone: '919999999999' }, journey.nodes[0], { cart_token: 'checkout3' });
     assert.equal(entries.size, 2);
+    journey.settings.testMode = false;
+    await startJourneyExecution(journey, { id: 'someone-else', phone: '918888888888' }, journey.nodes[0], { cart_token: 'checkout4' });
+    assert.equal(entries.size, 2, 'an allow-list remains restrictive even if a stale client clears testMode');
   } finally { Object.assign(prisma, originals); }
 });
 

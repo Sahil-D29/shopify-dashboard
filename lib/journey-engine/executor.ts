@@ -152,7 +152,7 @@ export async function startJourneyExecution(
   eventData: JsonRecord
 ) {
   if (!journey.storeId) throw new Error('Journey store is required');
-  if (journey.settings?.testMode && !journey.settings.testPhoneNumbers?.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) return;
+  if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) return;
   const enrollment: JourneyEnrollmentRecord = {
     id: generateId('enroll'),
     journeyId: journey.id,
