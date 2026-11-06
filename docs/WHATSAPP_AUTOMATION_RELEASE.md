@@ -14,4 +14,6 @@ For checkout reminders, enable **Abandoned-checkout reminder** in journey settin
 
 The Sahil verification journey is restricted by `testMode` and `testPhoneNumbers` to the explicitly authorized phone. Keep that restriction until customer-wide activation is requested. Old campaigns and historical checkout events are never automatically replayed. Existing document records remain readable; unscoped scheduled records fail closed rather than being assigned to a guessed store.
 
+Live WhatsApp journeys enroll only contacts whose store-scoped `optInStatus` is `OPTED_IN`, and recheck consent immediately before sending. Opted-out or unknown contacts are skipped; a contact who withdraws consent during a delay is stopped with `WHATSAPP_OPT_IN_REQUIRED`.
+
 Verification: `npm run test:whatsapp`, `npm run test:webhooks`, `npx tsc --noEmit`, `npm run build`. Confirm acceptance and actual delivery separately using Meta receipts.

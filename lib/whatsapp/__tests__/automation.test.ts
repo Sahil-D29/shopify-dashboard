@@ -111,3 +111,24 @@ test('purchase lookup uses tenant credentials, handles missing tokens conservati
     if (originalKey === undefined) delete process.env.ENCRYPTION_KEY; else process.env.ENCRYPTION_KEY = originalKey;
   }
 });
+
+test('live WhatsApp journeys resolve only store-scoped opted-in contacts and recheck consent', async () => {
+  const { prisma } = await import('../../prisma');
+  const original = prisma.contact.findFirst;
+  let optedIn = true;
+  prisma.contact.findFirst = (async ({ where }: any) => {
+    assert.equal(where.storeId, 'store-1');
+    assert.equal(where.optInStatus, 'OPTED_IN');
+    return optedIn ? { id: 'contact-1', phone: '917827718504', email: 'sahil@example.test', name: 'Sahil' } : null;
+  }) as any;
+  try {
+    const { resolveOptedInWhatsAppRecipient } = await import('../../journey-engine/consent');
+    const recipient = await resolveOptedInWhatsAppRecipient('store-1', { id: 'shopify-1', phone: '+91 78277 18504' });
+    assert.equal(recipient?.id, 'contact-1');
+    assert.equal(recipient?.phone, '917827718504');
+    optedIn = false;
+    assert.equal(await resolveOptedInWhatsAppRecipient('store-1', { id: 'shopify-1', phone: '+91 78277 18504' }), null);
+  } finally {
+    prisma.contact.findFirst = original;
+  }
+});

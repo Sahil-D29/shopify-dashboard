@@ -2,6 +2,7 @@ import { replayDeliveryReceipt } from '@/lib/whatsapp/delivery-receipts';
 import { prisma } from '@/lib/prisma';
 import { checkoutKey, checkoutPurchased, checkoutTemplateInput } from './checkout';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+import { resolveOptedInWhatsAppRecipient } from './consent';
 import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
 import { errorIssues, issue, SendValidationError } from '@/lib/whatsapp/issues';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
@@ -259,6 +260,17 @@ async function executeActionNode(
   try {
     if (isWhatsAppNode(node)) {
       if (!enrollment.customerPhone) throw new SendValidationError([issue('MISSING_PHONE', 'This recipient has no WhatsApp phone number.', 'phone')]);
+      const optedIn = await resolveOptedInWhatsAppRecipient(journey.storeId!, {
+        id: enrollment.customerId,
+        phone: enrollment.customerPhone,
+        email: enrollment.customerEmail,
+      });
+      if (!optedIn) throw new SendValidationError([{
+        ...issue('WHATSAPP_OPT_IN_REQUIRED', 'This recipient has not opted in to WhatsApp messages.', 'phone'),
+        action: 'Wait until the recipient opts in. Do not manually enable consent or resend this message.',
+        customerFixable: false,
+      }]);
+      enrollment.customerPhone = optedIn.phone;
       let input = config;
       if (journey.settings?.checkoutReminder) {
         const event = enrollment.context.triggerEvent as Record<string, any>;

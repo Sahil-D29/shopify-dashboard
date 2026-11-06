@@ -5,6 +5,8 @@ import { journeyShopifyClient } from './store-client';
 import { prisma } from '@/lib/prisma';
 import { normalizeTriggerNode } from './trigger-config';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
+import { isWhatsAppNode } from '@/lib/whatsapp/node-config';
+import { resolveOptedInWhatsAppRecipient } from './consent';
 import { customerInSegment } from '@/lib/segments/resolve-customers';
 import { normalizeEventName } from '@/lib/journeys/event-catalog';
 import { evaluateConditions } from './condition-evaluator';
@@ -121,8 +123,13 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
       }
 
       const customers = await getAffectedCustomers(eventData);
-      for (const customer of customers) {
+      for (let customer of customers) {
         if (!customer?.id) continue;
+        if (journey.nodes.some(isWhatsAppNode)) {
+          const optedIn = await resolveOptedInWhatsAppRecipient(storeId, customer);
+          if (!optedIn) continue;
+          customer = optedIn;
+        }
         if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) continue;
         const allowed = await canEnterJourney(journey, customer.id);
         if (!allowed) continue;
