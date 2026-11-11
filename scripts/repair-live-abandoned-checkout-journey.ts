@@ -53,6 +53,31 @@ function repairActionNode(node: JourneyNode, config: WhatsAppActionConfig): Jour
   return { ...node, subtype: 'send_whatsapp', data: nextData } as JourneyNode;
 }
 
+function repairEditableNodeState(node: JourneyNode): JourneyNode {
+  const data = jsonRecord(node.data);
+  const meta = jsonRecord(data.meta);
+  const nextMeta: Record<string, unknown> = { ...meta, status: 'active', isConfigured: true };
+  if (node.type === 'delay' && node.delay) {
+    const { value, unit } = node.delay;
+    Object.assign(nextMeta, {
+      duration: value,
+      unit,
+      delayType: 'fixed_time',
+      delaySummary: `Wait ${value} ${unit}`,
+      delayConfig: {
+        delayType: 'fixed_time',
+        specificConfig: { type: 'fixed_time', duration: { value, unit }, description: '' },
+        quietHours: { enabled: false, startTime: { hour: 21, minute: 0 }, endTime: { hour: 9, minute: 0 }, timezone: 'customer' },
+        holidaySettings: { skipWeekends: false, skipHolidays: false, holidayCalendar: 'us', customHolidayDates: [] },
+        throttling: { enabled: false },
+        nodeName: node.name ?? `Wait ${value} ${unit}`,
+        description: node.description ?? '',
+      },
+    });
+  }
+  return { ...node, data: { ...data, ...nextMeta, meta: nextMeta, status: 'active' } } as JourneyNode;
+}
+
 async function main() {
   const doc = await prisma.journeyDoc.findFirst({ where: { id: JOURNEY_ID, storeId: STORE_ID } });
   if (!doc) throw new Error(`Journey ${JOURNEY_ID} was not found in store ${STORE_ID}.`);
@@ -111,7 +136,10 @@ async function main() {
       entry: existing.settings?.entry ?? { frequency: 'once' },
       checkoutReminder: true,
     },
-    nodes: existing.nodes.map(normalizeTriggerNode).map(node => repairActionNode(node, config)),
+    nodes: existing.nodes
+      .map(normalizeTriggerNode)
+      .map(repairEditableNodeState)
+      .map(node => repairActionNode(node, config)),
     updatedAt: new Date().toISOString(),
   };
 

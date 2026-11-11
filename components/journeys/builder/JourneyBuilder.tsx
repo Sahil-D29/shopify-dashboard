@@ -1174,6 +1174,32 @@ function buildMetaFromNode(node: JourneyNode): JsonMap {
       if (delay) {
         meta.unit = delay.unit;
         meta.duration = delay.value;
+        meta.delayType = meta.delayType ?? 'fixed_time';
+        meta.delaySummary = meta.delaySummary ?? `Wait ${delay.value} ${delay.unit}`;
+        meta.delayConfig = meta.delayConfig ?? {
+          delayType: 'fixed_time',
+          specificConfig: {
+            type: 'fixed_time',
+            duration: { value: delay.value, unit: delay.unit },
+            description: '',
+          },
+          quietHours: {
+            enabled: false,
+            startTime: { hour: 21, minute: 0 },
+            endTime: { hour: 9, minute: 0 },
+            timezone: 'customer',
+          },
+          holidaySettings: {
+            skipWeekends: false,
+            skipHolidays: false,
+            holidayCalendar: 'us',
+            customHolidayDates: [],
+          },
+          throttling: { enabled: false },
+          nodeName: node.name ?? `Wait ${delay.value} ${delay.unit}`,
+          description: node.description ?? '',
+        };
+        meta.isConfigured = true;
       }
       break;
     }
