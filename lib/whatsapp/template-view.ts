@@ -1,5 +1,6 @@
 import type { WhatsAppTemplate } from '@/lib/types/whatsapp-config';
 import type { MetaTemplateDefinition } from './template-payload';
+import { normalizeTemplateRuntimeParameters } from './template-runtime';
 
 /** Convert an account-owned Meta definition to the existing editor response shape. */
 export function templateView(template: MetaTemplateDefinition): WhatsAppTemplate {
@@ -13,8 +14,9 @@ export function templateView(template: MetaTemplateDefinition): WhatsAppTemplate
     header: header ? { type: (header.format ?? 'TEXT') as any, content: header.text ?? '' } : undefined,
     hasMediaHeader: !!header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(header.format ?? ''),
     mediaType: header?.format as WhatsAppTemplate['mediaType'], hasButtons: !!buttons?.length,
-    buttons: buttons?.map(button => ({ id: `${button.type.toLowerCase()}_${button.text}`, type: button.type as any,
-      text: button.text, url: button.url, phoneNumber: (button as any).phone_number })),
+    buttons: buttons?.map((button, index) => ({ id: `${button.type.toLowerCase()}_${button.text}`, index, type: button.type as any,
+      text: button.text, url: button.url, urlExample: button.example?.[0], phoneNumber: (button as any).phone_number })),
     footer: template.components.find(c => c.type === 'FOOTER')?.text, sampleValues: {},
+    runtimeParameters: normalizeTemplateRuntimeParameters(template.components, template.parameter_format),
   };
 }

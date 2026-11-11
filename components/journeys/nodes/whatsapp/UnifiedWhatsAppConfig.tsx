@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Send, CheckCircle2, XCircle, Loader2, MessageSquare, Link2, LayoutGrid } from "lucide-react";
+import { Send, CheckCircle2, XCircle, Loader2, MessageSquare, Link2, LayoutGrid, LockKeyhole } from "lucide-react";
 import { MobilePreview } from "@/components/journeys/MobilePreview";
 import { WhatsAppMessageEditor } from "./WhatsAppMessageEditor";
 import TemplatePickerModal from "@/components/campaigns/TemplatePickerModal";
 import { UTMBuilder } from "@/components/journeys/builder/utm/UTMBuilder";
+import TemplateRuntimeFields from '@/components/templates/TemplateRuntimeFields';
 import type { WhatsAppTemplate, WhatsAppActionConfig, WhatsAppBodyField, VariableMapping } from "@/lib/types/whatsapp-config";
 import { cn } from "@/lib/utils";
+import { getJourneyEventFields } from '@/lib/journeys/event-schema';
+import { dynamicUrlParameters } from '@/lib/whatsapp/template-runtime';
 
 interface UnifiedWhatsAppConfigProps {
   templates: WhatsAppTemplate[];
@@ -23,9 +26,11 @@ interface UnifiedWhatsAppConfigProps {
   onTemplateSelect: (template: WhatsAppTemplate) => void;
   onBodyFieldChange: (fields: WhatsAppBodyField[]) => void;
   onVariableMappingsChange: (mappings: VariableMapping[]) => void;
+  onConfigChange?: (updates: Partial<WhatsAppActionConfig>) => void;
   onSendTest?: (phone: string) => Promise<void>;
   dataSources?: any[];
   triggerContext?: "generic" | "order" | "product";
+  eventName?: string;
   validationErrors?: string[];
 }
 
@@ -40,9 +45,11 @@ export function UnifiedWhatsAppConfig({
   onTemplateSelect,
   onBodyFieldChange,
   onVariableMappingsChange,
+  onConfigChange = () => undefined,
   onSendTest,
   dataSources = [],
   triggerContext = "generic",
+  eventName,
   validationErrors = [],
 }: UnifiedWhatsAppConfigProps) {
   const handleBodyFieldChange = (fieldId: string, value: string) => {
@@ -57,6 +64,56 @@ export function UnifiedWhatsAppConfig({
   const [pickerOpen, setPickerOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const defaultedRuntimeMapping = useRef<string>('');
+  const dynamicLinks = useMemo(() => dynamicUrlParameters(selectedTemplate), [selectedTemplate]);
+  const headerParameters = useMemo(
+    () => (selectedTemplate?.runtimeParameters ?? []).filter(parameter => parameter.component === 'HEADER'),
+    [selectedTemplate],
+  );
+  const eventUrlFields = useMemo(() => getJourneyEventFields(eventName, ['url']), [eventName]);
+
+  useEffect(() => {
+    if (!selectedTemplate || eventName !== 'custom:abandoned_cart' || dynamicLinks.length === 0) return;
+    const key = `${selectedTemplate.id}:${eventName}`;
+    if (defaultedRuntimeMapping.current === key) return;
+    defaultedRuntimeMapping.current = key;
+    const parameter = dynamicLinks[0];
+    const existing = config.componentMappings?.find(mapping => mapping.parameterId === parameter.id);
+    if (existing) return;
+    onConfigChange({
+      componentMappings: [
+        ...(config.componentMappings ?? []).filter(mapping => mapping.parameterId !== parameter.id),
+        {
+          parameterId: parameter.id,
+          component: parameter.component,
+          componentIndex: parameter.componentIndex,
+          parameterName: parameter.parameterName,
+          dataSource: 'event',
+          property: 'checkout_url',
+        },
+      ],
+      useCheckoutRecoveryUrl: true,
+    });
+  }, [config.componentMappings, dynamicLinks, eventName, onConfigChange, selectedTemplate]);
+
+  const updateDynamicLinkMapping = (parameterId: string, property: string) => {
+    const parameter = dynamicLinks.find(item => item.id === parameterId);
+    if (!parameter) return;
+    onConfigChange({
+      componentMappings: [
+        ...(config.componentMappings ?? []).filter(mapping => mapping.parameterId !== parameterId),
+        {
+          parameterId,
+          component: parameter.component,
+          componentIndex: parameter.componentIndex,
+          parameterName: parameter.parameterName,
+          dataSource: 'event',
+          property,
+        },
+      ],
+      useCheckoutRecoveryUrl: property === 'checkout_url',
+    });
+  };
 
   const handleSendTest = async () => {
     if (!testPhone || !onSendTest) return;
@@ -183,6 +240,87 @@ export function UnifiedWhatsAppConfig({
                 showPreview={false}
               />
             </section>
+          ) : null}
+
+          {selectedTemplate && headerParameters.some(parameter => parameter.parameterType === 'text') ? (
+            <TemplateRuntimeFields
+              template={{ ...selectedTemplate, buttons: [] }}
+              config={config}
+              onChange={onConfigChange}
+            />
+          ) : null}
+
+          {selectedTemplate && headerParameters.some(parameter => ['image', 'video', 'document'].includes(parameter.parameterType)) ? (
+            <section className="space-y-3 rounded-xl border border-[#E8E4DE] bg-white p-4">
+              <div className="flex items-center gap-2">
+                <LockKeyhole className="h-4 w-4 text-[#D4A574]" />
+                <div>
+                  <p className="text-[13px] font-semibold text-[#4A4139]">Required {selectedTemplate.mediaType?.toLowerCase()} header</p>
+                  <p className="text-[11px] text-[#8B7F76]">This field is shown because the approved Meta template requires it.</p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-[#4A4139]">
+                <input
+                  type="checkbox"
+                  checked={config.useDynamicMedia ?? false}
+                  onChange={event => onConfigChange({ useDynamicMedia: event.target.checked, mediaUrl: event.target.checked ? undefined : config.mediaUrl })}
+                />
+                Use product image from the journey event
+              </label>
+              {!config.useDynamicMedia ? (
+                <Input
+                  type="url"
+                  placeholder="https://…"
+                  value={config.mediaUrl ?? ''}
+                  onChange={event => onConfigChange({ mediaUrl: event.target.value })}
+                />
+              ) : null}
+            </section>
+          ) : null}
+
+          {selectedTemplate && dynamicLinks.length > 0 ? (
+            <section className="space-y-3 rounded-xl border border-[#E8E4DE] bg-white p-4">
+              <div className="flex items-center gap-2">
+                <Link2 className="h-4 w-4 text-[#D4A574]" />
+                <div>
+                  <p className="text-[13px] font-semibold text-[#4A4139]">Dynamic button link</p>
+                  <p className="text-[11px] text-[#8B7F76]">Only the approved dynamic portion can be mapped.</p>
+                </div>
+              </div>
+              {dynamicLinks.map(parameter => {
+                const mapping = config.componentMappings?.find(item => item.parameterId === parameter.id);
+                const selectedField = eventUrlFields.find(field => field.path === mapping?.property);
+                const preview = selectedField?.sample ?? parameter.example;
+                const suffix = preview && parameter.approvedPrefix && preview.startsWith(parameter.approvedPrefix)
+                  ? preview.slice(parameter.approvedPrefix.length)
+                  : preview;
+                return (
+                  <div key={parameter.id} className="space-y-2 rounded-lg bg-[#FAF9F6] p-3">
+                    <label className="text-xs font-medium text-[#4A4139]">{parameter.label || `Button ${parameter.componentIndex + 1}`}</label>
+                    <div className="flex items-center rounded-lg border border-[#E8E4DE] bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <LockKeyhole className="mr-2 h-3.5 w-3.5" />
+                      <span className="truncate">{parameter.approvedPrefix}</span>
+                      <span className="font-mono text-[#B7791F]">{'{{dynamic}}'}</span>
+                    </div>
+                    <select
+                      value={mapping?.property ?? ''}
+                      onChange={event => updateDynamicLinkMapping(parameter.id, event.target.value)}
+                      className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139]"
+                    >
+                      <option value="" disabled>Select event URL</option>
+                      {eventUrlFields.map(field => <option key={field.path} value={field.path}>{field.label}</option>)}
+                    </select>
+                    {preview ? (
+                      <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                        <span className="font-semibold">Preview data:</span> {parameter.approvedPrefix}{suffix}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </section>
+          ) : selectedTemplate?.hasButtons ? (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">This template has only static buttons; no link mapping is required.</p>
           ) : null}
 
           {/* Test Send — compact inline */}

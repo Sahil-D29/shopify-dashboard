@@ -582,9 +582,10 @@ const BaseNode = memo(function BaseNode({ id, data, selected }: BuilderNodeProps
     <>
       <Handle
         type="target"
-        position={Position.Left}
+        id="target-top"
+        position={Position.Top}
         style={handleStyle(token.accent)}
-        className="-left-4 top-1/2 hover:scale-125"
+        className="-top-4 left-1/2 hover:scale-125"
       />
       {exitPathHandles.length > 0 ? (
         <>
@@ -594,9 +595,10 @@ const BaseNode = memo(function BaseNode({ id, data, selected }: BuilderNodeProps
       ) : (
         <Handle
           type="source"
-          position={Position.Right}
+          id="source-bottom"
+          position={Position.Bottom}
           style={handleStyle(token.accent)}
-          className="-right-4 top-1/2 hover:scale-125"
+          className="-bottom-4 left-1/2 hover:scale-125"
         />
       )}
     </>
@@ -800,15 +802,17 @@ const WaitNode = memo(function WaitNode({ id, data, selected }: BuilderNodeProps
     <>
       <Handle
         type="target"
-        position={Position.Left}
+        id="target-top"
+        position={Position.Top}
         style={handleStyle(token.accent)}
-        className="-left-5 top-1/2 hover:scale-125"
+        className="-top-5 left-1/2 hover:scale-125"
       />
       <Handle
         type="source"
-        position={Position.Right}
-        style={{ ...handleStyle(token.accent), top: meta.hasTimeoutBranch ? '40%' : '50%' }}
-        className="-right-5 hover:scale-125"
+        id="source-bottom"
+        position={Position.Bottom}
+        style={handleStyle(token.accent)}
+        className="-bottom-5 left-1/2 hover:scale-125"
       />
       {meta.hasTimeoutBranch ? (
         <>
@@ -872,9 +876,10 @@ const DecisionNode = memo(function DecisionNode({ id, data, selected }: BuilderN
     <>
       <Handle
         type="target"
-        position={Position.Left}
+        id="target-top"
+        position={Position.Top}
         style={handleStyle(token.accent)}
-        className="-left-4 top-1/2 hover:scale-125"
+        className="-top-4 left-1/2 hover:scale-125"
       />
       <Handle
         type="source"
@@ -998,9 +1003,10 @@ const ExperimentNode = memo(function ExperimentNode({ id, data, selected }: Buil
     <>
       <Handle
         type="target"
-        position={Position.Left}
+        id="target-top"
+        position={Position.Top}
         style={handleStyle(token.accent)}
-        className="-left-4 top-1/2 hover:scale-125"
+        className="-top-4 left-1/2 hover:scale-125"
       />
       {variants.map((variant, index) => {
         const topPercent = ((index + 1) / (variants.length + 1)) * 100;

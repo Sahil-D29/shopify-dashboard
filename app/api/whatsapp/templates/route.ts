@@ -7,6 +7,7 @@ import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
 import type { TemplateButton, WhatsAppTemplate, WhatsAppTemplateStatus } from '@/lib/types/whatsapp-config';
 import { getDrafts, addDraft } from '@/lib/whatsapp/template-drafts';
 import { META_TEMPLATE_FIELDS } from '@/lib/whatsapp/template-submission';
+import { normalizeTemplateRuntimeParameters } from '@/lib/whatsapp/template-runtime';
 
 function matchesStatus(template: WhatsAppTemplate, status: string | null): boolean {
   if (!status || status === 'ALL') return true;
@@ -93,6 +94,7 @@ interface MetaTemplate {
   status: string;
   components?: MetaComponentType[];
   rejected_reason?: string;
+  parameter_format?: string;
 }
 
 interface MetaTemplatesResponse {
@@ -116,8 +118,9 @@ function extractVariables(text: string): string[] {
 
 function mapButtons(metaButtons: MetaComponentType['buttons']): TemplateButton[] | undefined {
   if (!metaButtons || metaButtons.length === 0) return undefined;
-  return metaButtons.map(button => ({
+  return metaButtons.map((button, index) => ({
     id: `${button.type.toLowerCase()}_${button.text}`,
+    index,
     type:
       button.type === 'URL'
         ? 'URL'
@@ -175,6 +178,7 @@ function toWhatsAppTemplate(metaTemplate: MetaTemplate): WhatsAppTemplate {
     hasMediaHeader: Boolean(headerComponent && headerComponent.format && headerComponent.format !== 'TEXT'),
     hasButtons: Boolean(buttonsComponent?.buttons?.length),
     mediaType: headerComponent?.format as WhatsAppTemplate['mediaType'],
+    runtimeParameters: normalizeTemplateRuntimeParameters(components, metaTemplate.parameter_format),
   };
 }
 

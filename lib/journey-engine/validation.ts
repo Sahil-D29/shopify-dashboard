@@ -1,10 +1,11 @@
-import { normalizeTriggerNode } from './trigger-config';
+import { normalizeTriggerNode, selectedTriggerEvent } from './trigger-config';
 import type { SendIssue } from '@/lib/whatsapp/issues';
 import { whatsappNodeConfig, isWhatsAppNode } from '@/lib/whatsapp/node-config';
 import { prepareTemplate } from '@/lib/whatsapp/template-send';
 import { errorIssues } from '@/lib/whatsapp/issues';
 import { resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
+import { getJourneyEventSchema } from '@/lib/journeys/event-schema';
 
 export type JourneyValidationSeverity = 'error' | 'warning';
 
@@ -355,10 +356,36 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
   const triggers = journey.nodes.filter(node => node.type === 'trigger');
   const actions = journey.nodes.filter(node => node.type === 'action');
   const goals = journey.nodes.filter(node => node.type === 'goal');
+  const checkoutReminder = journey.settings?.checkoutReminder === true;
   if (!actions.length) errors.push({ id: 'MISSING_ACTION', severity: 'error', title: 'Add a WhatsApp action before activating this journey.', suggestion: 'Add and connect an approved template action.' });
   for (const node of triggers) {
     const data = node.data as any;
     if (data?.triggerType === 'unified' || (data?.triggerConfig && !data?.webhookEvent && data?.triggerType === 'manual_entry')) errors.push({ id: 'INVALID_TRIGGER', severity: 'error', nodeId: node.id, title: 'Select one executable event trigger.', suggestion: 'Open the trigger and select the event that should start this journey.' });
+  }
+
+  if (checkoutReminder) {
+    const trigger = triggers[0];
+    const eventName = trigger ? selectedTriggerEvent(trigger) : undefined;
+    if (eventName !== 'custom:abandoned_cart') {
+      errors.push({
+        id: 'checkout-invalid-trigger',
+        severity: 'error',
+        nodeId: trigger?.id,
+        nodeName: trigger ? getNodeName(trigger) : undefined,
+        title: 'Abandoned checkout journey requires the Shiprocket event',
+        description: 'The executable trigger must be custom:abandoned_cart, not manual entry.',
+        suggestion: 'Open the trigger and select Shiprocket — Abandoned checkout.',
+      });
+    } else if (!getJourneyEventSchema(eventName)) {
+      errors.push({
+        id: 'checkout-missing-event-schema',
+        severity: 'error',
+        nodeId: trigger?.id,
+        title: 'Shiprocket event schema is unavailable',
+        description: 'The journey cannot safely map recovery data until the event fields are registered.',
+        suggestion: 'Contact support and provide this journey ID.',
+      });
+    }
   }
 
   if (triggers.length === 0) {
@@ -384,7 +411,7 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
 
   const unreachableNodes = journey.nodes.filter(node => !reachable.has(node.id));
   for (const node of unreachableNodes) {
-    const severity: JourneyValidationSeverity = node.type === 'goal' || node.type === 'trigger' ? 'error' : 'warning';
+    const severity: JourneyValidationSeverity = checkoutReminder || node.type === 'goal' || node.type === 'trigger' ? 'error' : 'warning';
     (severity === 'error' ? errors : warnings).push({
       id: `node-${node.id}-unreachable`,
       severity,
@@ -424,9 +451,9 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
     if (node.type === 'goal' || node.type === 'exit') continue;
     const outgoingEdges = outgoing.get(node.id) ?? [];
     if (outgoingEdges.length === 0) {
-      warnings.push({
+      (checkoutReminder ? errors : warnings).push({
         id: `node-${node.id}-no-outgoing`,
-        severity: 'warning',
+        severity: checkoutReminder ? 'error' : 'warning',
         title: `${getNodeName(node)} has no outgoing path`,
         description: 'Add at least one edge so customers know what happens next.',
         suggestion: 'Connect this node to the next step in the journey.',
@@ -473,6 +500,28 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
   }
 
   for (const node of journey.nodes.filter(isWhatsAppNode)) {
+    const config = whatsappNodeConfig(node);
+    if (checkoutReminder) {
+      if (config.skipIfOptedOut !== true) {
+        errors.push({
+          id: `${node.id}-consent-required`, severity: 'error', nodeId: node.id, nodeName: getNodeName(node),
+          title: 'WhatsApp consent protection is required',
+          description: 'Abandoned-checkout reminders must skip customers who are not opted in.',
+          suggestion: 'Enable “Skip opted-out customers” in this WhatsApp action.',
+        });
+      }
+      const recoveryMapping = config.componentMappings?.find((mapping: { component?: string; dataSource?: string; property?: string }) =>
+        mapping.component === 'BUTTON' && mapping.dataSource === 'event' && mapping.property === 'checkout_url'
+      );
+      if (config.useCheckoutRecoveryUrl !== true || !recoveryMapping) {
+        errors.push({
+          id: `${node.id}-missing-recovery-link`, severity: 'error', nodeId: node.id, nodeName: getNodeName(node),
+          title: 'Checkout recovery link mapping is required',
+          description: 'The approved dynamic button must map to Shiprocket’s checkout recovery URL.',
+          suggestion: 'Open this action and map the dynamic button to Checkout recovery URL.',
+        });
+      }
+    }
     try { const input = { ...whatsappNodeConfig(node), ...(journey.settings?.checkoutReminder ? { useCheckoutRecoveryUrl: true } : {}) }; await (checkTemplate ? checkTemplate(input) : prepareTemplate(storeId ?? journey.storeId ?? '', input, {}, true)); }
     catch (error) {
       for (const item of errorIssues(error)) errors.push({ id: node.id + '-' + item.code + '-' + (item.field ?? ''), severity: 'error', title: item.message, description: item.field, suggestion: item.action, issue: item, nodeId: node.id, nodeName: getNodeName(node) });

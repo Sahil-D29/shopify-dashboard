@@ -284,7 +284,14 @@ export async function deleteJourney(journeyId: string): Promise<void> {
 
 export async function getJourneyById(journeyId: string): Promise<JourneyDefinition | undefined> {
   const doc = await prisma.journeyDoc.findUnique({ where: { id: journeyId } });
-  return doc ? { ...(doc.data as unknown as JourneyDefinition), storeId: doc.storeId, status: doc.status as JourneyDefinition['status'] } : undefined;
+  if (!doc) return undefined;
+  const journey = doc.data as unknown as JourneyDefinition;
+  return {
+    ...journey,
+    nodes: (journey.nodes ?? []).map(normalizeTriggerNode),
+    storeId: doc.storeId,
+    status: doc.status as JourneyDefinition['status'],
+  };
 }
 
 // ─── Enrollments ────────────────────────────────────────────────────────────

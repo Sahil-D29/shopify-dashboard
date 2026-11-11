@@ -21,6 +21,8 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  MarkerType,
+  reconnectEdge,
 } from '@xyflow/react';
 import type { ReactFlowInstance, Viewport } from '@xyflow/react';
 
@@ -119,12 +121,15 @@ import {
   Trash2,
   UserPlus,
   Users,
+  Route,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { fallbackMessage } from '@/lib/utils/errors';
+import { normalizeTriggerNode, selectedTriggerEvent } from '@/lib/journey-engine/trigger-config';
+import { arrangeJourneyNodes } from '@/lib/journeys/layout';
 import { ImperativePanelHandle, Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 interface JourneyBuilderInnerProps {
@@ -309,6 +314,7 @@ function extractWhatsAppConfigFromMeta(meta?: JourneyNodeData['meta']): WhatsApp
   }
 
   return {
+    ...existing,
     templateId,
     templateName,
     templateStatus,
@@ -319,6 +325,9 @@ function extractWhatsAppConfigFromMeta(meta?: JourneyNodeData['meta']): WhatsApp
       existing?.templateCategory ??
       (typeof meta.templateCategory === 'string' ? meta.templateCategory : undefined),
     variableMappings,
+    bodyFields:
+      existing?.bodyFields ??
+      (Array.isArray(meta.bodyFields) ? (meta.bodyFields as WhatsAppActionConfig['bodyFields']) : []),
     mediaUrl:
       existing?.mediaUrl ?? (typeof meta.mediaUrl === 'string' ? meta.mediaUrl : undefined),
     useDynamicMedia:
@@ -341,6 +350,13 @@ function extractWhatsAppConfigFromMeta(meta?: JourneyNodeData['meta']): WhatsApp
         ? (meta.buttonActions as Record<string, string>)
         : {}),
     },
+    componentMappings: existing?.componentMappings,
+    useCheckoutRecoveryUrl: existing?.useCheckoutRecoveryUrl,
+    templateDefinition: existing?.templateDefinition,
+    previewBody: existing?.previewBody,
+    previewVariables: existing?.previewVariables,
+    previewPlainVariables: existing?.previewPlainVariables,
+    finalRenderedMessage: existing?.finalRenderedMessage,
     exitPaths: (existing as any)?.exitPaths ?? (meta.exitPaths as any) ?? undefined,
   } as WhatsAppActionConfig;
 }
@@ -421,7 +437,7 @@ function summariseExperimentConfig(config: ExperimentConfig): string {
 
 const edgeTypes = { journey: JourneyEdge as any };
 const DEFAULT_FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
-const DEFAULT_EDGE_OPTIONS = { type: 'journey', animated: true } as const;
+const DEFAULT_EDGE_OPTIONS = { type: 'journey', animated: false } as const;
 
 const jsonEquals = (left: unknown, right: unknown): boolean => {
   if (left === right) return true;
@@ -717,6 +733,7 @@ function normaliseTriggerConfiguration(config: JourneyTriggerConfiguration): Jou
         productSelection: shopify.productSelection ?? { mode: 'any', productIds: [], collectionIds: [] },
         filters: shopify.filters,
         advanced: shopify.advanced,
+        customEventName: shopify.customEventName,
       };
       break;
     }
@@ -925,6 +942,11 @@ function buildLegacyMetaFromConfig(config: JourneyTriggerConfiguration): JsonMap
       const shopify = config.shopifyEvent ?? { eventType: 'order_placed' as ShopifyEventTriggerConfig['eventType'] };
       legacy.shopifyEvent = deepClone(shopify);
       legacy.productSelection = deepClone(shopify.productSelection);
+      if (shopify.eventType === 'custom_event' && shopify.customEventName) {
+        legacy.triggerType = 'event_trigger';
+        legacy.webhookEvent = shopify.customEventName;
+        legacy.eventName = shopify.customEventName;
+      }
       break;
     }
     case 'time_based': {
@@ -994,6 +1016,7 @@ function deriveTriggerPayload(config: JourneyTriggerConfiguration): { trigger: T
       return {
         trigger: cleanUndefined({
           type: triggerType,
+          webhookEvent: eventType === 'custom_event' ? shopify.customEventName : undefined,
           data: {
             shopifyEvent: deepClone(shopify),
           },
@@ -1111,6 +1134,7 @@ function normaliseJourneyStructure(journey: JourneyDefinition): JourneyDefinitio
     settings,
     config,
     stats,
+    nodes: (journey.nodes ?? []).map(normalizeTriggerNode),
   };
 }
 
@@ -1297,7 +1321,7 @@ function createJourneyNodeFromFlow(node: Node<JourneyNodeData>): JourneyNode {
     base.subtype = node.data.subtype || 'exit_journey';
   }
 
-  return base as JourneyNode;
+  return normalizeTriggerNode(base as JourneyNode);
 }
 
 function mapDomainNodeToFlow(node: JourneyNode): Node<JourneyNodeData> {
@@ -1376,7 +1400,7 @@ function mapDomainNodeToFlow(node: JourneyNode): Node<JourneyNodeData> {
   if (variant === 'trigger' && isUnifiedTriggerEnabled()) {
     const existingConfig =
       ((node as { data?: { triggerConfig?: UnifiedTriggerConfig } }).data?.triggerConfig as UnifiedTriggerConfig | undefined) ??
-      (meta.triggerConfiguration as UnifiedTriggerConfig | undefined) ??
+      (isValidTriggerConfig(meta.triggerConfiguration) ? meta.triggerConfiguration as UnifiedTriggerConfig : undefined) ??
       (meta.triggerConfig as UnifiedTriggerConfig | undefined) ??
       convertLegacyTriggerMetaToUnified(meta);
     if (existingConfig) {
@@ -1431,9 +1455,12 @@ function mapDomainEdgeToFlow(edge: JourneyEdgeType): Edge {
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
     label: edge.label,
     type: 'journey',
-    markerEnd: { type: 'arrowclosed', color: '#9CA3AF', width: 20, height: 20 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: '#52616B', width: 22, height: 22 },
+    zIndex: 5,
     data: {},
   };
 }
@@ -1447,6 +1474,8 @@ function mapFlowEdgeToDomain(edge: Edge): JourneyEdgeType {
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
     label: typeof edge.label === 'string' ? edge.label : undefined,
   };
 }
@@ -1686,6 +1715,10 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
 
   useEffect(() => {
     journeyStatusRef.current = journeyStatus;
@@ -2018,6 +2051,10 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
   }, []);
 
   const selectedNode = useMemo(() => nodes.find(node => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
+  const journeyTriggerEvent = useMemo(() => {
+    const triggerNode = nodes.find(node => node.data.variant === 'trigger');
+    return triggerNode ? selectedTriggerEvent(mapFlowNodeToDomain(triggerNode)) : undefined;
+  }, [nodes]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -2046,7 +2083,8 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
             id: `edge_${crypto.randomUUID()}`,
             type: 'journey',
             label,
-            markerEnd: { type: 'arrowclosed', color: '#9CA3AF', width: 20, height: 20 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#52616B', width: 22, height: 22 },
+            zIndex: 5,
             data: {},
           },
           eds
@@ -2489,13 +2527,17 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
             cleverTap?.targetSegment.rules[0] ?? cleverTap?.targetSegment.ruleGroups[0]?.rules[0];
           const eventSummary =
             primaryRule?.eventDisplayName ?? primaryRule?.eventName ?? node.data.meta?.eventSummary;
+          const eventName = primaryRule?.eventName?.trim();
           const timeframeSummary = formatTimeFrameLabel(primaryRule?.timeFrame);
 
           const nextMeta: JsonMap = {
             ...(node.data.meta || {}),
             unified: true,
-            triggerType: 'unified',
-            triggerConfiguration: config,
+            triggerType: eventName ? 'event_trigger' : 'unified',
+            webhookEvent: eventName,
+            eventName,
+            eventSource: eventName === 'custom:abandoned_cart' ? 'Shiprocket' : node.data.meta?.eventSource,
+            triggerConfig: config,
           };
           if (config.segmentName) {
             nextMeta.segmentName = config.segmentName;
@@ -2557,6 +2599,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
               ...node.data,
               meta: nextMeta,
               triggerConfig: config,
+              subtype: eventName ? 'event_trigger' : node.data.subtype,
               status: node.data.status ?? 'draft',
               isConfigured,
               label: nextLabel,
@@ -3333,7 +3376,58 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
     [setEdges]
   );
 
-  const decoratedEdges = edges;
+  const handleEdgeInsertBetween = useCallback((edgeId: string) => {
+    const edge = edgesRef.current.find(item => item.id === edgeId);
+    if (!edge) return;
+    const source = nodesRef.current.find(node => node.id === edge.source);
+    const target = nodesRef.current.find(node => node.id === edge.target);
+    if (!source || !target) return;
+    const nodeId = `node_${crypto.randomUUID()}`;
+    const delayConfig: DelayConfig = {
+      delayType: 'fixed_time',
+      specificConfig: { type: 'fixed_time', duration: { value: 30, unit: 'minutes' }, description: '' },
+      quietHours: { enabled: false, startTime: { hour: 21, minute: 0 }, endTime: { hour: 9, minute: 0 }, timezone: 'customer' },
+      holidaySettings: { skipWeekends: false, skipHolidays: false, holidayCalendar: 'us', customHolidayDates: [] },
+      throttling: { enabled: false },
+      nodeName: 'Wait 30 minutes',
+      description: '',
+    };
+    const newNode: Node<JourneyNodeData> = {
+      id: nodeId,
+      type: 'wait',
+      position: { x: (source.position.x + target.position.x) / 2, y: (source.position.y + target.position.y) / 2 },
+      data: {
+        label: 'Wait 30 minutes',
+        variant: 'wait',
+        subtype: 'fixed_delay',
+        meta: { delayType: 'fixed_time', delaySummary: 'Wait 30 minutes', delayConfig, duration: 30, unit: 'minutes', isConfigured: true },
+      },
+      style: { width: 280 },
+    };
+    setNodes(current => [...current, newNode]);
+    setEdges(current => [
+      ...current.filter(item => item.id !== edgeId),
+      mapDomainEdgeToFlow({ id: `edge_${crypto.randomUUID()}`, source: edge.source, target: nodeId, sourceHandle: edge.sourceHandle }),
+      mapDomainEdgeToFlow({ id: `edge_${crypto.randomUUID()}`, source: nodeId, target: edge.target, targetHandle: edge.targetHandle, label: typeof edge.label === 'string' ? edge.label : undefined }),
+    ]);
+    setSelectedNodeId(nodeId);
+  }, [setEdges, setNodes]);
+
+  const handleReconnect = useCallback((oldEdge: Edge, connection: Connection) => {
+    setEdges(current => reconnectEdge(oldEdge, connection, current));
+  }, [setEdges]);
+
+  const handleArrangeJourney = useCallback(() => {
+    setNodes(current => arrangeJourneyNodes(current, edgesRef.current));
+    requestAnimationFrame(() => reactFlowInstanceRef.current?.fitView({ padding: 0.25, duration: 350 }));
+    toast.success('Journey arranged top to bottom');
+  }, [setNodes, toast]);
+
+  const decoratedEdges = useMemo(() => edges.map(edge => ({
+    ...edge,
+    zIndex: 5,
+    data: { ...(edge.data ?? {}), onDelete: handleEdgeDelete, onInsertBetween: handleEdgeInsertBetween },
+  })), [edges, handleEdgeDelete, handleEdgeInsertBetween]);
 
   // Attach callbacks to nodes for action buttons (Edit, Delete, Duplicate)
   const renderedNodes = useMemo(() => {
@@ -3747,6 +3841,14 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
                 >
                   <Menu className="h-5 w-5" />
                 </button>
+                <button
+                  type="button"
+                  onClick={handleArrangeJourney}
+                  className="flex min-h-[44px] items-center gap-2 rounded-lg px-3 text-sm font-medium text-[#4A4139] hover:bg-[#F5F3EE]"
+                  title="Arrange journey top to bottom"
+                >
+                  <Route className="h-4 w-4" /> Arrange
+                </button>
                 {selectedNodeId && (
                   <button
                     onClick={() => setRightPanelOpen(true)}
@@ -3787,6 +3889,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
+                  onReconnect={handleReconnect}
                   onDragOver={onDragOver}
                   onDrop={onDrop}
                   onNodeClick={handleNodeClick}
@@ -3905,6 +4008,14 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
                   </button>
                   <button
                     type="button"
+                    onClick={handleArrangeJourney}
+                    className="pointer-events-auto inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-4 text-sm font-medium text-[#4A4139] shadow-sm transition hover:border-[#C3D0F9] hover:text-[#3158D7]"
+                    title="Arrange journey top to bottom"
+                  >
+                    <Route className="h-4 w-4" /> Arrange journey
+                  </button>
+                  <button
+                    type="button"
                     onClick={toggleInspectorPanel}
                     className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E2E8F0] bg-white text-[#4A4139] shadow-sm transition hover:border-[#C3D0F9] hover:text-[#4971FF] min-h-[44px] min-w-[44px]"
                     title={isInspectorCollapsed ? 'Expand inspector' : 'Collapse inspector'}
@@ -3921,6 +4032,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
+                  onReconnect={handleReconnect}
                   onDragOver={onDragOver}
                   onDrop={onDrop}
                   onNodeClick={handleNodeClick}
@@ -4037,6 +4149,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
           }
         }}
         triggerContext="generic"
+        eventName={journeyTriggerEvent}
       />
       <DelayConfigModal
         open={Boolean(activeModal?.type === 'delay' && activeModalNode)}

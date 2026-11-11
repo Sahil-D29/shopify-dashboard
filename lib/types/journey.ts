@@ -106,6 +106,8 @@ export interface JourneyEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
   label?: string; // e.g., Yes/No for condition splits
 }
 

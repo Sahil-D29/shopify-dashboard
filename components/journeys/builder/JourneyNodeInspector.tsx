@@ -43,6 +43,7 @@ import { TriggerFilterBuilder, type TriggerFilter } from './trigger/TriggerFilte
 import { TriggerConfig } from '../trigger/TriggerConfig';
 import type { TriggerConfigState } from '../trigger/types';
 import { configToState, stateToConfig } from '../trigger/stateMappers';
+import { canonicalEventTriggerConfig } from '@/lib/journey-engine/trigger-config';
 
 
 export interface JourneyNodeInspectorProps {
@@ -134,6 +135,15 @@ export function JourneyNodeInspector({
   };
 
   const meta = node.data.meta || {};
+  const selectedEvent = typeof meta.webhookEvent === 'string' ? meta.webhookEvent : undefined;
+  const inspectorTriggerType = selectedEvent === 'custom:abandoned_cart'
+    ? 'shiprocket_abandoned_checkout'
+    : selectedEvent
+      ? 'event_trigger'
+      : (meta.triggerType as string) ?? node.data.subtype ?? 'segment_joined';
+  const handleEventChange = (eventName: string) => {
+    onUpdateTriggerConfig?.(node.id, canonicalEventTriggerConfig(eventName));
+  };
   const whatsappConfig = meta.whatsappActionConfig as WhatsAppActionConfig | undefined;
 
   const previewTemplate = useMemo<WhatsAppTemplate | null>(() => {
@@ -480,11 +490,19 @@ export function JourneyNodeInspector({
                 <select
                   id="triggerType"
                   className="w-full rounded-lg border border-[#E8E4DE] bg-white px-3 py-2 text-sm text-[#4A4139] focus:border-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]/20"
-                  value={(meta.triggerType as string) ?? node.data.subtype ?? 'segment_joined'}
-                  onChange={event => handleMetaChange('triggerType', event.target.value)}
+                  value={inspectorTriggerType}
+                  onChange={event => {
+                    const next = event.target.value;
+                    if (next === 'shiprocket_abandoned_checkout') {
+                      handleEventChange('custom:abandoned_cart');
+                    } else {
+                      handleMetaChange('triggerType', next);
+                    }
+                  }}
                 >
                   <option value="segment_joined">Segment Joined</option>
                   <option value="event_trigger">Event Trigger</option>
+                  <option value="shiprocket_abandoned_checkout">Shiprocket — Abandoned Checkout</option>
                   <option value="date_time">Date / Time</option>
                   <option value="abandoned_cart">Abandoned Cart</option>
                   <option value="manual_entry">Manual Entry</option>
@@ -499,13 +517,13 @@ export function JourneyNodeInspector({
                 />
               ) : null}
 
-              {(meta.triggerType === 'event_trigger' || (!meta.triggerType && node.data.subtype === 'event_trigger')) ? (
+              {(inspectorTriggerType === 'event_trigger' || inspectorTriggerType === 'shiprocket_abandoned_checkout') ? (
                 <div className="space-y-2">
                   <Label htmlFor="triggerEvent">Trigger Event</Label>
                   <CatalogEventSelect
                     id="triggerEvent"
                     value={String(meta.webhookEvent ?? '')}
-                    onChange={val => handleMetaChange('webhookEvent', val)}
+                    onChange={handleEventChange}
                   />
                   <p className="text-xs text-[#9B8E7E]">
                     The journey enrolls the customer when this event fires — from Shopify,

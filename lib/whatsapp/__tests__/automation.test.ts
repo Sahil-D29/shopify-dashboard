@@ -7,9 +7,14 @@ test('unified abandoned-checkout trigger survives save/load and preserves filter
   const node: any = { id: 'trigger', type: 'trigger', subtype: 'manual_entry', data: { triggerType: 'manual_entry', triggerConfig: { targetSegment: { rules: [{ ruleType: 'user_behavior', eventName: 'custom:abandoned_cart', conditions: [{ property: 'total_price', operator: 'greater_than', value: 100 }] }] } } } };
   const normalized = normalizeTriggerNode(node) as any;
   assert.equal(normalized.data.webhookEvent, 'custom:abandoned_cart');
-  assert.equal(normalized.subtype, 'custom:abandoned_cart');
+  assert.equal(normalized.subtype, 'event_trigger');
   assert.equal(normalized.trigger.type, 'webhook');
   assert.equal(normalized.trigger.webhookEvent, 'custom:abandoned_cart');
+  assert.equal(normalized.data.triggerType, 'event_trigger');
+  assert.equal(normalized.data.manual, undefined);
+  assert.equal(normalized.data.manualTrigger, undefined);
+  assert.equal(normalized.data.triggerConfiguration.category, 'shopify_event');
+  assert.equal(normalized.data.triggerConfiguration.shopifyEvent.customEventName, 'custom:abandoned_cart');
   assert.deepEqual(normalizeTriggerNode(JSON.parse(JSON.stringify(normalized))), normalized);
   assert.equal(normalized.data.conditions[0].field, 'total_price');
 });

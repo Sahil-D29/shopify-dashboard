@@ -51,6 +51,7 @@ import type {
   WhatsAppTemplateStatus,
   TemplateButton,
   WhatsAppBodyField,
+  TemplateRuntimeParameter,
 } from "@/lib/types/whatsapp-config";
 
 type JsonMap = Record<string, unknown>;
@@ -94,18 +95,22 @@ const normalizeButtons = (value: unknown): TemplateButton[] | undefined => {
     .map(button => {
       if (!isJsonMap(button)) return null;
       const id = getString(button.id);
-      const label = getString(button.label);
+      const label = getString(button.label) ?? getString(button.text);
       const type = getString(button.type);
       if (!id || !label || !type) return null;
-      if (type !== "quick_reply" && type !== "url" && type !== "phone") return null;
+      if (!['quick_reply', 'url', 'phone', 'QUICK_REPLY', 'URL', 'PHONE_NUMBER'].includes(type)) return null;
       const result: TemplateButton = {
         id,
         label,
-        type,
+        text: getString(button.text) ?? label,
+        type: type as TemplateButton['type'],
+        index: getNumber(button.index),
       };
       const url = getString(button.url);
+      const urlExample = getString(button.urlExample);
       const phone = getString(button.phone);
       if (url) result.url = url;
+      if (urlExample) result.urlExample = urlExample;
       if (phone) result.phone = phone;
       return result;
     })
@@ -122,6 +127,21 @@ const normalizeTemplate = (value: unknown): WhatsAppTemplate | null => {
   const variables = normalizeStringArray(value.variables);
   const mediaType = asMediaType(value.mediaType);
   const buttons = normalizeButtons(value.buttons);
+  const runtimeParameters = Array.isArray(value.runtimeParameters)
+    ? value.runtimeParameters.filter(isJsonMap).map(parameter => ({
+        id: getString(parameter.id) ?? '',
+        component: getString(parameter.component) as TemplateRuntimeParameter['component'],
+        componentIndex: getNumber(parameter.componentIndex) ?? 0,
+        parameterType: getString(parameter.parameterType) as TemplateRuntimeParameter['parameterType'],
+        position: getNumber(parameter.position) ?? 0,
+        parameterName: getString(parameter.parameterName),
+        token: getString(parameter.token),
+        approvedPrefix: getString(parameter.approvedPrefix),
+        example: getString(parameter.example),
+        label: getString(parameter.label),
+        required: getBoolean(parameter.required) ?? true,
+      })).filter(parameter => parameter.id && parameter.component && parameter.parameterType)
+    : undefined;
 
   return {
     id,
@@ -151,6 +171,7 @@ const normalizeTemplate = (value: unknown): WhatsAppTemplate | null => {
     createdAt: typeof value.createdAt === 'string' || value.createdAt instanceof Date ? value.createdAt : undefined,
     updatedAt: typeof value.updatedAt === 'string' || value.updatedAt instanceof Date ? value.updatedAt : undefined,
     lastUsed: typeof value.lastUsed === 'string' || value.lastUsed instanceof Date ? value.lastUsed : undefined,
+    runtimeParameters,
   };
 };
 
@@ -184,6 +205,7 @@ interface WhatsAppActionModalProps {
   onClose: () => void;
   onSave: (config: WhatsAppActionConfig) => void;
   triggerContext?: "generic" | "order" | "product";
+  eventName?: string;
   initialStep?: StepId;
 }
 
@@ -396,21 +418,9 @@ function buildMappingsForTemplate(
 
 function buildBodyFieldsForTemplate(
   template: WhatsAppTemplate,
-  existingFields: WhatsAppBodyField[] = [],
 ): WhatsAppBodyField[] {
   const source = template.body ?? template.content ?? "";
-  const segments = source.split(/\n{2,}/).filter(segment => segment.trim().length > 0);
-  if (segments.length === 0) {
-    segments.push(source);
-  }
-  return segments.map((segment, index) => {
-    const existing = existingFields[index];
-    return {
-      id: existing?.id ?? `body_${index}`,
-      label: existing?.label ?? `Body Text ${index + 1}`,
-      value: existing?.value ?? segment.trim(),
-    };
-  });
+  return source ? [{ id: 'approved_body', label: 'Approved body', value: source }] : [];
 }
 
 function combineBodyFields(fields: WhatsAppBodyField[]): string {
@@ -444,8 +454,12 @@ function isValidUrl(value: string): boolean {
 function deriveButtonActions(buttons: TemplateButton[] | undefined, existing: Record<string, string>): Record<string, string> {
   if (!buttons) return {};
   const record: Record<string, string> = {};
-  buttons.forEach(button => {
-    record[button.id] = existing?.[button.id] ?? (button.url?.includes("{{") ? "" : button.url) ?? button.phone ?? "";
+  buttons.forEach((button, fallbackIndex) => {
+    const index = button.index ?? fallbackIndex;
+    const dynamicExample = button.url?.includes("{{") ? button.urlExample ?? "" : button.url;
+    const value = existing?.[String(index)] ?? existing?.[button.id] ?? dynamicExample ?? button.phone ?? "";
+    record[button.id] = value;
+    if (button.type === 'URL' || button.type === 'url') record[String(index)] = value;
   });
   return record;
 }
@@ -458,6 +472,7 @@ export default function WhatsAppActionModal({
   onClose,
   onSave,
   triggerContext = "generic",
+  eventName,
   initialStep,
 }: WhatsAppActionModalProps) {
   const toast = useToast();
@@ -527,7 +542,7 @@ export default function WhatsAppActionModal({
   }, [variablePreview]);
 
   const bodyFields = config.bodyFields ?? [];
-  const previewBody = useMemo(() => combineBodyFields(bodyFields), [bodyFields]);
+  const previewBody = selectedTemplate?.body ?? selectedTemplate?.content ?? combineBodyFields(bodyFields);
 
   const finalRenderedMessage = useMemo(() => {
     if (!selectedTemplate) return previewBody;
@@ -735,7 +750,7 @@ export default function WhatsAppActionModal({
             templateLanguage: template.language,
             templateCategory: template.category,
             variableMappings: buildMappingsForTemplate(template, prev.variableMappings, dataSources),
-            bodyFields: buildBodyFieldsForTemplate(template, prev.bodyFields),
+            bodyFields: buildBodyFieldsForTemplate(template),
             templateDefinition: template,
           }));
         }
@@ -769,17 +784,9 @@ export default function WhatsAppActionModal({
   useEffect(() => {
     if (!selectedTemplate) return;
     setConfig(prev => {
-      const templateChanged = selectedTemplate.id !== prev.templateId;
-      const hasExistingFields = prev.bodyFields && prev.bodyFields.length > 0;
-      if (hasExistingFields && !templateChanged) {
-        return prev;
-      }
       return {
         ...prev,
-        bodyFields: buildBodyFieldsForTemplate(
-          selectedTemplate,
-          templateChanged ? [] : prev.bodyFields,
-        ),
+        bodyFields: buildBodyFieldsForTemplate(selectedTemplate),
       };
     });
   }, [selectedTemplate]);
@@ -1310,6 +1317,7 @@ export default function WhatsAppActionModal({
             onTemplateSelect={handleTemplateSelect}
             onBodyFieldChange={handleBodyFieldsChange}
             onVariableMappingsChange={handleVariableMappingsChange}
+            onConfigChange={updates => setConfig(prev => ({ ...prev, ...updates }))}
             onSendTest={async (phone: string) => {
               await handleSendTest({
                 phone,
@@ -1319,6 +1327,7 @@ export default function WhatsAppActionModal({
             }}
             dataSources={dataSources}
             triggerContext={triggerContext}
+            eventName={eventName}
             validationErrors={formErrors.template || []}
           />
         );

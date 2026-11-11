@@ -473,5 +473,5 @@ select:focus {
 
 .react-flow__node > div {
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }

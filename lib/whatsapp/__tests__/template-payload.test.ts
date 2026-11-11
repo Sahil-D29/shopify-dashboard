@@ -7,6 +7,7 @@ import { campaignTemplateInput } from '../campaign-config';
 import { whatsappNodeConfig } from '../node-config';
 import { legacyIssues, issueHref } from '../issue-records';
 import { templateView } from '../template-view';
+import { normalizeTemplateRuntimeParameters } from '../template-runtime';
 
 const definition = (components: MetaTemplateDefinition['components'], extra = {}): MetaTemplateDefinition => ({ id: '123', name: 'sahil_test', language: 'en_US', status: 'APPROVED', components, ...extra });
 function rejects(fn: () => unknown, field: string) {
@@ -22,6 +23,21 @@ test('live Meta template details retain required header and dynamic button field
   assert.equal(view.header?.content, '{{name}}');
   assert.equal(view.buttons?.[0].id, 'url_Shop Now');
   assert.equal(view.buttons?.[0].url, 'https://mymaatram.com/{{1}}');
+});
+test('template runtime parameters expose only actual approved placeholders and dynamic components', () => {
+  assert.deepEqual(normalizeTemplateRuntimeParameters([{ type: 'BODY', text: 'Approved static copy' }]), []);
+  const parameters = normalizeTemplateRuntimeParameters([
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY', text: 'Hi {{name}}, order {{order}}' },
+    { type: 'BUTTONS', buttons: [
+      { type: 'URL', text: 'Website', url: 'https://mymaatram.com' },
+      { type: 'URL', text: 'Recover', url: 'https://mymaatram.com/{{1}}', example: ['https://mymaatram.com/?cart-resume-id=sample'] },
+    ] },
+  ], 'NAMED');
+  assert.deepEqual(parameters.map(parameter => parameter.id), ['header.media', 'body.name', 'body.order', 'button.1']);
+  assert.equal(parameters[1].parameterName, 'name');
+  assert.equal(parameters[3].approvedPrefix, 'https://mymaatram.com/');
+  assert.equal(parameters[3].example, 'https://mymaatram.com/?cart-resume-id=sample');
 });
 test('positional variables use numeric order, deduplicate placeholders and ignore object insertion order', () => {
   const payload = buildTemplatePayload(definition([{ type: 'BODY', text: '{{2}} {{1}} {{2}} {{10}}' }]), { variables: { '10': 'ten', '2': 'two', '1': 'one' } });

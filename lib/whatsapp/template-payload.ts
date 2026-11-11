@@ -6,7 +6,7 @@ export interface MetaTemplateDefinition {
   language: string;
   status: string;
   parameter_format?: string;
-  components: Array<{ type: string; format?: string; text?: string; buttons?: Array<{ type: string; text?: string; url?: string }> }>;
+  components: Array<{ type: string; format?: string; text?: string; buttons?: Array<{ type: string; text?: string; url?: string; example?: string[] }> }>;
 }
 export interface TemplateInput {
   templateId?: string;

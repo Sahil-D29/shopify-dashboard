@@ -10,6 +10,7 @@ export type TemplateButtonType =
 
 export interface TemplateButton {
   id: string;
+  index?: number;
   type: TemplateButtonType;
   label?: string;
   text?: string;
@@ -17,6 +18,33 @@ export interface TemplateButton {
   urlExample?: string;
   phone?: string;
   phoneNumber?: string;
+}
+
+export type TemplateRuntimeComponent = 'HEADER' | 'BODY' | 'BUTTON';
+export type TemplateRuntimeParameterType = 'text' | 'image' | 'video' | 'document' | 'url';
+
+export interface TemplateRuntimeParameter {
+  id: string;
+  component: TemplateRuntimeComponent;
+  componentIndex: number;
+  parameterType: TemplateRuntimeParameterType;
+  position: number;
+  parameterName?: string;
+  token?: string;
+  approvedPrefix?: string;
+  example?: string;
+  label?: string;
+  required: boolean;
+}
+
+export interface TemplateComponentMapping {
+  parameterId: string;
+  component: TemplateRuntimeComponent;
+  componentIndex: number;
+  parameterName?: string;
+  dataSource: VariableDataSource;
+  property: string;
+  fallbackValue?: string;
 }
 
 export interface TemplateHeader {
@@ -68,9 +96,10 @@ export interface WhatsAppTemplate {
   approvedAt?: number;
   lastUsedAt?: number;
   lastUsed?: string | Date;
+  runtimeParameters?: TemplateRuntimeParameter[];
 }
 
-export type VariableDataSource = 'customer' | 'order' | 'product' | 'custom' | 'static';
+export type VariableDataSource = 'customer' | 'order' | 'product' | 'event' | 'custom' | 'static';
 
 export interface VariableMapping {
   variable: string;
@@ -159,6 +188,8 @@ export interface WhatsAppActionConfig {
   failureHandling: FailureHandlingConfig;
   skipIfOptedOut: boolean;
   buttonActions?: Record<string, string>;
+  componentMappings?: TemplateComponentMapping[];
+  useCheckoutRecoveryUrl?: boolean;
   templateDefinition?: WhatsAppTemplate;
   previewBody?: string;
   previewVariables?: Record<string, string>;
