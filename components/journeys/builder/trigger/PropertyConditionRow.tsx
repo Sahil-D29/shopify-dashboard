@@ -59,20 +59,33 @@ export function PropertyConditionRow({
   );
   const propertyType = property?.type ?? 'string';
   const operators = OPERATORS_BY_TYPE[propertyType] ?? OPERATORS_BY_TYPE.string;
+  const propertyLabel = property?.description?.split(' — ')[0] || property?.name || '';
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-2 overflow-hidden rounded-xl border border-border bg-card p-3">
       <div className="min-w-0">
         <Select value={condition.property} onValueChange={value => onUpdate({ property: value })}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Property" />
+          <SelectTrigger className="h-10 min-w-0 overflow-hidden">
+            <SelectValue placeholder="Property">
+              {property ? <span className="block min-w-0 truncate" title={propertyLabel}>{propertyLabel}</span> : null}
+            </SelectValue>
           </SelectTrigger>
-          <SelectContent position="popper" sideOffset={4}>
+          <SelectContent
+            position="popper"
+            sideOffset={4}
+            align="start"
+            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]"
+          >
             {availableProperties.map(item => (
-              <SelectItem key={item.name} value={item.name}>
-                <div className="flex flex-col">
-                  <span className="font-medium text-sm">{item.description || item.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{item.name} · {item.type}</span>
+              <SelectItem
+                key={item.name}
+                value={item.name}
+                textValue={item.description?.split(' — ')[0] || item.name}
+                className="items-start whitespace-normal"
+              >
+                <div className="flex min-w-0 flex-col pr-1">
+                  <span className="break-words text-sm font-medium leading-5">{item.description || item.name}</span>
+                  <span className="break-all font-mono text-xs text-muted-foreground">{item.name} · {item.type}</span>
                 </div>
               </SelectItem>
             ))}
@@ -80,8 +93,8 @@ export function PropertyConditionRow({
         </Select>
       </div>
 
-      <div className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] gap-2">
-      <div className="min-w-0">
+      <div className="grid min-w-0 grid-cols-[minmax(5.5rem,0.8fr)_minmax(0,1.2fr)_auto] gap-2">
+        <div className="min-w-0 overflow-hidden [&>*]:!w-full [&>*]:min-w-0">
         <Select value={condition.operator} onValueChange={value => onUpdate({ operator: value as ConditionOperator })}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Operator" />
@@ -94,9 +107,9 @@ export function PropertyConditionRow({
             ))}
           </SelectContent>
         </Select>
-      </div>
+        </div>
 
-      <div className="min-w-0">
+        <div className="min-w-0 overflow-hidden [&>*]:!w-full [&>*]:min-w-0">
         {!['exists', 'not_exists'].includes(condition.operator) ? (
           <DynamicValueInput
             propertyId={condition.property}
@@ -110,16 +123,16 @@ export function PropertyConditionRow({
         ) : (
           <div className="text-sm italic text-muted-foreground">No value required</div>
         )}
-      </div>
+        </div>
 
-      <button
-        type="button"
-        onClick={onRemove}
-        className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-        title="Remove filter"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+          title="Remove filter"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
