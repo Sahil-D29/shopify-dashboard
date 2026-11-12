@@ -17,6 +17,7 @@ import {
   getLastEnrollment,
 } from './storage';
 import type { EngineCondition, ConditionContext } from './condition-evaluator';
+import { recordJourneyEventEvaluation } from './event-evaluations';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -118,23 +119,112 @@ export async function matchAndExecuteJourneys(eventType: string, eventData: Even
 
     for (const trigger of triggerNodes) {
       const config = extractTriggerConfig(normalizeTriggerNode(trigger));
+      const expectedEvent = normalizeEventName(config.webhookEvent || config.triggerType || '');
+      if (expectedEvent && expectedEvent !== normalizeEventName(eventType)) continue;
+      if (eventData.payload.duplicate === true) {
+        await recordJourneyEventEvaluation({
+          storeId,
+          journeyId: journey.id,
+          event: eventData.payload,
+          outcome: 'DUPLICATE',
+          reasonCode: 'DUPLICATE_WEBHOOK',
+          receivedAt: eventData.receivedAt,
+        });
+        continue;
+      }
       if (!(await triggerMatches(config, eventType, eventData))) {
+        await recordJourneyEventEvaluation({
+          storeId,
+          journeyId: journey.id,
+          event: eventData.payload,
+          outcome: 'FILTERED',
+          reasonCode: 'TRIGGER_FILTER_NOT_MATCHED',
+          receivedAt: eventData.receivedAt,
+        });
         continue;
       }
 
       const customers = await getAffectedCustomers(eventData);
+      if (!customers.length) {
+        await recordJourneyEventEvaluation({
+          storeId,
+          journeyId: journey.id,
+          event: eventData.payload,
+          outcome: 'MISSING_CONTACT',
+          reasonCode: 'MISSING_CONTACT',
+          receivedAt: eventData.receivedAt,
+        });
+      }
       for (let customer of customers) {
         if (!customer?.id) continue;
         if (journey.nodes.some(isWhatsAppNode)) {
           const optedIn = await resolveOptedInWhatsAppRecipient(storeId, customer);
-          if (!optedIn) continue;
-          customer = optedIn;
+          const audience = journey.settings?.enrollmentAudience ?? 'recorded_opt_in_only';
+          if (!optedIn && audience === 'recorded_opt_in_only') {
+            await recordJourneyEventEvaluation({
+              storeId,
+              journeyId: journey.id,
+              event: eventData.payload,
+              customerId: customer.id,
+              outcome: 'CONSENT_REQUIRED',
+              reasonCode: 'WHATSAPP_OPT_IN_REQUIRED',
+              receivedAt: eventData.receivedAt,
+            });
+            continue;
+          }
+          if (optedIn) customer = optedIn;
         }
-        if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) continue;
+        if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) {
+          await recordJourneyEventEvaluation({
+            storeId,
+            journeyId: journey.id,
+            event: eventData.payload,
+            customerId: customer.id,
+            outcome: 'FILTERED',
+            reasonCode: 'TEST_PHONE_FILTER',
+            receivedAt: eventData.receivedAt,
+          });
+          continue;
+        }
         const allowed = await canEnterJourney(journey, customer.id);
-        if (!allowed) continue;
+        if (!allowed) {
+          await recordJourneyEventEvaluation({
+            storeId,
+            journeyId: journey.id,
+            event: eventData.payload,
+            customerId: customer.id,
+            outcome: 'DUPLICATE',
+            reasonCode: 'REENTRY_NOT_ALLOWED',
+            receivedAt: eventData.receivedAt,
+          });
+          continue;
+        }
 
-        await startJourneyExecution(journey, customer, trigger, eventData.payload as JsonRecord);
+        try {
+          const enrollment = await startJourneyExecution(journey, customer, trigger, eventData.payload as JsonRecord);
+          await recordJourneyEventEvaluation({
+            storeId,
+            journeyId: journey.id,
+            event: eventData.payload,
+            customerId: customer.id,
+            enrollmentId: enrollment?.id,
+            outcome: enrollment ? 'ENROLLED' : 'DUPLICATE',
+            reasonCode: enrollment ? undefined : 'CHECKOUT_ALREADY_ENROLLED',
+            receivedAt: eventData.receivedAt,
+          });
+        } catch (error) {
+          await recordJourneyEventEvaluation({
+            storeId,
+            journeyId: journey.id,
+            event: eventData.payload,
+            customerId: customer.id,
+            outcome: 'INTERNAL_FAILURE',
+            reasonCode: 'ENROLLMENT_FAILED',
+            receivedAt: eventData.receivedAt,
+            details: { message: error instanceof Error ? error.message : 'Enrollment failed' },
+          });
+          throw error;
+        }
       }
     }
   }

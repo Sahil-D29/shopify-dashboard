@@ -1,238 +1,89 @@
 export const dynamic = 'force-dynamic';
+
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { readJsonFile, writeJsonFile } from '@/lib/utils/json-storage';
+
 import { prisma } from '@/lib/prisma';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
-import type { JourneyDefinition, JourneyNode } from '@/lib/types/journey';
 
 interface ButtonClickPayload {
-  entry: Array<{
-    id: string;
-    changes: Array<{
-      value: {
-        messages: Array<{
-          from: string;
-          interactive: {
-            type: 'button_reply' | 'list_reply';
-            button_reply?: {
-              id: string;
-              title: string;
-            };
-            list_reply?: {
-              id: string;
-              title: string;
-            };
-          };
-          context: {
-            from: string;
-            id: string; // Original message ID
-          };
-        }>;
+  entry?: Array<{ changes?: Array<{ value?: {
+    metadata?: { phone_number_id?: string };
+    messages?: Array<{
+      from?: string;
+      interactive?: {
+        button_reply?: { id?: string; title?: string };
+        list_reply?: { id?: string; title?: string };
       };
+      context?: { id?: string };
     }>;
-  }>;
+  } }> }>;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as ButtonClickPayload;
+    const body = await request.json() as ButtonClickPayload;
+    for (const entry of body.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        const phoneNumberId = change.value?.metadata?.phone_number_id;
+        const connection = phoneNumberId
+          ? await prisma.whatsAppConfig.findFirst({ where: { phoneNumberId }, select: { storeId: true } })
+          : null;
+        for (const message of change.value?.messages ?? []) {
+          const originalMessageId = message.context?.id;
+          const buttonId = message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id;
+          const buttonText = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title;
+          if (!originalMessageId || !buttonId) continue;
 
-    for (const entry of body.entry || []) {
-      for (const change of entry.changes || []) {
-        for (const message of change.value?.messages || []) {
-          const { from: phoneNumber, interactive, context } = message;
-          const buttonId = interactive.button_reply?.id || interactive.list_reply?.id;
-          const buttonText = interactive.button_reply?.title || interactive.list_reply?.title;
-
-          if (!buttonId || !context.id) continue;
-
-          // ─── Campaign tracking: Update CampaignLog on button click ────────
-          try {
-            const campaignLog = await prisma.campaignLog.findFirst({
-              where: { whatsappMessageId: context.id },
+          const campaignLog = await prisma.campaignLog.findFirst({
+            where: { whatsappMessageId: originalMessageId, ...(connection ? { campaign: { storeId: connection.storeId } } : {}) },
+          });
+          if (campaignLog && !campaignLog.clickedAt) {
+            const claimed = await prisma.campaignLog.updateMany({
+              where: { id: campaignLog.id, clickedAt: null },
+              data: { status: 'CLICKED', clickedAt: new Date(), metadata: { ...(campaignLog.metadata as any ?? {}), buttonId, buttonText } },
             });
-
-            if (campaignLog) {
-              await prisma.campaignLog.update({
-                where: { id: campaignLog.id },
-                data: {
-                  status: 'CLICKED',
-                  clickedAt: new Date(),
-                  metadata: {
-                    ...(typeof campaignLog.metadata === 'object' && campaignLog.metadata !== null
-                      ? campaignLog.metadata as Record<string, unknown>
-                      : {}),
-                    buttonId,
-                    buttonText,
-                  },
-                },
-              });
-
-              await prisma.campaign.update({
-                where: { id: campaignLog.campaignId },
-                data: { totalClicked: { increment: 1 } },
-              });
-            }
-          } catch (err) {
-            console.error('[Button Click] CampaignLog update error:', err);
-            // Non-fatal: don't break webhook processing
+            if (claimed.count) await prisma.campaign.update({ where: { id: campaignLog.campaignId }, data: { totalClicked: { increment: 1 } } });
           }
 
-          // ─── Journey trigger: WhatsApp button clicked ────────
-          try {
-            await matchAndExecuteJourneys('whatsapp_button_clicked', {
-              shop: null,
-              payload: {
-                phone: normalizePhone(phoneNumber),
-                buttonId,
-                buttonText: buttonText ?? '',
-                text: buttonText ?? '',
+          const sent = await prisma.journeyActivityDoc.findFirst({
+            where: { data: { path: ['data', 'result', 'messageId'], equals: originalMessageId } },
+          });
+          if (!sent) continue;
+          const enrollment = await prisma.journeyEnrollmentDoc.findUnique({ where: { id: sent.enrollmentId } });
+          const journey = enrollment
+            ? await prisma.journeyDoc.findUnique({ where: { id: enrollment.journeyId }, select: { storeId: true } })
+            : null;
+          if (!journey || (connection && connection.storeId !== journey.storeId)) continue;
+          const clickId = `button:${originalMessageId}:${crypto.createHash('sha256').update(buttonId).digest('hex').slice(0, 16)}`;
+          await prisma.journeyActivityDoc.upsert({
+            where: { id: clickId },
+            create: {
+              id: clickId,
+              enrollmentId: sent.enrollmentId,
+              data: {
+                id: clickId,
+                enrollmentId: sent.enrollmentId,
+                timestamp: new Date().toISOString(),
+                eventType: 'button_clicked',
+                data: { messageId: originalMessageId, buttonId, buttonText },
               },
-              receivedAt: new Date().toISOString(),
-            });
-          } catch (journeyErr) {
-            console.error('[Button Click] Journey trigger dispatch failed:', journeyErr);
-          }
-
-          // Find enrollment by original message ID
-          const enrollments = readJsonFile<any>('journey-enrollments.json');
-          const enrollment = enrollments.find((e: any) => 
-            e.metadata?.whatsappMessageId === context.id
-          ) as any;
-
-          if (!enrollment) {
-            console.warn(`[Button Click] No enrollment found for message ${context.id}`);
-            continue;
-          }
-
-          // Load journey and node
-          const journeys = readJsonFile<JourneyDefinition>('journeys.json');
-          const journey = journeys.find((j: JourneyDefinition) => j.id === enrollment.journeyId);
-          if (!journey) continue;
-
-          const node = journey.nodes.find((n: JourneyNode) => 
-            n.id === enrollment.currentNodeId && 
-            n.type === 'action' && (n.data as any)?.meta?.actionType === 'whatsapp'
-          );
-          if (!node) continue;
-
-          const exitPaths = (node as any).config?.exitPaths;
-          if (!exitPaths?.buttonClicked) continue;
-
-          // Find button-specific exit path
-          const buttonPath = exitPaths.buttonClicked.find(
-            (p: any) => p.buttonConfig?.buttonId === buttonId && p.enabled
-          );
-
-          if (!buttonPath) continue;
-
-          // Track event
-          if (buttonPath.tracking?.enabled) {
-            await trackEvent(enrollment, buttonPath.tracking.eventName, {
-              buttonId,
-              buttonText,
-              messageId: context.id,
-              phoneNumber,
-              customPayload: buttonPath.buttonConfig?.customPayload,
-            });
-          }
-
-          // Update profile if configured
-          if (buttonPath.profileUpdates) {
-            await updateProfile(enrollment.customerId, buttonPath.profileUpdates);
-          }
-
-          // Route user
-          if (buttonPath.action.type === 'branch' && buttonPath.action.branchId) {
-            await routeUserToBranch(enrollment, buttonPath.action.branchId, journey);
-          } else if (buttonPath.action.type === 'continue') {
-            // Continue to next node
-            const edges = journey.edges.filter(e => e.source === node.id);
-            if (edges.length > 0) {
-              const nextNode = journey.nodes.find(n => n.id === edges[0].target);
-              if (nextNode) {
-                enrollment.currentNodeId = nextNode.id;
-                enrollment.lastActivityAt = new Date().toISOString();
-              }
-            }
-          }
-
-          // Save enrollment
-          const enrollmentIndex = enrollments.findIndex(e => e.id === enrollment.id);
-          if (enrollmentIndex >= 0) {
-            enrollments[enrollmentIndex] = enrollment;
-            writeJsonFile('journey-enrollments.json', enrollments);
-          }
+            },
+            update: {},
+          });
+          await matchAndExecuteJourneys('whatsapp_button_clicked', {
+            storeId: journey.storeId,
+            shop: null,
+            payload: { phone: normalizePhone(message.from ?? ''), buttonId, buttonText: buttonText ?? '', text: buttonText ?? '' },
+            receivedAt: new Date().toISOString(),
+          }).catch(error => console.error('[Button Click] Journey dispatch failed', error));
         }
       }
     }
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[Button Click webhook]', error);
-    return NextResponse.json(
-      { error: 'Failed to process button click' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to process button click' }, { status: 500 });
   }
 }
-
-async function routeUserToBranch(
-  enrollment: any,
-  branchId: string,
-  journey: JourneyDefinition
-) {
-  const targetNode = journey.nodes.find(n => 
-    n.id === branchId || (n as any).metadata?.branchId === branchId
-  );
-
-  if (targetNode) {
-    enrollment.currentNodeId = targetNode.id;
-    enrollment.lastActivityAt = new Date().toISOString();
-    
-    const activities = readJsonFile<any>('journey-activity-log.json');
-    activities.push({
-      id: `activity_${Date.now()}`,
-      enrollmentId: enrollment.id,
-      journeyId: journey.id,
-      nodeId: targetNode.id,
-      action: 'button_click_routed',
-      timestamp: new Date().toISOString(),
-      metadata: { branchId },
-    });
-    writeJsonFile('journey-activity-log.json', activities);
-  }
-}
-
-async function trackEvent(enrollment: any, eventName: string, properties: Record<string, any>) {
-  console.log(`[Event Tracking] ${eventName}`, {
-    customerId: enrollment.customerId,
-    journeyId: enrollment.journeyId,
-    properties,
-  });
-}
-
-async function updateProfile(customerId: string, updates: Array<{ property: string; value: any; operation: string }>) {
-  const customers = readJsonFile<any>('customers.json');
-  const customerIndex = customers.findIndex((c: any) => c.id === customerId);
-  
-  if (customerIndex >= 0) {
-    const customer = customers[customerIndex];
-    for (const update of updates) {
-      if (update.operation === 'set') {
-        customer[update.property] = update.value;
-      } else if (update.operation === 'increment') {
-        customer[update.property] = (customer[update.property] || 0) + update.value;
-      } else if (update.operation === 'append') {
-        if (!Array.isArray(customer[update.property])) {
-          customer[update.property] = [];
-        }
-        customer[update.property].push(update.value);
-      }
-    }
-    customers[customerIndex] = customer;
-    writeJsonFile('customers.json', customers);
-  }
-}
-

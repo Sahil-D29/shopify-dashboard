@@ -151,9 +151,9 @@ export async function startJourneyExecution(
   customer: CustomerSummary,
   triggerNode: JourneyNode,
   eventData: JsonRecord
-) {
+): Promise<JourneyEnrollmentRecord | null> {
   if (!journey.storeId) throw new Error('Journey store is required');
-  if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) return;
+  if (journey.settings?.testPhoneNumbers?.length && !journey.settings.testPhoneNumbers.some(phone => normalizePhone(phone) === normalizePhone(customer.phone ?? ''))) return null;
   const enrollment: JourneyEnrollmentRecord = {
     id: generateId('enroll'),
     journeyId: journey.id,
@@ -190,7 +190,7 @@ export async function startJourneyExecution(
       await tx.journeyEntryClaim.create({ data: { id: crypto.randomUUID(), storeId: journey.storeId!, journeyId: journey.id, checkoutKey: claimKey, enrollmentId: enrollment.id } });
       await tx.journeyEnrollmentDoc.create({ data: { id: enrollment.id, journeyId: journey.id, customerId: customer.id, status: enrollment.status, data: JSON.parse(JSON.stringify(enrollment)) } });
     });
-  } catch (error) { if ((error as any).code === 'P2002') return; throw error; }
+  } catch (error) { if ((error as any).code === 'P2002') return null; throw error; }
   await logJourneyActivity(enrollment.id, 'journey_started', {
     journeyId: journey.id,
     journeyName: journey.name,
@@ -201,12 +201,13 @@ export async function startJourneyExecution(
 
   const nextEdge = findNextEdge(journey.edges, triggerNode.id);
   if (!nextEdge) {
-    return;
+    return enrollment;
   }
   const nextNode = journey.nodes.find(node => node.id === nextEdge.target);
   if (nextNode) {
     await executeNode(journey, enrollment, nextNode);
   }
+  return enrollment;
 }
 
 export async function executeNode(
@@ -265,11 +266,26 @@ async function executeActionNode(
         phone: enrollment.customerPhone,
         email: enrollment.customerEmail,
       });
-      if (!optedIn) throw new SendValidationError([{
-        ...issue('WHATSAPP_OPT_IN_REQUIRED', 'This recipient has not opted in to WhatsApp messages.', 'phone'),
-        action: 'Wait until the recipient opts in. Do not manually enable consent or resend this message.',
-        customerFixable: false,
-      }]);
+      if (!optedIn) {
+        const consentIssue = {
+          ...issue('WHATSAPP_OPT_IN_REQUIRED', 'This recipient has not opted in to WhatsApp messages.', 'phone'),
+          action: 'Capture explicit WhatsApp permission before sending another message.',
+          customerFixable: false,
+        };
+        enrollment.status = 'suppressed';
+        enrollment.exitReason = 'consent_required';
+        enrollment.completedAt = new Date().toISOString();
+        enrollment.lastActivityAt = enrollment.completedAt;
+        enrollment.metadata = { ...(enrollment.metadata ?? {}), suppression: consentIssue };
+        await updateEnrollmentRecord(enrollment);
+        await cancelScheduledExecutionsForEnrollment(enrollment.id);
+        await logJourneyActivity(enrollment.id, 'journey_suppressed', {
+          nodeId: node.id,
+          reason: 'consent_required',
+          issue: consentIssue,
+        });
+        return;
+      }
       enrollment.customerPhone = optedIn.phone;
       let input = config;
       if (journey.settings?.checkoutReminder) {
@@ -281,7 +297,11 @@ async function executeActionNode(
           throw new SendValidationError([{ ...issue('PURCHASE_CHECK_FAILED', 'Could not verify whether this checkout was purchased. No message was sent.'), retryable: true, action: 'Check the Shopify connection, then revalidate this journey.' }]);
         }
         if (purchased) { await exitJourney(enrollment, 'purchase_completed'); return; }
-        input = await checkoutTemplateInput(journey.storeId!, config, event);
+        input = await checkoutTemplateInput(journey.storeId!, config, event, {
+          journeyId: journey.id,
+          enrollmentId: enrollment.id,
+          nodeId: node.id,
+        });
       }
       const current = await prisma.journeyEnrollmentDoc.findUnique({ where: { id: enrollment.id } });
       if (!current || !['active', 'waiting'].includes(current.status)) return;
@@ -298,6 +318,12 @@ async function executeActionNode(
         throw new SendValidationError(messageResult.issues ?? [issue('SEND_FAILED', messageResult.error ?? 'Sending failed')]);
       }
       acceptedMessageId = messageResult.messageId;
+      if (acceptedMessageId) {
+        await prisma.journeyTrackedLink.updateMany({
+          where: { storeId: journey.storeId, journeyId: journey.id, enrollmentId: enrollment.id, nodeId: node.id, messageId: null },
+          data: { messageId: acceptedMessageId },
+        });
+      }
       await logJourneyActivity(enrollment.id, 'whatsapp_sent', {
         nodeId: node.id,
         template: config.templateName,

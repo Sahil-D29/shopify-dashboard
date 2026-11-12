@@ -156,6 +156,7 @@ export interface JourneyDefinition {
     allowReentry?: boolean;
     reentryCooldownDays?: number;
     testPhoneNumbers?: string[];
+    enrollmentAudience?: 'all_live_events' | 'recorded_opt_in_only';
   };
   config?: JourneyConfig;
   stats?: JourneyStats;
@@ -168,7 +169,7 @@ export interface JourneyEnrollment {
   id: string;
   journeyId: string;
   customerId: string;
-  status: 'ACTIVE' | 'COMPLETED' | 'EXITED' | 'DROPPED';
+  status: 'ACTIVE' | 'COMPLETED' | 'EXITED' | 'DROPPED' | 'SUPPRESSED';
   currentNodeId?: string;
   history: Array<{
     nodeId: string;

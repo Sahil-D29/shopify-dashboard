@@ -598,6 +598,52 @@ model JourneyEntryClaim {
   @@map("journey_entry_claims")
 }
 
+/// One immutable decision for each live event evaluated against a journey.
+/// This makes filtered/suppressed events visible without replaying them.
+model JourneyEventEvaluation {
+  id           String   @id @default(uuid())
+  storeId      String
+  journeyId    String
+  eventKey     String
+  checkoutKey  String?
+  customerId   String?
+  enrollmentId String?
+  outcome      String
+  reasonCode   String?
+  details      Json?
+  receivedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  @@unique([storeId, journeyId, eventKey])
+  @@index([storeId, journeyId, createdAt])
+  @@index([journeyId, outcome])
+  @@index([enrollmentId])
+  @@map("journey_event_evaluations")
+}
+
+/// Opaque storefront redirect used to attribute recovery-link clicks to the
+/// originating journey message without exposing customer data in the URL.
+model JourneyTrackedLink {
+  id           String   @id @default(uuid())
+  tokenHash    String   @unique
+  storeId      String
+  journeyId    String
+  enrollmentId String
+  nodeId       String
+  messageId    String?
+  destination  String
+  expiresAt    DateTime
+  firstClickedAt DateTime?
+  lastClickedAt  DateTime?
+  clickCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([storeId, journeyId])
+  @@index([enrollmentId])
+  @@index([expiresAt])
+  @@map("journey_tracked_links")
+}
+
 model JourneyDoc {
   id        String   @id // journey definition id
   storeId   String   @default("")
@@ -649,6 +695,7 @@ model JourneyActivityDoc {
   createdAt    DateTime @default(now())
 
   @@index([enrollmentId])
+  @@index([enrollmentId, createdAt])
   @@map("journey_activity_docs")
 }
 

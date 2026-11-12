@@ -27,6 +27,7 @@ const defaultSettings = {
   reentryCooldownDays: undefined,
   testMode: false,
   testPhoneNumbers: [],
+  enrollmentAudience: 'recorded_opt_in_only' as const,
 } satisfies JourneyDefinition['settings'];
 
 function sanitizeSettings(settings?: JourneyDefinition['settings']): JourneyDefinition['settings'] {
@@ -262,6 +263,24 @@ export function JourneySettingsDrawer({ open, settings, onClose, onSave }: Journ
               Abandoned-checkout reminder
             </label>
             <p className="text-sm text-slate-500">Verify purchases before sending, cancel after purchase, and use the event's checkout recovery link in the approved template button.</p>
+          </section>
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <Label htmlFor="enrollmentAudience">Abandoned-checkout audience</Label>
+              <p className="mt-1 text-xs text-slate-500">Controls who enters the workflow. WhatsApp permission is always rechecked before sending.</p>
+            </div>
+            <select
+              id="enrollmentAudience"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800"
+              value={draft?.enrollmentAudience ?? 'recorded_opt_in_only'}
+              onChange={event => handleSettingChange({ enrollmentAudience: event.target.value as 'all_live_events' | 'recorded_opt_in_only' })}
+            >
+              <option value="all_live_events">All live checkout events</option>
+              <option value="recorded_opt_in_only">Recorded opt-in only</option>
+            </select>
+            {draft?.enrollmentAudience === 'all_live_events' ? (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Contacts without recorded permission will be enrolled and shown as Suppressed at the WhatsApp step. They will not be messaged.</p>
+            ) : null}
           </section>
           <section className="space-y-2">
             <Label htmlFor="goalDescription">Goal description</Label>

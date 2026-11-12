@@ -1,10 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  getEnrollments,
-  getJourneyActivityLogs,
-} from '@/lib/journey-engine/storage';
+import { getCurrentStoreId } from '@/lib/tenant/api-helpers';
+import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
@@ -22,22 +20,27 @@ export async function GET(
 ) {
   try {
     const resolved = (await params);
+    const storeId = await getCurrentStoreId(request);
+    if (!storeId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const journey = await prisma.journeyDoc.findFirst({ where: { id: resolved.id, storeId }, select: { id: true } });
+    if (!journey) return NextResponse.json({ error: 'Journey not found' }, { status: 404 });
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get('limit'));
     const sinceParam = searchParams.get('since');
     const sinceMs = sinceParam ? Date.parse(sinceParam) : undefined;
 
-    const allEnrollments = await getEnrollments();
-    const enrollments = allEnrollments.filter(enrollment => enrollment.journeyId === resolved.id);
+    const docs = await prisma.journeyEnrollmentDoc.findMany({ where: { journeyId: resolved.id }, select: { id: true, data: true } });
+    const enrollments = docs.map(doc => doc.data as any);
     const enrollmentIds = new Set(enrollments.map(enrollment => enrollment.id));
     const enrollmentLookup = new Map(enrollments.map(enrollment => [enrollment.id, enrollment]));
 
-    const allLogs = await getJourneyActivityLogs();
-    const logs = allLogs
-      .filter(log => {
-        if (log.data?.journeyId === resolved.id) return true;
-        return Boolean(log.enrollmentId && enrollmentIds.has(log.enrollmentId));
-      })
+    const activityDocs = enrollmentIds.size ? await prisma.journeyActivityDoc.findMany({
+      where: { enrollmentId: { in: Array.from(enrollmentIds) } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    }) : [];
+    const logs = activityDocs
+      .map(doc => doc.data as any)
       .filter(log => {
         if (sinceMs === undefined) return true;
         const timestamp = Date.parse(log.timestamp);

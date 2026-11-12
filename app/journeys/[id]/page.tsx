@@ -9,7 +9,7 @@ import {
   ExternalLink, FileText, Loader2, Pause, Pencil, Play, Settings2,
   Target, Trash2, TrendingUp, Users, XCircle, AlertTriangle,
   ChevronRight, Search, ChevronLeft, ChevronRight as ChevronRightIcon,
-  Zap, Timer, GitBranch, MessageSquare
+  Zap, Timer, GitBranch, MessageSquare, RefreshCw, Send, Eye, MousePointerClick
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -66,6 +66,18 @@ interface AnalyticsMetrics {
   completed?: number;
   dropped?: number;
   conversionRate?: number;
+  waiting?: number;
+  failed?: number;
+  suppressed?: number;
+  updatedAt?: string;
+  enrollment?: {
+    received: number; enrolled: number; active: number; waiting: number; completed: number;
+    failed: number; suppressed: number; duplicate: number; purchased: number; filtered: number; missingContact: number;
+  };
+  messages?: {
+    accepted: number; sent: number; delivered: number; read: number; clicked: number;
+    failed: number; unknown: number; deliveryRate: number; readRate: number; clickRate: number; lastReceiptAt: string | null;
+  };
 }
 
 interface Enrollment {
@@ -74,10 +86,12 @@ interface Enrollment {
   customerEmail?: string;
   customerPhone?: string;
   currentNode?: string;
+  currentNodeId?: string | null;
   status: string;
   enteredAt: string;
   completedAt?: string;
   metadata?: Record<string, unknown>;
+  message?: { status?: string; acceptedAt?: string; statusAt?: string; clickedAt?: string } | null;
 }
 
 interface ActivityLog {
@@ -107,6 +121,7 @@ const enrollmentStatusStyles: Record<string, string> = {
   completed: 'bg-green-100 text-green-700',
   failed: 'bg-red-100 text-red-700',
   exited: 'bg-gray-100 text-gray-600',
+  suppressed: 'bg-amber-100 text-amber-700',
 };
 
 const logStatusStyles: Record<string, string> = {
@@ -159,6 +174,8 @@ export default function JourneyDetailPage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(enrollmentTotal / pageSize));
@@ -183,7 +200,11 @@ export default function JourneyDetailPage() {
 
         if (analyticsRes.ok) {
           const aData = await analyticsRes.json();
-          if (active) setMetrics(aData.metrics || aData.overview || {});
+          if (active) {
+            const next = aData.metrics || aData.overview || {};
+            setMetrics(next);
+            setLastUpdated(next.updatedAt ?? new Date().toISOString());
+          }
         }
       } catch (err) {
         console.error('Failed to load journey:', err);
@@ -196,6 +217,33 @@ export default function JourneyDetailPage() {
     loadJourney();
     return () => { active = false; };
   }, [id, toast]);
+
+  const refreshAnalytics = useCallback(async () => {
+    if (!id || document.visibilityState === 'hidden') return;
+    setRefreshing(true);
+    try {
+      const response = await fetch(`/api/journeys/${id}/analytics`, { cache: 'no-store' });
+      if (response.ok) {
+        const payload = await response.json();
+        const next = payload.metrics || payload.overview || {};
+        setMetrics(next);
+        setLastUpdated(next.updatedAt ?? new Date().toISOString());
+        if (activeTab === 'enrollments') void loadEnrollments();
+        if (activeTab === 'activity') void loadActivity();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, activeTab, enrollmentPage, enrollmentStatusFilter]);
+
+  useEffect(() => {
+    if (!id) return;
+    const timer = window.setInterval(() => { void refreshAnalytics(); }, 15_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshAnalytics(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [id, refreshAnalytics]);
 
   // Load enrollments when tab changes
   useEffect(() => {
@@ -345,6 +393,9 @@ export default function JourneyDetailPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => void refreshAnalytics()} disabled={refreshing}>
+                <RefreshCw className={cn('mr-1 h-3 w-3', refreshing && 'animate-spin')} />Refresh
+              </Button>
               <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
                 <Link href={`/journeys/${id}/builder`}><Pencil className="mr-1 h-3 w-3" />Builder</Link>
               </Button>
@@ -374,9 +425,23 @@ export default function JourneyDetailPage() {
             <StatCard icon={Users} title="Enrolled" value={metrics.totalEnrolled ?? journey.stats?.totalEnrollments ?? 0} color="text-blue-600" bg="bg-blue-50" />
             <StatCard icon={Activity} title="Active" value={metrics.active ?? journey.stats?.activeEnrollments ?? 0} color="text-green-600" bg="bg-green-50" />
             <StatCard icon={CheckCircle2} title="Completed" value={metrics.completed ?? journey.stats?.completedEnrollments ?? 0} color="text-emerald-600" bg="bg-emerald-50" />
-            <StatCard icon={XCircle} title="Failed" value={metrics.dropped ?? 0} color="text-red-600" bg="bg-red-50" />
+            <StatCard icon={XCircle} title="Failed" value={metrics.failed ?? 0} color="text-red-600" bg="bg-red-50" />
             <StatCard icon={TrendingUp} title="Conversion" value={`${metrics.conversionRate ?? journey.stats?.goalConversionRate ?? 0}%`} color="text-purple-600" bg="bg-purple-50" />
             <StatCard icon={Target} title="Steps" value={journey.nodes.length} color="text-amber-600" bg="bg-amber-50" />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">WhatsApp delivery</p>
+              <p className="text-[10px] text-slate-400">{lastUpdated ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'Waiting for data'}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              <DeliveryMetric icon={Send} label="Accepted" value={metrics.messages?.accepted ?? 0} />
+              <DeliveryMetric icon={Send} label="Sent" value={metrics.messages?.sent ?? 0} />
+              <DeliveryMetric icon={CheckCircle2} label="Delivered" value={metrics.messages?.delivered ?? 0} />
+              <DeliveryMetric icon={Eye} label="Read" value={metrics.messages?.read ?? 0} />
+              <DeliveryMetric icon={MousePointerClick} label="Clicked" value={metrics.messages?.clicked ?? 0} />
+              <DeliveryMetric icon={XCircle} label="Failed" value={metrics.messages?.failed ?? 0} />
+            </div>
           </div>
         </div>
       </header>
@@ -395,6 +460,22 @@ export default function JourneyDetailPage() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-5">
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base">Live event funnel</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+                  <FunnelMetric label="Received" value={metrics.enrollment?.received ?? metrics.totalEnrolled ?? 0} />
+                  <FunnelMetric label="Enrolled" value={metrics.enrollment?.enrolled ?? metrics.totalEnrolled ?? 0} />
+                  <FunnelMetric label="Suppressed" value={metrics.enrollment?.suppressed ?? 0} tone="amber" />
+                  <FunnelMetric label="Filtered" value={metrics.enrollment?.filtered ?? 0} />
+                  <FunnelMetric label="Duplicate" value={metrics.enrollment?.duplicate ?? 0} />
+                  <FunnelMetric label="Purchased" value={metrics.enrollment?.purchased ?? 0} />
+                  <FunnelMetric label="Missing contact" value={metrics.enrollment?.missingContact ?? 0} tone="red" />
+                  <FunnelMetric label="Failed" value={metrics.enrollment?.failed ?? 0} tone="red" />
+                </div>
+                <p className="mt-3 text-xs text-slate-500">Only new live events are evaluated. Historical abandoned checkouts are not replayed.</p>
+              </CardContent>
+            </Card>
             <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
               {/* Journey Flow */}
               <Card>
@@ -519,6 +600,7 @@ export default function JourneyDetailPage() {
                       <option value="active">Active</option>
                       <option value="completed">Completed</option>
                       <option value="failed">Failed</option>
+                      <option value="suppressed">Suppressed</option>
                       <option value="exited">Exited</option>
                     </select>
                   </div>
@@ -536,12 +618,13 @@ export default function JourneyDetailPage() {
                 ) : (
                   <>
                     <div className="overflow-x-auto -mx-4 sm:mx-0">
-                      <table className="w-full text-sm min-w-[600px]">
+                      <table className="w-full text-sm min-w-[760px]">
                         <thead>
                           <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
                             <th className="px-3 py-2.5 font-medium">Customer</th>
                             <th className="px-3 py-2.5 font-medium">Status</th>
                             <th className="px-3 py-2.5 font-medium">Current Node</th>
+                            <th className="px-3 py-2.5 font-medium">WhatsApp</th>
                             <th className="px-3 py-2.5 font-medium">Enrolled At</th>
                             <th className="px-3 py-2.5 font-medium">Completed At</th>
                           </tr>
@@ -560,7 +643,11 @@ export default function JourneyDetailPage() {
                                   {enrollment.status}
                                 </Badge>
                               </td>
-                              <td className="px-3 py-2.5 text-xs text-slate-600">{enrollment.currentNode || '—'}</td>
+                              <td className="px-3 py-2.5 text-xs text-slate-600">{enrollment.currentNodeId || enrollment.currentNode || '—'}</td>
+                              <td className="px-3 py-2.5 text-xs text-slate-600">
+                                <div className="font-medium">{enrollment.message?.status ?? (enrollment.status === 'suppressed' ? 'SUPPRESSED' : '—')}</div>
+                                {enrollment.message?.clickedAt ? <div className="text-[10px] text-blue-600">Clicked {new Date(enrollment.message.clickedAt).toLocaleString()}</div> : null}
+                              </td>
                               <td className="px-3 py-2.5 text-xs text-slate-500">
                                 {new Date(enrollment.enteredAt).toLocaleString()}
                               </td>
@@ -724,6 +811,25 @@ function StatCard({ icon: Icon, title, value, color, bg }: { icon: typeof Users;
           <p className="text-lg font-semibold text-slate-900 sm:text-xl">{typeof value === 'number' ? value.toLocaleString() : value}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeliveryMetric({ icon: Icon, label, value }: { icon: typeof Send; label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] text-slate-500"><Icon className="h-3 w-3" />{label}</div>
+      <div className="mt-1 text-base font-semibold text-slate-900">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function FunnelMetric({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'amber' | 'red' }) {
+  const toneClass = tone === 'amber' ? 'text-amber-700 bg-amber-50' : tone === 'red' ? 'text-red-700 bg-red-50' : 'text-slate-800 bg-slate-50';
+  return (
+    <div className={cn('rounded-lg border border-slate-200 px-3 py-2', toneClass)}>
+      <div className="text-[10px] opacity-70">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value.toLocaleString()}</div>
     </div>
   );
 }

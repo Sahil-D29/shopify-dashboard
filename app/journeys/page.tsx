@@ -20,6 +20,8 @@ interface JourneyMetrics {
   active: number;
   completed: number;
   conversionRate: number;
+  updatedAt?: string;
+  messages?: { accepted: number; sent: number; delivered: number; read: number; clicked: number; failed: number; unknown: number };
 }
 
 interface JourneyListItem extends JourneyDefinition {
@@ -177,8 +179,16 @@ export default function JourneysPage() {
 
     void loadAnalytics();
 
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadAnalytics();
+    }, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void loadAnalytics(); };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journeys.length, journeys.map(j => j.id).join('|')]);
@@ -652,6 +662,12 @@ function JourneyCard({
         <MetricBox label="Steps" value={totalSteps.toString()} />
         <MetricBox label="Trigger" value={triggerLabel} />
       </div>
+      <div className="grid grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-slate-50/70 py-2 text-center">
+        <CompactMetric label="Sent" value={journey.metrics?.messages?.sent ?? 0} />
+        <CompactMetric label="Delivered" value={journey.metrics?.messages?.delivered ?? 0} />
+        <CompactMetric label="Read" value={journey.metrics?.messages?.read ?? 0} />
+        <CompactMetric label="Clicked" value={journey.metrics?.messages?.clicked ?? 0} />
+      </div>
 
       {/* Footer */}
       <footer className="flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -755,6 +771,8 @@ function JourneyListRow({
       </div>
       <div className="flex items-center gap-4 text-xs text-slate-600 shrink-0">
         <span><strong>{journey.metrics?.totalEnrolled ?? 0}</strong> enrolled</span>
+        <span><strong>{journey.metrics?.messages?.delivered ?? 0}</strong> delivered</span>
+        <span><strong>{journey.metrics?.messages?.read ?? 0}</strong> read</span>
         <span><strong>{conversionRate}%</strong> conv.</span>
         <span><strong>{journey.nodes.length}</strong> steps</span>
       </div>
@@ -787,6 +805,15 @@ function MetricBox({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 sm:gap-1 sm:rounded-xl sm:p-3.5">
       <span className="text-[10px] font-medium text-slate-500 sm:text-xs">{label}</span>
       <span className="text-lg font-semibold text-slate-900 sm:text-xl">{value}</span>
+    </div>
+  );
+}
+
+function CompactMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="px-1">
+      <div className="text-sm font-semibold text-slate-900">{value.toLocaleString()}</div>
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
     </div>
   );
 }

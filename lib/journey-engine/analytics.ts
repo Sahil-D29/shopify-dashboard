@@ -109,7 +109,7 @@ function normaliseNodeMeta(node: JourneyDefinition['nodes'][number]): NodeMeta {
 export interface AnalyticsFilters {
   from?: string;
   to?: string;
-  status?: 'active' | 'completed' | 'waiting' | 'exited' | 'failed';
+  status?: 'active' | 'completed' | 'waiting' | 'exited' | 'failed' | 'suppressed';
   goalAchieved?: 'yes' | 'no';
   segmentId?: string;
 }
@@ -198,11 +198,11 @@ export async function computeJourneyAnalytics(journeyId: string, filters: Analyt
   const totalEntered = enrollments.length;
   const active = enrollments.filter(enrollment => enrollment.status === 'active' || enrollment.status === 'waiting').length;
   const completed = enrollments.filter(enrollment => enrollment.status === 'completed' || enrollment.goalAchieved).length;
-  const dropped = enrollments.filter(enrollment => enrollment.status === 'exited' || enrollment.status === 'failed').length;
+  const dropped = enrollments.filter(enrollment => enrollment.status === 'exited' || enrollment.status === 'failed' || enrollment.status === 'suppressed').length;
   const goalConversionRate = totalEntered ? Number(((completed / totalEntered) * 100).toFixed(1)) : 0;
 
   const enrollmentIds = new Set(enrollments.map(enrollment => enrollment.id));
-  const logs = (await getJourneyActivityLogs()).filter(
+  const logs = (await getJourneyActivityLogs(Array.from(enrollmentIds))).filter(
     log => Boolean(log.enrollmentId && enrollmentIds.has(log.enrollmentId)),
   );
 

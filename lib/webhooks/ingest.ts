@@ -80,6 +80,23 @@ const validDate = (value: string): Date => {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
+function explicitWhatsAppConsent(
+  body: IngestPayload,
+  properties: Record<string, unknown>,
+): { capturedAt: Date; source: string } | null {
+  const consent = asObject(
+    properties.whatsapp_consent ??
+    properties.whatsappConsent ??
+    (asObject(properties.marketing_consent).whatsapp) ??
+    body.whatsapp_consent,
+  );
+  const granted = consent.granted === true || consent.opted_in === true || consent.value === true;
+  const source = firstString(consent.source, properties.consent_source);
+  const captured = firstString(consent.captured_at, consent.timestamp, properties.consent_captured_at);
+  if (!granted || !source || !captured || !Number.isFinite(Date.parse(captured))) return null;
+  return { capturedAt: new Date(captured), source };
+}
+
 /** Infer the event name from a variety of webhook payload shapes. */
 function inferEventName(body: IngestPayload): string | undefined {
   return firstString(
@@ -393,6 +410,24 @@ export async function processInboundWebhook(
       });
     }
 
+    const consent = explicitWhatsAppConsent(body, properties);
+    if (contactId && consent) {
+      const contact = await prisma.contact.findFirst({ where: { id: contactId, storeId }, select: { metadata: true, optOutAt: true } });
+      if (contact && (!contact.optOutAt || consent.capturedAt > contact.optOutAt)) {
+        await prisma.contact.update({
+          where: { id: contactId },
+          data: {
+            optInStatus: 'OPTED_IN',
+            optInAt: consent.capturedAt,
+            metadata: {
+              ...asObject(contact.metadata),
+              whatsappConsent: { source: consent.source, capturedAt: consent.capturedAt.toISOString() },
+            } as any,
+          },
+        });
+      }
+    }
+
     if (parsed.kind === 'event' && parsed.eventName) {
       const eventName = parsed.eventName;
       const resourceId = parsed.resourceId || (properties.resource_id != null ? String(properties.resource_id) : undefined);
@@ -407,6 +442,14 @@ export async function processInboundWebhook(
       });
 
       if (duplicate) {
+        if (!opts?.skipJourneys) {
+          await matchAndExecuteJourneys(`custom:${eventName}`, {
+            storeId,
+            shop: null,
+            payload: { ...body, ...properties, storeId, contactId, eventId: fingerprint, duplicate: true },
+            receivedAt,
+          }).catch(err => console.warn('[ingest] duplicate journey audit failed (non-fatal):', err));
+        }
         return {
           ok: true,
           status: 'PROCESSED',
@@ -443,7 +486,7 @@ export async function processInboundWebhook(
         await matchAndExecuteJourneys(`custom:${eventName}`, {
           storeId,
           shop: null,
-          payload: { ...body, storeId, contactId },
+          payload: { ...body, ...properties, storeId, contactId, eventId: fingerprint },
           receivedAt,
         }).catch(err => console.warn('[ingest] journey match failed (non-fatal):', err));
       }

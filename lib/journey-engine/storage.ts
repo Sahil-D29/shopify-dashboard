@@ -6,7 +6,7 @@ import type { JourneyDefinition } from '@/lib/types/journey';
 /** Strip `undefined` (which Prisma's Json input rejects) before persisting. */
 const toJson = (value: unknown): object => JSON.parse(JSON.stringify(value ?? null));
 
-export type JourneyEnrollmentStatus = 'active' | 'waiting' | 'completed' | 'exited' | 'failed';
+export type JourneyEnrollmentStatus = 'active' | 'waiting' | 'completed' | 'exited' | 'failed' | 'suppressed';
 
 export interface JourneyEnrollmentRecord {
   id: string;
@@ -52,7 +52,7 @@ export interface ScheduledExecutionRecord {
   metadata?: Record<string, unknown>;
 }
 
-const VALID_ENROLLMENT_STATUS: JourneyEnrollmentStatus[] = ['active', 'waiting', 'completed', 'exited', 'failed'];
+const VALID_ENROLLMENT_STATUS: JourneyEnrollmentStatus[] = ['active', 'waiting', 'completed', 'exited', 'failed', 'suppressed'];
 const VALID_EXECUTION_STATUS: ScheduledExecutionRecord['status'][] = ['pending', 'processing', 'processed', 'failed', 'cancelled'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -347,8 +347,12 @@ export async function getLastEnrollment(journeyId: string, customerId: string): 
 
 // ─── Activity logs ──────────────────────────────────────────────────────────
 
-export async function getJourneyActivityLogs(): Promise<JourneyActivityLogRecord[]> {
-  const docs = await prisma.journeyActivityDoc.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
+export async function getJourneyActivityLogs(enrollmentIds?: string[]): Promise<JourneyActivityLogRecord[]> {
+  const docs = await prisma.journeyActivityDoc.findMany({
+    ...(enrollmentIds ? { where: { enrollmentId: { in: enrollmentIds } } } : {}),
+    orderBy: { createdAt: 'desc' },
+    ...(enrollmentIds ? {} : { take: 500 }),
+  });
   return docs
     .map(doc => normaliseActivityLog(doc.data))
     .filter((item): item is JourneyActivityLogRecord => Boolean(item));

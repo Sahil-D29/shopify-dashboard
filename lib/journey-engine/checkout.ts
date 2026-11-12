@@ -5,6 +5,7 @@ import { resolveTemplate } from '@/lib/whatsapp/template-send';
 import type { TemplateInput } from '@/lib/whatsapp/template-payload';
 import type { JourneyEnrollmentRecord } from './storage';
 import { resolveEventMapping } from '@/lib/journeys/event-mapping';
+import crypto from 'crypto';
 
 export function checkoutKey(event: Record<string, any>): string | undefined {
   const value = event.cart_token ?? event.checkout_token ?? event.cart_id;
@@ -41,7 +42,12 @@ export function recoverySuffix(url: string, approvedUrl: string): string {
   return url.slice(prefix.length);
 }
 
-export async function checkoutTemplateInput(storeId: string, input: TemplateInput, event: Record<string, any>) {
+export async function checkoutTemplateInput(
+  storeId: string,
+  input: TemplateInput,
+  event: Record<string, any>,
+  tracking?: { journeyId: string; enrollmentId: string; nodeId: string },
+) {
   const definition = await resolveTemplate(storeId, input);
   const buttons = definition.components.find(c => c.type === 'BUTTONS')?.buttons ?? [];
   const index = buttons.findIndex(b => b.type === 'URL' && b.url?.includes('{{1}}'));
@@ -51,7 +57,25 @@ export async function checkoutTemplateInput(storeId: string, input: TemplateInpu
   if (!resolved) throw new SendValidationError([issue('MISSING_RECOVERY_LINK', 'The checkout event did not provide the configured recovery-link fields.', `componentMappings.${index}`)]);
   const prefix = buttons[index].url!.split('{{')[0];
   const finalUrl = resolved.startsWith(prefix) ? resolved : `${prefix}${resolved}`;
-  return { ...input, buttonActions: { ...input.buttonActions, [String(index)]: recoverySuffix(finalUrl, buttons[index].url!) } };
+  recoverySuffix(finalUrl, buttons[index].url!);
+  let buttonUrl = finalUrl;
+  if (tracking) {
+    const token = crypto.randomBytes(24).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await prisma.journeyTrackedLink.create({
+      data: {
+        tokenHash,
+        storeId,
+        journeyId: tracking.journeyId,
+        enrollmentId: tracking.enrollmentId,
+        nodeId: tracking.nodeId,
+        destination: finalUrl,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    buttonUrl = new URL(`apps/dorza/r/${token}`, prefix).toString();
+  }
+  return { ...input, buttonActions: { ...input.buttonActions, [String(index)]: recoverySuffix(buttonUrl, buttons[index].url!) } };
 }
 
 export async function cancelPurchasedCheckouts(storeId: string, order: Record<string, any>) {
