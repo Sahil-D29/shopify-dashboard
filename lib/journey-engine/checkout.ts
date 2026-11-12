@@ -59,7 +59,10 @@ export async function checkoutTemplateInput(
   const finalUrl = resolved.startsWith(prefix) ? resolved : `${prefix}${resolved}`;
   recoverySuffix(finalUrl, buttons[index].url!);
   let buttonUrl = finalUrl;
-  if (tracking) {
+  // Keep the original recovery URL until Shopify has published the app-proxy
+  // configuration. This prevents a newly sent reminder from containing a
+  // /apps/dorza URL that the storefront cannot route yet.
+  if (tracking && process.env.SHOPIFY_APP_PROXY_ENABLED === 'true') {
     const token = crypto.randomBytes(24).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     await prisma.journeyTrackedLink.create({
