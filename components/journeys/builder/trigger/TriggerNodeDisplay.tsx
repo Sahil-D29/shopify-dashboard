@@ -97,7 +97,9 @@ export function TriggerNodeDisplay({ data }: TriggerNodeDisplayProps) {
   const primaryRule =
     cleverTap?.targetSegment.rules[0] ?? cleverTap?.targetSegment.ruleGroups[0]?.rules[0];
   const eventName = primaryRule?.eventDisplayName ?? primaryRule?.eventName;
-  const timeframe = formatTimeframe(primaryRule?.timeFrame?.period, primaryRule?.timeFrame?.customDays);
+  const timeframe = primaryRule?.eventName && primaryRule.ruleType === 'user_behavior'
+    ? 'Live events'
+    : formatTimeframe(primaryRule?.timeFrame?.period, primaryRule?.timeFrame?.customDays);
   const filtersCount = primaryRule?.conditions?.length ?? 0;
   const estimatedCount =
     cleverTap?.estimatedUserCount ??

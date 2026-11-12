@@ -83,7 +83,6 @@ export function canonicalEventTriggerConfig(event: string, conditions: UnifiedTr
     category: 'Event (Shiprocket)',
     eventName: event,
     conditions,
-    timeFrame: { period: 'last_30_days' as const },
   };
   return {
     targetSegment: { type: 'new_segment', rules: [rule], ruleGroups: [] },
@@ -99,7 +98,6 @@ export function canonicalEventTriggerConfig(event: string, conditions: UnifiedTr
           eventName: event,
           eventDisplayName: event === 'custom:abandoned_cart' ? 'Abandoned checkout' : event,
           action: 'did',
-          timeFrame: { period: 'last_30_days' },
           conditions: conditions.map((condition, index) => ({
             id: `condition_${index}`,
             property: condition.property,
@@ -117,9 +115,12 @@ export function canonicalEventTriggerConfig(event: string, conditions: UnifiedTr
 
 function canonicalMeta(current: JsonRecord, event: string, conditions: UnifiedTriggerRuleCondition[]): JsonRecord {
   const triggerConfig = canonicalEventTriggerConfig(event, conditions);
-  const entryFrequency = isRecord(current.entryFrequency)
+  const storedEntryFrequency = isRecord(current.entryFrequency)
     ? current.entryFrequency
     : { allowReentry: false, cooldown: null, entryLimit: null };
+  const entryFrequency = event === 'custom:abandoned_cart'
+    ? { ...storedEntryFrequency, allowReentry: true, cooldown: null, entryLimit: null }
+    : storedEntryFrequency;
   const entryWindow = isRecord(current.entryWindow)
     ? current.entryWindow
     : { startsAt: null, endsAt: null, timezone: 'UTC' };
@@ -131,7 +132,7 @@ function canonicalMeta(current: JsonRecord, event: string, conditions: UnifiedTr
     eventName: event,
     eventSource: event === 'custom:abandoned_cart' ? 'Shiprocket' : current.eventSource,
     conditions: conditions.map(condition => ({
-      source: 'order',
+      source: 'event',
       field: condition.property,
       operator: condition.operator,
       value: condition.value,

@@ -45,11 +45,13 @@ export interface TargetSegmentSectionProps {
 
 const formatRuleSummary = (rule: CleverTapStyleRule): string => {
   const eventLabel = rule.eventDisplayName ?? rule.eventName ?? 'Event';
-  const timeframe = rule.timeFrame
-    ? rule.timeFrame.period === 'custom' && rule.timeFrame.customDays
-      ? `Last ${rule.timeFrame.customDays} days`
-      : rule.timeFrame.period.replace(/_/g, ' ')
-    : 'Any time';
+  const timeframe = rule.ruleType === 'user_behavior' && rule.eventName
+    ? 'Live events'
+    : rule.timeFrame
+      ? rule.timeFrame.period === 'custom' && rule.timeFrame.customDays
+        ? `Last ${rule.timeFrame.customDays} days`
+        : rule.timeFrame.period.replace(/_/g, ' ')
+      : 'Any time';
   const filters = rule.conditions.length ? `${rule.conditions.length} filter${rule.conditions.length === 1 ? '' : 's'}` : 'No filters';
   return `${eventLabel} • ${timeframe} • ${filters}`;
 };

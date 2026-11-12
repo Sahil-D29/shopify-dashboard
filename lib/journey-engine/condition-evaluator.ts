@@ -5,7 +5,7 @@ import type { ShopifyCustomer } from '@/lib/types/shopify-customer';
 type ComparisonOperator = OperatorType | 'gt' | 'lt';
 
 export interface EngineCondition {
-  source: 'customer' | 'order' | 'product';
+  source: 'customer' | 'order' | 'product' | 'event';
   field: string;
   operator: ComparisonOperator;
   value: ConditionValue;
@@ -112,6 +112,8 @@ async function evaluateSingleCondition(condition: EngineCondition, context: Cond
       const customer = await fetchShopifyCustomer(context.customerId, typeof context.storeId === 'string' ? context.storeId : undefined);
       actualValue = getNestedValue(customer, field);
     }
+  } else if (source === 'event') {
+    actualValue = getNestedValue(context.triggerEvent, field);
   } else if (source === 'order') {
     actualValue = getNestedValue(context.order ?? context.triggerEvent, field);
   } else if (source === 'product') {

@@ -6,6 +6,7 @@ import { errorIssues } from '@/lib/whatsapp/issues';
 import { resolveWhatsAppConfig } from '@/lib/config/whatsapp-config-resolver';
 import type { JourneyDefinition, JourneyEdge, JourneyNode, JourneyNodeData } from '@/lib/types/journey';
 import { getJourneyEventSchema } from '@/lib/journeys/event-schema';
+import { mappingTokenPaths, validateEventUrlMapping } from '@/lib/journeys/event-mapping';
 
 export type JourneyValidationSeverity = 'error' | 'warning';
 
@@ -501,6 +502,32 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
 
   for (const node of journey.nodes.filter(isWhatsAppNode)) {
     const config = whatsappNodeConfig(node);
+    const triggerEventName = triggers[0] ? selectedTriggerEvent(triggers[0]) : undefined;
+    const eventSchema = getJourneyEventSchema(triggerEventName);
+    const dynamicParameters = config.templateDefinition?.runtimeParameters?.filter((parameter: { component?: string; parameterType?: string }) =>
+      parameter.component === 'BUTTON' && parameter.parameterType === 'url'
+    ) ?? [];
+    for (const parameter of dynamicParameters) {
+      const mapping = config.componentMappings?.find((item: { parameterId?: string }) => item.parameterId === parameter.id);
+      if (!mapping) {
+        errors.push({
+          id: `${node.id}-missing-button-${parameter.id}`, severity: 'error', nodeId: node.id, nodeName: getNodeName(node),
+          title: 'Dynamic button mapping is required',
+          description: `Map ${parameter.label ?? 'the template button'} to an event field or URL expression.`,
+          suggestion: 'Open this action and configure the dynamic button.',
+        });
+        continue;
+      }
+      const mappingErrors = validateEventUrlMapping(mapping, parameter.approvedPrefix ?? '', eventSchema);
+      if (mappingErrors.length) {
+        errors.push({
+          id: `${node.id}-button-${parameter.id}-invalid`, severity: 'error', nodeId: node.id, nodeName: getNodeName(node),
+          title: 'Dynamic button URL is invalid',
+          description: mappingErrors.join(' '),
+          suggestion: 'Use registered event fields and keep the generated URL under Meta’s locked HTTPS prefix.',
+        });
+      }
+    }
     if (checkoutReminder) {
       if (config.skipIfOptedOut !== true) {
         errors.push({
@@ -510,8 +537,8 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
           suggestion: 'Enable “Skip opted-out customers” in this WhatsApp action.',
         });
       }
-      const recoveryMapping = config.componentMappings?.find((mapping: { component?: string; dataSource?: string; property?: string }) =>
-        mapping.component === 'BUTTON' && mapping.dataSource === 'event' && mapping.property === 'checkout_url'
+      const recoveryMapping = config.componentMappings?.find((mapping: { component?: string; dataSource?: string }) =>
+        mapping.component === 'BUTTON' && mapping.dataSource === 'event'
       );
       if (config.useCheckoutRecoveryUrl !== true || !recoveryMapping) {
         errors.push({
@@ -520,6 +547,19 @@ export async function validateJourney(journey: JourneyDefinition, storeId?: stri
           description: 'The approved dynamic button must map to Shiprocket’s checkout recovery URL.',
           suggestion: 'Open this action and map the dynamic button to Checkout recovery URL.',
         });
+      } else {
+        const parameter = config.templateDefinition?.runtimeParameters?.find((item: { id?: string }) => item.id === recoveryMapping.parameterId);
+        const prefix = recoveryMapping.approvedPrefix ?? parameter?.approvedPrefix ?? '';
+        const schema = getJourneyEventSchema('custom:abandoned_cart');
+        const mappingErrors = validateEventUrlMapping(recoveryMapping, prefix, schema);
+        if (!mappingTokenPaths(recoveryMapping).length || mappingErrors.length) {
+          errors.push({
+            id: `${node.id}-invalid-recovery-link`, severity: 'error', nodeId: node.id, nodeName: getNodeName(node),
+            title: 'Checkout recovery link mapping is invalid',
+            description: mappingErrors.join(' '),
+            suggestion: 'Open this action, select a Shiprocket field or build a customer-specific URL that matches the locked Meta prefix.',
+          });
+        }
       }
     }
     try { const input = { ...whatsappNodeConfig(node), ...(journey.settings?.checkoutReminder ? { useCheckoutRecoveryUrl: true } : {}) }; await (checkTemplate ? checkTemplate(input) : prepareTemplate(storeId ?? journey.storeId ?? '', input, {}, true)); }

@@ -630,7 +630,7 @@ export function TriggerConfigPanel({
       eventName: undefined,
       eventDisplayName: undefined,
       action: 'did',
-      timeFrame: { period: 'last_7_days' },
+      ...(category === 'user_behavior' ? {} : { timeFrame: { period: 'last_7_days' as const } }),
       conditions: [],
     };
 

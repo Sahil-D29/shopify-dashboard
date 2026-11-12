@@ -4,6 +4,7 @@ import { issue, SendValidationError } from '@/lib/whatsapp/issues';
 import { resolveTemplate } from '@/lib/whatsapp/template-send';
 import type { TemplateInput } from '@/lib/whatsapp/template-payload';
 import type { JourneyEnrollmentRecord } from './storage';
+import { resolveEventMapping } from '@/lib/journeys/event-mapping';
 
 export function checkoutKey(event: Record<string, any>): string | undefined {
   const value = event.cart_token ?? event.checkout_token ?? event.cart_id;
@@ -44,8 +45,13 @@ export async function checkoutTemplateInput(storeId: string, input: TemplateInpu
   const definition = await resolveTemplate(storeId, input);
   const buttons = definition.components.find(c => c.type === 'BUTTONS')?.buttons ?? [];
   const index = buttons.findIndex(b => b.type === 'URL' && b.url?.includes('{{1}}'));
-  if (index < 0 || typeof event.checkout_url !== 'string') throw new SendValidationError([issue('MISSING_RECOVERY_LINK', 'Choose a template with a dynamic recovery button and provide the checkout URL.', 'buttonActions')]);
-  return { ...input, buttonActions: { ...input.buttonActions, [String(index)]: recoverySuffix(event.checkout_url, buttons[index].url!) } };
+  if (index < 0) throw new SendValidationError([issue('MISSING_RECOVERY_LINK', 'Choose a template with a dynamic recovery button and provide the checkout URL.', 'buttonActions')]);
+  const mapping = input.componentMappings?.find(item => item.component === 'BUTTON' && item.componentIndex === index);
+  const resolved = mapping ? resolveEventMapping(mapping, event) : typeof event.checkout_url === 'string' ? event.checkout_url : '';
+  if (!resolved) throw new SendValidationError([issue('MISSING_RECOVERY_LINK', 'The checkout event did not provide the configured recovery-link fields.', `componentMappings.${index}`)]);
+  const prefix = buttons[index].url!.split('{{')[0];
+  const finalUrl = resolved.startsWith(prefix) ? resolved : `${prefix}${resolved}`;
+  return { ...input, buttonActions: { ...input.buttonActions, [String(index)]: recoverySuffix(finalUrl, buttons[index].url!) } };
 }
 
 export async function cancelPurchasedCheckouts(storeId: string, order: Record<string, any>) {

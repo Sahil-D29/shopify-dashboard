@@ -45,6 +45,10 @@ export interface TemplateComponentMapping {
   dataSource: VariableDataSource;
   property: string;
   fallbackValue?: string;
+  mode?: 'field' | 'expression';
+  expression?: string;
+  approvedPrefix?: string;
+  validationStatus?: 'valid' | 'invalid' | 'unverified';
 }
 
 export interface TemplateHeader {

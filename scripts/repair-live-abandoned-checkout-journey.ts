@@ -57,8 +57,9 @@ function repairEditableNodeState(node: JourneyNode): JourneyNode {
   const data = jsonRecord(node.data);
   const meta = jsonRecord(data.meta);
   const nextMeta: Record<string, unknown> = { ...meta, status: 'active', isConfigured: true };
-  if (node.type === 'delay' && node.delay) {
-    const { value, unit } = node.delay;
+  if (node.type === 'delay') {
+    const value = 30;
+    const unit = 'minutes';
     Object.assign(nextMeta, {
       duration: value,
       unit,
@@ -75,7 +76,11 @@ function repairEditableNodeState(node: JourneyNode): JourneyNode {
       },
     });
   }
-  return { ...node, data: { ...data, ...nextMeta, meta: nextMeta, status: 'active' } } as JourneyNode;
+  return {
+    ...node,
+    ...(node.type === 'delay' ? { name: 'Wait 30 minutes', delay: { value: 30, unit: 'minutes' as const } } : {}),
+    data: { ...data, ...nextMeta, meta: nextMeta, status: 'active' },
+  } as JourneyNode;
 }
 
 async function main() {
@@ -117,6 +122,9 @@ async function main() {
       parameterName: parameter.parameterName,
       dataSource: 'event',
       property: 'checkout_url',
+      mode: 'field',
+      approvedPrefix: parameter.approvedPrefix,
+      validationStatus: 'valid',
     }],
     useCheckoutRecoveryUrl: true,
     templateDefinition: template,
@@ -135,6 +143,7 @@ async function main() {
       ...(existing.settings ?? {}),
       entry: existing.settings?.entry ?? { frequency: 'once' },
       checkoutReminder: true,
+      allowReentry: true,
     },
     nodes: existing.nodes
       .map(normalizeTriggerNode)

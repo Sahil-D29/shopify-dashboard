@@ -24,6 +24,13 @@ test('live Meta template details retain required header and dynamic button field
   assert.equal(view.buttons?.[0].id, 'url_Shop Now');
   assert.equal(view.buttons?.[0].url, 'https://mymaatram.com/{{1}}');
 });
+test('preflight accepts a structured event mapping for a dynamic URL button', () => {
+  const template = definition([{ type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Recover', url: 'https://mymaatram.com/{{1}}' }] }]);
+  const payload = buildTemplatePayload(template, {
+    componentMappings: [{ parameterId: 'button.0', component: 'BUTTON', componentIndex: 0, dataSource: 'event', property: 'checkout_url', mode: 'field' }],
+  }, {}, true);
+  assert.equal(payload.components?.[0].type, 'button');
+});
 test('template runtime parameters expose only actual approved placeholders and dynamic components', () => {
   assert.deepEqual(normalizeTemplateRuntimeParameters([{ type: 'BODY', text: 'Approved static copy' }]), []);
   const parameters = normalizeTemplateRuntimeParameters([

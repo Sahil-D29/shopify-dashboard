@@ -337,6 +337,10 @@ function extractTriggerConfig(node: JourneyNode): TriggerMeta {
 
 export async function canEnterJourney(journey: JourneyDefinition, customerId: string): Promise<boolean> {
   const settings = (journey.settings as Record<string, unknown>) || {};
+  // Checkout events are deduplicated atomically by their checkout key in
+  // startJourneyExecution. Do not block a later, distinct checkout merely
+  // because the same customer previously entered this recovery journey.
+  if (settings.checkoutReminder === true) return true;
   const allowReentry = typeof settings.allowReentry === 'boolean' ? settings.allowReentry : false;
   const cooldownDays = typeof settings.reentryCooldownDays === 'number' ? settings.reentryCooldownDays : typeof settings.reentryCooldown === 'number' ? settings.reentryCooldown : 0;
 

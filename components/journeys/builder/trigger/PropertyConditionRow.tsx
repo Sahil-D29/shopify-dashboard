@@ -4,7 +4,6 @@ import React, { useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import type { EventCondition, ConditionOperator } from '@/lib/types/trigger-config';
 import type { ShopifyEventProperty } from '@/constants/shopifyEvents';
 import { DynamicValueInput } from '@/components/journeys/nodes/trigger/DynamicValueInput';
@@ -62,8 +61,8 @@ export function PropertyConditionRow({
   const operators = OPERATORS_BY_TYPE[propertyType] ?? OPERATORS_BY_TYPE.string;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:gap-3">
-      <div className="flex-1">
+    <div className="grid min-w-0 grid-cols-1 gap-2 overflow-hidden rounded-xl border border-border bg-card p-3">
+      <div className="min-w-0">
         <Select value={condition.property} onValueChange={value => onUpdate({ property: value })}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Property" />
@@ -72,8 +71,8 @@ export function PropertyConditionRow({
             {availableProperties.map(item => (
               <SelectItem key={item.name} value={item.name}>
                 <div className="flex flex-col">
-                  <span className="font-medium text-sm">{item.name}</span>
-                  <span className="text-xs text-muted-foreground">{item.type}</span>
+                  <span className="font-medium text-sm">{item.description || item.name}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{item.name} · {item.type}</span>
                 </div>
               </SelectItem>
             ))}
@@ -81,7 +80,8 @@ export function PropertyConditionRow({
         </Select>
       </div>
 
-      <div className="flex-1">
+      <div className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] gap-2">
+      <div className="min-w-0">
         <Select value={condition.operator} onValueChange={value => onUpdate({ operator: value as ConditionOperator })}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Operator" />
@@ -96,7 +96,7 @@ export function PropertyConditionRow({
         </Select>
       </div>
 
-      <div className="flex-1">
+      <div className="min-w-0">
         {!['exists', 'not_exists'].includes(condition.operator) ? (
           <DynamicValueInput
             propertyId={condition.property}
@@ -120,6 +120,7 @@ export function PropertyConditionRow({
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      </div>
     </div>
   );
 }

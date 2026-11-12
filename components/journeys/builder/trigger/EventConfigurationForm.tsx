@@ -8,12 +8,13 @@ import { EventSelector } from './EventSelector';
 import { PropertyConditionRow } from './PropertyConditionRow';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { CleverTapStyleRule, EventCondition, TimeFrame } from '@/lib/types/trigger-config';
+import type { CleverTapStyleRule, EventCondition } from '@/lib/types/trigger-config';
 import type { EnhancedShopifyEvent, ShopifyEventProperty } from '@/constants/shopifyEvents';
 import { getEnhancedEventById } from '@/constants/shopifyEvents';
 import { useToast } from '@/lib/hooks/useToast';
 import { useTenant } from '@/lib/tenant/tenant-context';
 import type { EventSource } from '@/lib/types/event-source';
+import type { JourneyEventSchema } from '@/lib/journeys/event-schema';
 
 interface EventConfigurationFormProps {
   rule: CleverTapStyleRule;
@@ -21,29 +22,17 @@ interface EventConfigurationFormProps {
   onCancel: () => void;
 }
 
-// TimeFrame options removed from UI - kept for default value assignment
-// const TIMEFRAME_OPTIONS: Array<{ label: string; value: TimeFrame['period'] }> = [
-//   { value: 'last_24_hours', label: 'Last 24 hours' },
-//   { value: 'last_7_days', label: 'Last 7 days' },
-//   { value: 'last_30_days', label: 'Last 30 days' },
-//   { value: 'last_90_days', label: 'Last 90 days' },
-//   { value: 'custom', label: 'Custom range' },
-// ];
-
-// Default timeframe used when saving rules (TimeFrame UI removed)
-const DEFAULT_TIMEFRAME: TimeFrame = {
-  period: 'last_7_days', // Changed to 'last_7_days' as a sensible default
-};
-
 export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigurationFormProps) {
   const toast = useToast();
   const { currentStore } = useTenant();
-  const [localRule, setLocalRule] = useState<CleverTapStyleRule>(() => ({
-    ...rule,
-    timeFrame: rule.timeFrame ?? DEFAULT_TIMEFRAME,
-  }));
+  const [localRule, setLocalRule] = useState<CleverTapStyleRule>(() => {
+    const liveRule = { ...rule };
+    delete liveRule.timeFrame;
+    return liveRule;
+  });
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>(rule.eventName ?? undefined);
   const [customEventsCache, setCustomEventsCache] = useState<EnhancedShopifyEvent[]>([]);
+  const [registeredSchema, setRegisteredSchema] = useState<JourneyEventSchema | null>(null);
 
   // Fetch custom events so we can resolve custom event IDs
   useEffect(() => {
@@ -75,6 +64,23 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
       .catch(() => {});
   }, [currentStore?.id]);
 
+  useEffect(() => {
+    if (!selectedEventId || !currentStore?.id) {
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/journeys/event-schema?event=${encodeURIComponent(selectedEventId)}`, {
+      headers: { 'x-store-id': currentStore.id },
+      signal: controller.signal,
+    })
+      .then(async response => response.ok ? response.json() : null)
+      .then(result => setRegisteredSchema(result?.schema ?? null))
+      .catch(error => {
+        if (error?.name !== 'AbortError') setRegisteredSchema(null);
+      });
+    return () => controller.abort();
+  }, [currentStore?.id, selectedEventId]);
+
   const selectedEvent = useMemo<EnhancedShopifyEvent | undefined>(() => {
     if (!selectedEventId) return undefined;
     // First try built-in events
@@ -83,7 +89,21 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
     // Then check custom events
     return customEventsCache.find(e => e.id === selectedEventId);
   }, [selectedEventId, customEventsCache]);
-  const availableProperties = useMemo<ShopifyEventProperty[]>(() => selectedEvent?.properties ?? [], [selectedEvent]);
+  const availableProperties = useMemo<ShopifyEventProperty[]>(() => {
+    const schema = registeredSchema;
+    if (schema && schema.id === selectedEventId) {
+      return schema.fields.map(field => ({
+        name: field.path,
+        type: field.type === 'number' || field.type === 'currency'
+          ? 'number'
+          : field.type === 'date'
+            ? 'date'
+            : 'string',
+        description: `${field.label}${field.description ? ` — ${field.description}` : ''}`,
+      }));
+    }
+    return selectedEvent?.properties ?? [];
+  }, [registeredSchema, selectedEvent, selectedEventId]);
 
   const handleEventSelect = (event: EnhancedShopifyEvent) => {
     setSelectedEventId(event.id);
@@ -101,9 +121,6 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
       action,
     }));
   };
-
-  // TimeFrame handlers removed - UI no longer displays timeframe selector
-  // Default timeframe is set automatically when saving (see handleSubmit)
 
   const handleAddCondition = () => {
     if (!selectedEvent) {
@@ -145,11 +162,8 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
       toast.error('Please select an event');
       return;
     }
-    // TimeFrame removed from UI - set default value automatically
-    const ruleToSave: CleverTapStyleRule = {
-      ...localRule,
-      timeFrame: localRule.timeFrame ?? DEFAULT_TIMEFRAME,
-    };
+    const ruleToSave = { ...localRule };
+    delete ruleToSave.timeFrame;
     onSave(ruleToSave);
   };
 
@@ -191,7 +205,7 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
 
         {selectedEvent ? (
           <>
-            {/* Action selector - TimeFrame removed, using single column layout */}
+            {/* Event rules run only for newly received events. */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-[#4A4139]">
                 Action <span className="text-red-500">*</span>
@@ -205,6 +219,7 @@ export function EventConfigurationForm({ rule, onSave, onCancel }: EventConfigur
                   <SelectItem value="did_not">Did Not</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-emerald-700">Live event: this rule evaluates each new event as it arrives. Historical events are not replayed.</p>
             </div>
 
             <div className="space-y-4 rounded-2xl border border-[#E8E4DE] bg-[#F5F3EE]/60 p-4">

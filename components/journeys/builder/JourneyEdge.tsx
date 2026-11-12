@@ -57,8 +57,8 @@ export function JourneyEdge(props: EdgeProps<any>) {
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? '#3158D7' : '#52616B',
-          strokeWidth: selected ? 3.5 : 2.5,
+          stroke: selected ? '#3158D7' : '#000000',
+          strokeWidth: selected ? 4 : 3,
           filter: selected ? 'drop-shadow(0 0 4px rgba(99,102,241,0.35))' : undefined,
           transition: 'stroke 0.2s, stroke-width 0.2s',
           ...style,

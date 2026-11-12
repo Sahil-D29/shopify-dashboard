@@ -196,7 +196,7 @@ function rehydrateFlowNode(node: Node<JourneyNodeData>): Node<JourneyNodeData> {
 }
 
 function coerceDataSource(value: unknown): VariableMapping['dataSource'] {
-  if (value === 'customer' || value === 'order' || value === 'product' || value === 'custom' || value === 'static') {
+  if (value === 'customer' || value === 'order' || value === 'product' || value === 'event' || value === 'custom' || value === 'static') {
     return value;
   }
   return 'static';
@@ -437,7 +437,12 @@ function summariseExperimentConfig(config: ExperimentConfig): string {
 
 const edgeTypes = { journey: JourneyEdge as any };
 const DEFAULT_FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
-const DEFAULT_EDGE_OPTIONS = { type: 'journey', animated: false } as const;
+const DEFAULT_EDGE_OPTIONS = {
+  type: 'journey',
+  animated: false,
+  zIndex: 5,
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#000000', width: 22, height: 22 },
+} as const;
 
 const jsonEquals = (left: unknown, right: unknown): boolean => {
   if (left === right) return true;
@@ -632,7 +637,9 @@ const buildUnifiedTriggerSummary = (config: UnifiedTriggerConfig): string | unde
   if (eventName) {
     summaryParts.push(eventName.replace(/_/g, ' '));
   }
-  const timeframe = formatUnifiedTriggerTimeFrameLabel(primaryRule.timeFrame);
+  const timeframe = primaryRule.ruleType === 'user_behavior' && primaryRule.eventName
+    ? 'Live events'
+    : formatUnifiedTriggerTimeFrameLabel(primaryRule.timeFrame);
   if (timeframe) {
     summaryParts.push(timeframe);
   }
@@ -1485,7 +1492,7 @@ function mapDomainEdgeToFlow(edge: JourneyEdgeType): Edge {
     targetHandle: edge.targetHandle,
     label: edge.label,
     type: 'journey',
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#52616B', width: 22, height: 22 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: '#000000', width: 22, height: 22 },
     zIndex: 5,
     data: {},
   };
@@ -2109,7 +2116,7 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
             id: `edge_${crypto.randomUUID()}`,
             type: 'journey',
             label,
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#52616B', width: 22, height: 22 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#000000', width: 22, height: 22 },
             zIndex: 5,
             data: {},
           },
@@ -4163,6 +4170,8 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
               mediaUrl: config.mediaUrl,
               useDynamicMedia: config.useDynamicMedia,
               buttonActions: config.buttonActions,
+              componentMappings: config.componentMappings,
+              useCheckoutRecoveryUrl: config.useCheckoutRecoveryUrl,
               exitPaths: config.exitPaths, // Store exit paths for canvas rendering
               isConfigured: true,
             };
@@ -4208,6 +4217,12 @@ function JourneyBuilderInner({ journeyId }: JourneyBuilderInnerProps) {
               delayConfig: config,
               delayType: config.delayType,
               delaySummary: summariseDelayConfig(config),
+              ...(config.delayType === 'fixed_time'
+                ? {
+                    duration: (config.specificConfig as FixedTimeDelayConfig).duration.value,
+                    unit: (config.specificConfig as FixedTimeDelayConfig).duration.unit,
+                  }
+                : {}),
               quietHoursEnabled: Boolean(config.quietHours?.enabled),
               skipWeekends: Boolean(config.holidaySettings?.skipWeekends),
               throttled: Boolean(config.throttling?.enabled),
