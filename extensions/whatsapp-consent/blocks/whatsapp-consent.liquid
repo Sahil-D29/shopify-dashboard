@@ -1,0 +1,52 @@
+<div
+  class="dorza-consent"
+  data-dorza-whatsapp-consent
+  data-endpoint="/apps/dorza/consent"
+  data-email="{% if customer %}{{ customer.email | escape }}{% endif %}"
+  data-wording-version="cart-consent-v1"
+  data-success="{{ 'whatsapp_consent.success' | t | escape }}"
+  data-error="{{ 'whatsapp_consent.error' | t | escape }}"
+  {{ block.shopify_attributes }}
+>
+  <form class="dorza-consent__form">
+    <div class="dorza-consent__heading">{{ 'whatsapp_consent.heading' | t }}</div>
+    <label class="dorza-consent__phone-label" for="dorza-consent-phone-{{ block.id }}">
+      {{ 'whatsapp_consent.phone_label' | t }}
+    </label>
+    <input
+      class="dorza-consent__phone"
+      id="dorza-consent-phone-{{ block.id }}"
+      name="phone"
+      type="tel"
+      inputmode="tel"
+      autocomplete="tel"
+      placeholder="{{ 'whatsapp_consent.phone_placeholder' | t | escape }}"
+      required
+    >
+    <label class="dorza-consent__choice">
+      <input class="dorza-consent__checkbox" name="granted" type="checkbox" required>
+      <span>{{ 'whatsapp_consent.permission' | t: business: block.settings.business_name }}</span>
+    </label>
+    <button class="dorza-consent__submit" type="submit">
+      {{ 'whatsapp_consent.button' | t }}
+    </button>
+    <p class="dorza-consent__status" role="status" aria-live="polite"></p>
+  </form>
+</div>
+
+{% schema %}
+{
+  "name": "t:schema.name",
+  "target": "content",
+  "javascript": "whatsapp-consent.js",
+  "stylesheet": "whatsapp-consent.css",
+  "settings": [
+    {
+      "type": "text",
+      "id": "business_name",
+      "label": "t:schema.business_name",
+      "default": "Maatram"
+    }
+  ]
+}
+{% endschema %}

@@ -5,13 +5,18 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@/lib/prisma';
 import { appProxyTimestampIsFresh, verifyShopifyAppProxy } from '@/lib/shopify-app-proxy';
+import { recordWhatsAppConsent } from '@/lib/journey-engine/consent';
+
+function validProxyRequest(request: NextRequest) {
+  const secret = process.env.SHOPIFY_API_SECRET ?? process.env.SHOPIFY_CLIENT_SECRET ?? '';
+  return verifyShopifyAppProxy(request.nextUrl.searchParams, secret) && appProxyTimestampIsFresh(request.nextUrl.searchParams);
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  const secret = process.env.SHOPIFY_API_SECRET ?? process.env.SHOPIFY_CLIENT_SECRET ?? '';
-  if (!verifyShopifyAppProxy(request.nextUrl.searchParams, secret) || !appProxyTimestampIsFresh(request.nextUrl.searchParams)) {
+  if (!validProxyRequest(request)) {
     return NextResponse.json({ error: 'Invalid storefront signature' }, { status: 401 });
   }
   const segments = (await params).path ?? [];
@@ -56,4 +61,51 @@ export async function GET(
     });
   });
   return NextResponse.redirect(destination, 302);
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  if (!validProxyRequest(request)) {
+    return NextResponse.json({ error: 'Invalid storefront signature' }, { status: 401 });
+  }
+  const segments = (await params).path ?? [];
+  if (segments.at(-1) !== 'consent') return NextResponse.json({ error: 'Endpoint not found' }, { status: 404 });
+  const shop = request.nextUrl.searchParams.get('shop') ?? '';
+  const store = await prisma.store.findFirst({ where: { shopifyDomain: shop }, select: { id: true } });
+  if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+  if (body.granted !== true) {
+    return NextResponse.json({ error: 'Explicit confirmation is required' }, { status: 422 });
+  }
+  const phone = typeof body.phone === 'string' ? body.phone : '';
+  const email = typeof body.email === 'string' ? body.email : null;
+  const cartToken = typeof body.cartToken === 'string' ? body.cartToken.slice(0, 200) : null;
+  const wordingVersion = typeof body.wordingVersion === 'string' ? body.wordingVersion.slice(0, 80) : 'cart-consent-v1';
+  try {
+    const result = await recordWhatsAppConsent({
+      storeId: store.id,
+      phone,
+      email,
+      granted: true,
+      source: 'shopify_cart_app_block',
+      capturedAt: new Date(),
+      wordingVersion,
+      evidence: {
+        shop,
+        cartToken,
+        loggedInCustomerId: request.nextUrl.searchParams.get('logged_in_customer_id'),
+      },
+    });
+    return NextResponse.json({ success: true, status: result.contact.optInStatus });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not record consent' }, { status: 422 });
+  }
 }

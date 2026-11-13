@@ -1022,6 +1022,25 @@ model Contact {
   @@map("contacts")
 }
 
+model WhatsAppConsentEvent {
+  id             String   @id @default(uuid())
+  storeId        String
+  contactId      String?
+  phone          String
+  email          String?
+  status         String
+  source         String
+  wordingVersion String?
+  occurredAt     DateTime
+  evidence       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([storeId, phone, occurredAt])
+  @@index([storeId, contactId, occurredAt])
+  @@index([storeId, status, occurredAt])
+  @@map("whatsapp_consent_events")
+}
+
 model ContactGroup {
   id          String   @id @default(uuid())
   storeId     String

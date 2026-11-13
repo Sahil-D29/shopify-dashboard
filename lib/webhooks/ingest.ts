@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 import { parseShiprocketAbandonedCart, webhookFingerprint } from '@/lib/webhooks/shiprocket';
+import { recordWhatsAppConsent } from '@/lib/journey-engine/consent';
 
 /**
  * Inbound webhook ingestion core (third party → Dorza).
@@ -412,20 +413,18 @@ export async function processInboundWebhook(
 
     const consent = explicitWhatsAppConsent(body, properties);
     if (contactId && consent) {
-      const contact = await prisma.contact.findFirst({ where: { id: contactId, storeId }, select: { metadata: true, optOutAt: true } });
-      if (contact && (!contact.optOutAt || consent.capturedAt > contact.optOutAt)) {
-        await prisma.contact.update({
-          where: { id: contactId },
-          data: {
-            optInStatus: 'OPTED_IN',
-            optInAt: consent.capturedAt,
-            metadata: {
-              ...asObject(contact.metadata),
-              whatsappConsent: { source: consent.source, capturedAt: consent.capturedAt.toISOString() },
-            } as any,
-          },
-        });
-      }
+      const contact = await prisma.contact.findFirst({ where: { id: contactId, storeId }, select: { phone: true, email: true } });
+      if (contact?.phone) await recordWhatsAppConsent({
+        storeId,
+        contactId,
+        phone: contact.phone,
+        email: contact.email,
+        granted: true,
+        source: consent.source,
+        capturedAt: consent.capturedAt,
+        wordingVersion: firstString(properties.consent_wording_version),
+        evidence: { integrationId: integration.id, eventType },
+      });
     }
 
     if (parsed.kind === 'event' && parsed.eventName) {

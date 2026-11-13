@@ -6,6 +6,7 @@ import { normalizePhone } from '@/lib/whatsapp/normalize-phone';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send-message';
 import { matchAndExecuteJourneys } from '@/lib/journey-engine/trigger-matcher';
 import type { JourneyDefinition } from '@/lib/types/journey';
+import { recordWhatsAppConsent } from '@/lib/journey-engine/consent';
 
 interface InboundMessagePayload {
   entry: Array<{
@@ -210,14 +211,28 @@ export async function handleInboundPayload(body: InboundMessagePayload) {
 
               // ─── Handle Opt-out/Opt-in via Prisma Contact ────────
               if (OPT_OUT_KEYWORDS.some(keyword => messageText.includes(keyword))) {
-                await prisma.contact.update({
-                  where: { id: contact.id },
-                  data: { optInStatus: 'OPTED_OUT', optOutAt: new Date() },
+                await recordWhatsAppConsent({
+                  storeId,
+                  contactId: contact.id,
+                  phone: normalizedPhone,
+                  email: contact.email,
+                  granted: false,
+                  source: 'whatsapp_inbound_keyword',
+                  capturedAt: new Date(),
+                  wordingVersion: 'inbound-keyword-v1',
+                  evidence: { messageId: message.id, keywordType: 'opt_out' },
                 });
               } else if (OPT_IN_KEYWORDS.some(keyword => messageText.includes(keyword))) {
-                await prisma.contact.update({
-                  where: { id: contact.id },
-                  data: { optInStatus: 'OPTED_IN', optInAt: new Date() },
+                await recordWhatsAppConsent({
+                  storeId,
+                  contactId: contact.id,
+                  phone: normalizedPhone,
+                  email: contact.email,
+                  granted: true,
+                  source: 'whatsapp_inbound_keyword',
+                  capturedAt: new Date(),
+                  wordingVersion: 'inbound-keyword-v1',
+                  evidence: { messageId: message.id, keywordType: 'opt_in' },
                 });
               }
 

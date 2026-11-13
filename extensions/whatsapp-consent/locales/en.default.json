@@ -1,0 +1,11 @@
+{
+  "whatsapp_consent": {
+    "heading": "Get your cart and order updates on WhatsApp",
+    "phone_label": "WhatsApp number",
+    "phone_placeholder": "+91 98765 43210",
+    "permission": "I agree to receive cart recovery and order updates from {{ business }} on WhatsApp. I can opt out at any time.",
+    "button": "Confirm WhatsApp updates",
+    "success": "WhatsApp permission saved.",
+    "error": "We could not save your WhatsApp permission. Please try again."
+  }
+}
