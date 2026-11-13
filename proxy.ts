@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
   const isApiCron = pathname.startsWith("/api/cron");
   const isPublicApi = pathname.startsWith("/api/public");
   const isApiTracking = pathname === "/api/tracking/events";
+  const isShopifyAppProxy = pathname.startsWith("/api/journey-click/");
   const isDisabledDebugApi = [
     "/api/settings/whatsapp/full",
     "/api/whatsapp/debug",
@@ -38,7 +39,7 @@ export async function proxy(request: NextRequest) {
     "/api/test-route",
   ].includes(pathname);
 
-  if (isApiAuth || isApiHealth || isApiWebhook || isApiCron || isPublicApi || isApiTracking || isDisabledDebugApi || isApiAdminAuth) {
+  if (isApiAuth || isApiHealth || isApiWebhook || isApiCron || isPublicApi || isApiTracking || isShopifyAppProxy || isDisabledDebugApi || isApiAdminAuth) {
     return NextResponse.next();
   }
 
